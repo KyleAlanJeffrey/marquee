@@ -1,0 +1,38 @@
+project_id = "marquee"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "marquee://"
+# v1 signs users in anonymously on first launch; email/social can be layered on later
+enable_anonymous_sign_ins = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[edge_runtime]
+enabled = true
+
+# Spotify search proxy — called by the app, so require a user JWT
+[functions.search-artists]
+verify_jwt = true
+
+# Ingestion job — called by pg_cron / CI with a shared secret, not a user JWT
+[functions.ingest-events]
+verify_jwt = false
