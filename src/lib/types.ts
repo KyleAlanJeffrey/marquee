@@ -1,4 +1,5 @@
-export type FollowedEvent = {
+/** One upcoming show near a point, as returned by the `nearby_events` RPC. */
+export type NearbyEvent = {
   event_id: string;
   event_name: string;
   starts_at: string;
@@ -6,14 +7,12 @@ export type FollowedEvent = {
   artist_id: string;
   artist_name: string;
   artist_image_url: string | null;
+  artist_spotify_id: string | null;
+  artist_genres: string[];
   venue_name: string | null;
   venue_city: string | null;
   venue_region: string | null;
   distance_miles: number | null;
-};
-
-export type NearbyEvent = FollowedEvent & {
-  artist_genres: string[];
 };
 
 export type ArtistEvent = {
@@ -34,24 +33,12 @@ export type Artist = {
   genres: string[];
 };
 
-export type Follow = {
-  artist_id: string;
-  artist: Artist;
-};
-
 export type ArtistSearchResult = {
   spotify_id: string;
   name: string;
   image_url: string | null;
   genres: string[];
   popularity: number;
-};
-
-export type Profile = {
-  id: string;
-  home_label: string | null;
-  notify_radius_miles: number;
-  expo_push_token: string | null;
 };
 
 export type Coords = { lat: number; lng: number };

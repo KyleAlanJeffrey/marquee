@@ -1,10 +1,17 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 
+import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Shadow, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { formatDistance, formatEventDate, formatVenue } from '@/lib/format';
+import {
+  formatDistance,
+  formatEventDateParts,
+  formatRelativeDay,
+  formatVenue,
+} from '@/lib/format';
 
 type Props = {
   artistName: string;
@@ -15,6 +22,7 @@ type Props = {
   venueRegion: string | null;
   distanceMiles: number | null;
   ticketUrl: string | null;
+  following?: boolean;
   onPress?: () => void;
 };
 
@@ -27,53 +35,68 @@ export function EventCard({
   venueRegion,
   distanceMiles,
   ticketUrl,
+  following = false,
   onPress,
 }: Props) {
   const theme = useTheme();
   const distance = formatDistance(distanceMiles);
+  const { weekday, day } = formatEventDateParts(startsAt);
 
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
-      ]}>
+      style={[styles.card, { backgroundColor: theme.backgroundElement }, Shadow.card]}>
+      {following && <View style={[styles.followStripe, { backgroundColor: theme.following }]} />}
+
+      <View style={[styles.dateChip, { backgroundColor: theme.background }]}>
+        <ThemedText style={[styles.dateWeekday, { color: theme.tint }]}>{weekday}</ThemedText>
+        <ThemedText style={styles.dateDay}>{day}</ThemedText>
+      </View>
+
       <Image
         source={artistImageUrl ? { uri: artistImageUrl } : undefined}
         style={[styles.avatar, { backgroundColor: theme.backgroundSelected }]}
         contentFit="cover"
-        transition={150}
+        transition={200}
       />
+
       <View style={styles.body}>
-        <ThemedText type="smallBold" numberOfLines={1}>
-          {artistName}
-        </ThemedText>
+        <View style={styles.nameRow}>
+          {following && (
+            <Ionicons name="star" size={13} color={theme.following} style={styles.star} />
+          )}
+          <ThemedText type="smallBold" numberOfLines={1} style={styles.name}>
+            {artistName}
+          </ThemedText>
+        </View>
         <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
           {formatVenue(venueName, venueCity, venueRegion)}
         </ThemedText>
         <View style={styles.metaRow}>
-          <ThemedText type="small" style={{ color: theme.tint }}>
-            {formatEventDate(startsAt)}
+          <ThemedText style={[styles.meta, { color: theme.tint }]}>
+            {formatRelativeDay(startsAt)}
           </ThemedText>
           {distance && (
-            <ThemedText type="small" themeColor="textSecondary">
-              {' '}· {distance} away
+            <ThemedText style={[styles.meta, { color: theme.textTertiary }]}>
+              {'  ·  '}
+              {distance}
             </ThemedText>
           )}
         </View>
       </View>
-      {ticketUrl && (
-        <Pressable
+
+      {ticketUrl ? (
+        <PressableScale
+          scaleTo={0.9}
           onPress={() => Linking.openURL(ticketUrl)}
           hitSlop={8}
-          style={[styles.ticketButton, { backgroundColor: theme.tint }]}>
-          <ThemedText type="smallBold" style={{ color: theme.onTint }}>
-            Tickets
-          </ThemedText>
-        </Pressable>
+          style={[styles.ticketBtn, { backgroundColor: theme.tint }]}>
+          <Ionicons name="arrow-forward" size={16} color={theme.onTint} />
+        </PressableScale>
+      ) : (
+        <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -82,27 +105,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
-    padding: Spacing.three,
-    borderRadius: 14,
+    padding: Spacing.two + 2,
+    borderRadius: Radius.lg,
     marginHorizontal: Spacing.three,
-    marginBottom: Spacing.two,
+    marginBottom: Spacing.two + 2,
+    overflow: 'hidden',
   },
-  avatar: {
-    width: 52,
+  followStripe: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+  },
+  dateChip: {
+    width: 46,
     height: 52,
-    borderRadius: 26,
-  },
-  body: {
-    flex: 1,
-    gap: 1,
-  },
-  metaRow: {
-    flexDirection: 'row',
+    borderRadius: Radius.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.one,
   },
-  ticketButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: 999,
+  dateWeekday: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5, lineHeight: 15 },
+  dateDay: { fontSize: 22, fontWeight: '800', lineHeight: 26 },
+  avatar: { width: 52, height: 52, borderRadius: Radius.md },
+  body: { flex: 1, gap: 2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  star: { marginTop: 1 },
+  name: { flexShrink: 1, fontSize: 15 },
+  metaRow: { flexDirection: 'row', alignItems: 'center' },
+  meta: { fontSize: 13, fontWeight: '600' },
+  ticketBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

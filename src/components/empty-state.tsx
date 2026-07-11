@@ -1,8 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type Props = {
@@ -16,8 +18,10 @@ type Props = {
 export function EmptyState({ icon, title, message, actionLabel, onAction }: Props) {
   const theme = useTheme();
   return (
-    <View style={styles.container}>
-      <Ionicons name={icon} size={44} color={theme.textSecondary} />
+    <Animated.View entering={FadeInDown.duration(450)} style={styles.container}>
+      <View style={[styles.iconWrap, { backgroundColor: theme.backgroundElement }]}>
+        <Ionicons name={icon} size={40} color={theme.tint} />
+      </View>
       <ThemedText type="subtitle" style={styles.title}>
         {title}
       </ThemedText>
@@ -25,18 +29,15 @@ export function EmptyState({ icon, title, message, actionLabel, onAction }: Prop
         {message}
       </ThemedText>
       {actionLabel && onAction && (
-        <Pressable
+        <PressableScale
           onPress={onAction}
-          style={({ pressed }) => [
-            styles.button,
-            { backgroundColor: theme.tint, opacity: pressed ? 0.85 : 1 },
-          ]}>
+          style={[styles.button, { backgroundColor: theme.tint }]}>
           <ThemedText type="smallBold" style={{ color: theme.onTint }}>
             {actionLabel}
           </ThemedText>
-        </Pressable>
+        </PressableScale>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -48,6 +49,14 @@ const styles = StyleSheet.create({
     padding: Spacing.five,
     gap: Spacing.two,
   },
+  iconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.two,
+  },
   title: {
     fontSize: 22,
     lineHeight: 28,
@@ -55,11 +64,12 @@ const styles = StyleSheet.create({
   },
   message: {
     textAlign: 'center',
+    maxWidth: 320,
   },
   button: {
     marginTop: Spacing.three,
     paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two + 2,
-    borderRadius: 999,
+    paddingVertical: Spacing.two + 4,
+    borderRadius: Radius.pill,
   },
 });

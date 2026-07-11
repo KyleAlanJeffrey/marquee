@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
-import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, View, useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useColorScheme } from 'react-native';
 
+import { FollowsProvider } from '@/lib/follows-store';
 import { useNotificationObserver } from '@/lib/notifications';
-import { supabase } from '@/lib/supabase';
+import { PrefsProvider } from '@/lib/prefs-store';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -13,52 +15,33 @@ const queryClient = new QueryClient({
 });
 
 /**
- * v1 auth: every device gets an anonymous Supabase user on first launch.
- * Follows, location, and push tokens hang off that user; it can be upgraded
- * to email/social later without losing data.
+ * Local-first: no account. Follows and preferences live on-device, so there's
+ * no auth gate — the app opens straight to the feed.
  */
-function AuthGate({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        const { error } = await supabase.auth.signInAnonymously();
-        if (error) console.error('anonymous sign-in failed:', error.message);
-      }
-      setReady(true);
-    })();
-  }, []);
-
-  if (!ready) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
-  return <>{children}</>;
-}
-
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   useNotificationObserver();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <AuthGate>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="search"
-              options={{ presentation: 'modal', title: 'Find artists' }}
-            />
-            <Stack.Screen name="artist/[id]" options={{ title: '' }} />
-          </Stack>
-        </AuthGate>
+        <FollowsProvider>
+          <PrefsProvider>
+            <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
+              <StatusBar style={isDark ? 'light' : 'dark'} />
+              <Stack>
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen
+                  name="search"
+                  options={{ presentation: 'modal', title: 'Find artists' }}
+                />
+                <Stack.Screen name="artist/[id]" options={{ title: '' }} />
+              </Stack>
+            </ThemeProvider>
+          </PrefsProvider>
+        </FollowsProvider>
       </QueryClientProvider>
-    </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

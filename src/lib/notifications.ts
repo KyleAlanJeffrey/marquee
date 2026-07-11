@@ -65,6 +65,9 @@ function handleNotificationResponse(response: Notifications.NotificationResponse
  */
 export function useNotificationObserver() {
   useEffect(() => {
+    // Notification response APIs aren't available on web.
+    if (Platform.OS === 'web') return;
+
     let mounted = true;
 
     // App launched by tapping a notification while it was killed.
