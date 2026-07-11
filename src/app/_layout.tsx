@@ -3,6 +3,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, View, useColorScheme } from 'react-native';
 
+import { useNotificationObserver } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
 
 const queryClient = new QueryClient({
@@ -42,6 +43,7 @@ function AuthGate({ children }: { children: ReactNode }) {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  useNotificationObserver();
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

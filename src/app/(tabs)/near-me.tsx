@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-
 import { router } from 'expo-router';
 
 import { EmptyState } from '@/components/empty-state';
+import { ErrorState } from '@/components/error-state';
 import { EventCard } from '@/components/event-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -79,11 +80,15 @@ export default function NearMeScreen() {
         refreshing={events.isRefetching}
         onRefresh={() => events.refetch()}
         ListEmptyComponent={
-          <EmptyState
-            icon="compass-outline"
-            title="Nothing nearby yet"
-            message="No upcoming shows from artists you don't follow within this radius. Events refresh nightly — try a wider radius."
-          />
+          events.isError ? (
+            <ErrorState onRetry={() => events.refetch()} />
+          ) : (
+            <EmptyState
+              icon="compass-outline"
+              title="Nothing nearby yet"
+              message="No upcoming shows from artists you don't follow within this radius. Events refresh nightly — try a wider radius."
+            />
+          )
         }
         contentContainerStyle={(events.data ?? []).length === 0 && { flex: 1 }}
         renderItem={({ item }) => (

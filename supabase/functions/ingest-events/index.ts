@@ -252,7 +252,7 @@ async function notifyFollowers(newEventIds: string[]) {
       month: "long",
       day: "numeric",
     })} at ${t.venue_name ?? "TBA"}. Tap for tickets.`,
-    data: { eventId: t.event_id },
+    data: { eventId: t.event_id, artistId: t.artist_id },
   }));
 
   for (let i = 0; i < messages.length; i += 100) {

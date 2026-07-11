@@ -8,6 +8,10 @@ export function useColorScheme() {
   const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
+    // Intentional: flip to the client value only after hydration so static web
+    // export and the first client render agree. This is the documented Expo
+    // pattern (https://docs.expo.dev/router/web/static-rendering/).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setHasHydrated(true);
   }, []);
 

@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { EmptyState } from '@/components/empty-state';
+import { ErrorState } from '@/components/error-state';
 import { EventCard } from '@/components/event-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -19,6 +20,19 @@ export default function FollowingScreen() {
     return (
       <ThemedView style={styles.center}>
         <ActivityIndicator />
+      </ThemedView>
+    );
+  }
+
+  if (follows.isError) {
+    return (
+      <ThemedView style={styles.center}>
+        <ErrorState
+          onRetry={() => {
+            follows.refetch();
+            events.refetch();
+          }}
+        />
       </ThemedView>
     );
   }
@@ -74,9 +88,13 @@ export default function FollowingScreen() {
         }
         ListEmptyComponent={
           <View style={styles.noEvents}>
-            <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>
-              No upcoming shows from your artists yet. We check for new dates every night.
-            </ThemedText>
+            {events.isError ? (
+              <ErrorState onRetry={() => events.refetch()} />
+            ) : (
+              <ThemedText themeColor="textSecondary" style={{ textAlign: 'center' }}>
+                No upcoming shows from your artists yet. We check for new dates every night.
+              </ThemedText>
+            )}
           </View>
         }
         renderItem={({ item }) => (

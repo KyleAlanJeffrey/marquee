@@ -13,6 +13,7 @@ src/
   lib/            supabase client, TanStack Query hooks, location/notifications/format helpers
 supabase/
   migrations/     schema: profiles, artists, follows, venues, events + RPCs (PostGIS)
+  seed.sql        dev data: 12 fictional artists, real venues, ~8 weeks of events
   functions/
     search-artists/   Spotify search proxy (user-facing)
     ingest-events/    nightly Ticketmaster+Bandsintown ingest + push notifications (cron)
@@ -23,24 +24,44 @@ supabase/
 
 Prereqs: Node 20+, [Supabase CLI](https://supabase.com/docs/guides/cli) (`brew install supabase/tap/supabase`), Docker (for local Supabase).
 
+**Quick start (one command):**
+
+```sh
+npm install
+npm run dev                     # brings up Supabase, writes .env, launches Expo
+```
+
+`npm run dev` ([scripts/dev.sh](scripts/dev.sh)) checks for the Supabase CLI,
+starts Docker if needed, runs `supabase start` (migrations + seed), writes `.env`
+from the local credentials, then launches Expo. Re-runnable and idempotent. Pass
+`npm run dev -- --no-app` to bring up only the backend.
+
+**Or step by step:**
+
 ```sh
 npm install
 
-# 1. Start the backend (applies migrations automatically)
+# 1. Start the backend (applies migrations + seed data automatically)
 supabase start
 
 # 2. Configure the app
 cp .env.example .env            # paste the URL + anon key that `supabase start` printed
 
-# 3. Configure function secrets (Spotify/Ticketmaster keys — see file for links)
-cp supabase/functions/.env.example supabase/functions/.env
-supabase functions serve        # runs search-artists + ingest-events locally
-
-# 4. Run the app
+# 3. Run the app
 npx expo start                  # press i / a, or scan with Expo Go
 ```
 
-To pull real concert data locally, trigger ingestion by hand:
+That's enough to use the whole app with **seed data** — no API keys needed. The seed ([supabase/seed.sql](supabase/seed.sql)) ships fictional artists playing real venues, mostly around San Francisco because that's the iOS simulator's default location. Open **Near Me**, tap a show, and follow artists from there (artist search needs a Spotify key, but following from Near Me doesn't).
+
+### Real data (optional)
+
+```sh
+# Configure function secrets (Spotify/Ticketmaster keys — see file for links)
+cp supabase/functions/.env.example supabase/functions/.env
+supabase functions serve        # runs search-artists + ingest-events locally
+```
+
+Then trigger ingestion by hand:
 
 ```sh
 curl -X POST http://127.0.0.1:54321/functions/v1/ingest-events \
