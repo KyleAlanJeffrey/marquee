@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -248,7 +248,7 @@ export default function ArtistScreen() {
       />
 
       <View style={styles.topBarAbs}>
-        <TopBar transparent onBack={() => router.back()} />
+        <TopBar transparent back />
       </View>
     </View>
   );

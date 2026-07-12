@@ -61,7 +61,7 @@ export default function BrowseScreen() {
   return (
     <View style={{ flex: 1 }}>
       <MeshBackground />
-      <TopBar onBack={() => router.back()} onSearchPress={() => router.push('/search')} />
+      <TopBar back onSearchPress={() => router.push('/search')} />
 
       <FlatList
         key={mode}

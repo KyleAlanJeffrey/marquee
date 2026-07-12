@@ -233,7 +233,7 @@ export default function EventScreen() {
 
       {/* Floating top bar with back */}
       <View style={styles.topBarAbs}>
-        <TopBar transparent onBack={() => router.back()} />
+        <TopBar transparent back />
       </View>
 
       {/* Sticky buy bar */}

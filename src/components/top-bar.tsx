@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,13 +11,16 @@ type Props = {
   onSearchPress?: () => void;
   /** Transparent variant for sitting over a full-bleed hero. */
   transparent?: boolean;
-  onBack?: () => void;
+  /** Show a back chevron (falls back to Home when there's no history). */
+  back?: boolean;
 };
 
 /** The signature glass top bar with the neon MARQUEE wordmark. */
-export function TopBar({ onSearchPress, transparent, onBack }: Props) {
+export function TopBar({ onSearchPress, transparent, back }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
   return (
     <View
@@ -32,8 +36,8 @@ export function TopBar({ onSearchPress, transparent, onBack }: Props) {
         },
       ]}>
       <View style={styles.side}>
-        {onBack && (
-          <Pressable onPress={onBack} hitSlop={10}>
+        {back && (
+          <Pressable onPress={goBack} hitSlop={16} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={26} color={theme.primary} />
           </Pressable>
         )}
@@ -58,6 +62,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
   },
   side: { width: 40, justifyContent: 'center' },
+  backBtn: { width: 40, height: 40, justifyContent: 'center' },
   right: { alignItems: 'flex-end' },
   wordmark: {
     fontFamily: Fonts.headline,

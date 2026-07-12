@@ -1,6 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQueryClient } from '@tanstack/react-query';
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
@@ -11,10 +10,8 @@ import { EmptyState } from '@/components/empty-state';
 import { ErrorState } from '@/components/error-state';
 import { FeaturedCard } from '@/components/featured-card';
 import { MeshBackground } from '@/components/mesh-background';
-import { PressableScale } from '@/components/pressable-scale';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
 import { SectionTitle } from '@/components/section-title';
-import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { VenueMap, type MapPin } from '@/components/venue-map';
@@ -28,9 +25,7 @@ import { RADIUS_OPTIONS, usePrefs } from '@/lib/prefs-store';
 import { syncConcertReminders } from '@/lib/reminders';
 import type { Coords, NearbyEvent } from '@/lib/types';
 
-type SegmentKey = 'nearby' | 'following';
 const ALL = 'All';
-
 const eventRef = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_spotify_id });
 
 export default function ExploreScreen() {
@@ -41,7 +36,6 @@ export default function ExploreScreen() {
   const [coords, setCoords] = useState<Coords | null>(null);
   const [label, setLabel] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
-  const [segment, setSegment] = useState<SegmentKey>('nearby');
   const [genre, setGenre] = useState<string>(ALL);
 
   const events = useNearbyEvents(coords, radiusMiles);
@@ -73,7 +67,15 @@ export default function ExploreScreen() {
     };
   }, [coords, radiusMiles, queryClient]);
 
-  // Refresh the followed artists' shows once per session.
+  const allEvents = useMemo(() => events.data ?? [], [events.data]);
+
+  // Followed shows near the user — not shown here (see the Following tab), but
+  // used to keep on-device reminders in sync and to refresh followed artists.
+  const followingEvents = useMemo(
+    () => allEvents.filter((e) => isFollowing(eventRef(e))),
+    [allEvents, isFollowing],
+  );
+
   useEffect(() => {
     if (refreshedFollows.current || follows.length === 0) return;
     refreshedFollows.current = true;
@@ -82,47 +84,25 @@ export default function ExploreScreen() {
     });
   }, [follows, queryClient]);
 
-  async function onRefresh() {
-    setRefreshing(true);
-    try {
-      if (coords) await Promise.all([discoverEvents(coords, radiusMiles), refreshArtistEvents(follows)]);
-      await events.refetch();
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
-  const allEvents = useMemo(() => events.data ?? [], [events.data]);
-
-  const followingEvents = useMemo(
-    () => allEvents.filter((e) => isFollowing(eventRef(e))),
-    [allEvents, isFollowing],
-  );
-
   useEffect(() => {
     syncConcertReminders(followingEvents, remindersEnabled);
   }, [followingEvents, remindersEnabled]);
 
-  // Genre facets derived from the current segment's events.
-  const segmentEvents = segment === 'following' ? followingEvents : allEvents;
   const genres = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const e of segmentEvents) for (const g of e.artist_genres ?? []) {
-      counts.set(g, (counts.get(g) ?? 0) + 1);
-    }
+    for (const e of allEvents) for (const g of e.artist_genres ?? []) counts.set(g, (counts.get(g) ?? 0) + 1);
     return [ALL, ...[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([g]) => g).slice(0, 8)];
-  }, [segmentEvents]);
+  }, [allEvents]);
 
   const shown = useMemo(
-    () => (genre === ALL ? segmentEvents : segmentEvents.filter((e) => (e.artist_genres ?? []).includes(genre))),
-    [segmentEvents, genre],
+    () => (genre === ALL ? allEvents : allEvents.filter((e) => (e.artist_genres ?? []).includes(genre))),
+    [allEvents, genre],
   );
 
   const featured = shown[0];
   const secondary = shown.slice(1, 3);
   const comingUp = shown.slice(3);
 
-  // De-duplicated venue pins for the map.
   const pins = useMemo<MapPin[]>(() => {
     const seen = new Map<string, MapPin>();
     for (const e of shown) {
@@ -155,6 +135,16 @@ export default function ExploreScreen() {
       imageUrl: e.artist_image_url,
       genres: e.artist_genres ?? [],
     });
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      if (coords) await Promise.all([discoverEvents(coords, radiusMiles), refreshArtistEvents(follows)]);
+      await events.refetch();
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   return (
@@ -229,10 +219,7 @@ export default function ExploreScreen() {
 
           {/* Genre filter chips */}
           {genres.length > 1 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.genreRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.genreRow}>
               {genres.map((g) => {
                 const active = g === genre;
                 return (
@@ -254,25 +241,12 @@ export default function ExploreScreen() {
             </ScrollView>
           )}
 
-          {/* Segment */}
-          <View style={styles.controls}>
-            <SegmentedControl
-              value={segment}
-              onChange={(k) => {
-                setSegment(k as SegmentKey);
-                setGenre(ALL);
-              }}
-              segments={[
-                { key: 'nearby', label: 'Nearby' },
-                { key: 'following', label: 'Following', badge: followingEvents.length },
-              ]}
-            />
-          </View>
-
-          {segment === 'following' && follows.length > 0 && <FollowingRail />}
-
           {shown.length === 0 ? (
-            <FeedEmpty segment={segment} hasFollows={follows.length > 0} radiusMiles={radiusMiles} />
+            <EmptyState
+              icon="compass-outline"
+              title="Nothing nearby yet"
+              message={`No upcoming shows within ${radiusMiles} mi. Try a wider radius.`}
+            />
           ) : (
             <>
               {/* Nearby Venues map */}
@@ -295,12 +269,7 @@ export default function ExploreScreen() {
                       <Ionicons name="arrow-forward" size={15} color={theme.primary} />
                     </Pressable>
                   </View>
-                  <VenueMap
-                    pins={pins}
-                    locationLabel={cityLabel}
-                    withinMiles={nearestMiles}
-                    onExplore={goBrowse}
-                  />
+                  <VenueMap pins={pins} locationLabel={cityLabel} withinMiles={nearestMiles} onExplore={goBrowse} />
                 </>
               )}
 
@@ -350,67 +319,6 @@ export default function ExploreScreen() {
   );
 }
 
-function FollowingRail() {
-  const theme = useTheme();
-  const { follows } = useFollows();
-  return (
-    <View style={styles.rail}>
-      <FlatList
-        horizontal
-        data={follows}
-        keyExtractor={(f) => f.artistId ?? f.spotifyId ?? f.name}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.railContent}
-        renderItem={({ item }) => (
-          <PressableScale
-            haptic={false}
-            disabled={!item.artistId}
-            onPress={() => item.artistId && router.push(`/artist/${item.artistId}`)}
-            style={styles.railItem}>
-            <Image
-              source={item.imageUrl ? { uri: item.imageUrl } : undefined}
-              style={[styles.railAvatar, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}
-              contentFit="cover"
-            />
-            <ThemedText type="labelSm" numberOfLines={1} style={styles.railName}>
-              {item.name}
-            </ThemedText>
-          </PressableScale>
-        )}
-      />
-    </View>
-  );
-}
-
-function FeedEmpty({
-  segment,
-  hasFollows,
-  radiusMiles,
-}: {
-  segment: SegmentKey;
-  hasFollows: boolean;
-  radiusMiles: number;
-}) {
-  if (segment === 'following' && !hasFollows) {
-    return (
-      <EmptyState
-        icon="heart-outline"
-        title="No artists followed"
-        message="Follow artists and their nearby shows take the spotlight right here."
-        actionLabel="Find artists"
-        onAction={() => router.push('/search')}
-      />
-    );
-  }
-  return (
-    <EmptyState
-      icon="compass-outline"
-      title={segment === 'following' ? 'Nothing from your artists' : 'Nothing nearby yet'}
-      message={`No upcoming shows within ${radiusMiles} mi. Try a wider radius.`}
-    />
-  );
-}
-
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.three },
   searchBar: {
@@ -451,11 +359,5 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     borderWidth: 1,
   },
-  controls: { paddingHorizontal: Spacing.three, paddingTop: Spacing.three },
   comingUpRow: { paddingHorizontal: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.three },
-  rail: { paddingTop: Spacing.three },
-  railContent: { paddingHorizontal: Spacing.three, gap: Spacing.three, paddingVertical: Spacing.two },
-  railItem: { alignItems: 'center', width: 68, gap: Spacing.one },
-  railAvatar: { width: 60, height: 60, borderRadius: Radius.pill, borderWidth: 1 },
-  railName: { maxWidth: 68, textAlign: 'center' },
 });
