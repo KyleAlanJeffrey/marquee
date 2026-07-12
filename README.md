@@ -1,102 +1,116 @@
 # Marquee 🎪
 
-Follow music artists and get notified when they book a concert near you — plus discover artists you *don't* follow who are playing in your area.
+Discover upcoming concerts near you, follow the artists you love, and get an
+on-device reminder before their next nearby show.
 
-See [TECH_STACK.md](TECH_STACK.md) for the full architecture writeup. Short version: Expo (React Native + TypeScript) app on a Supabase backend (Postgres + PostGIS, Edge Functions), with concert data ingested nightly from Ticketmaster and Bandsintown and artist metadata from Spotify.
+**Stack:** an Expo (React Native + TypeScript) app talking to a **Cloudflare
+Worker** (Hono) backed by **Cloudflare D1** (SQLite). Concert data is pulled on
+demand from the Ticketmaster Discovery API; artist search uses Spotify. Follows
+and preferences live **on-device** (no account). The web build deploys to
+**Cloudflare Pages**; native builds ship via EAS.
+
+Because D1 is SQLite (no PostGIS), the "near me" radius search is a lat/lng
+bounding-box prefilter (indexed) plus a haversine distance computed in the
+Worker.
 
 ## Project layout
 
 ```
 src/
-  app/            expo-router screens (tabs: Following, Near Me, Settings; search modal; artist detail)
-  components/     UI building blocks (EventCard, FollowButton, EmptyState, themed primitives)
-  lib/            supabase client, TanStack Query hooks, location/notifications/format helpers
-supabase/
-  migrations/     schema: profiles, artists, follows, venues, events + RPCs (PostGIS)
-  seed.sql        dev data: 12 fictional artists, real venues, ~8 weeks of events
-  functions/
-    search-artists/   Spotify search proxy (user-facing)
-    ingest-events/    nightly Ticketmaster+Bandsintown ingest + push notifications (cron)
-  schedule.sql    pg_cron setup for the nightly job (run once against hosted project)
+  app/            expo-router screens (Near Me tab, Profile tab, search modal, artist + event detail)
+  components/     UI building blocks (design system, cards, map, etc.)
+  lib/            api client (Worker), TanStack Query hooks, local follows/prefs stores, reminders
+worker/
+  src/index.ts    Hono routes (reads + ingestion endpoints)
+  src/lib.ts      Ticketmaster/Spotify/Bandsintown + D1 persistence + geo
+  migrations/     D1 schema (0001_init) + dev seed (0002_seed)
+  wrangler.toml   Worker + D1 binding
+scripts/dev.sh    one-command local dev (Worker + local D1 + Expo)
 ```
 
 ## Getting started
 
-Prereqs: Node 20+, [Supabase CLI](https://supabase.com/docs/guides/cli) (`brew install supabase/tap/supabase`), Docker (for local Supabase).
-
-**Quick start (one command):**
-
-```sh
-npm install
-npm run dev                     # brings up Supabase, writes .env, launches Expo
-```
-
-`npm run dev` ([scripts/dev.sh](scripts/dev.sh)) checks for the Supabase CLI,
-starts Docker if needed, runs `supabase start` (migrations + seed), writes `.env`
-from the local credentials, then launches Expo. Re-runnable and idempotent. Pass
-`npm run dev -- --no-app` to bring up only the backend.
-
-**Or step by step:**
+Prereqs: Node 20+, and (for the backend) Wrangler — installed automatically as a
+`worker/` dev dependency.
 
 ```sh
 npm install
-
-# 1. Start the backend (applies migrations + seed data automatically)
-supabase start
-
-# 2. Configure the app
-cp .env.example .env            # paste the URL + anon key that `supabase start` printed
-
-# 3. Run the app
-npx expo start                  # press i / a, or scan with Expo Go
+npm run dev            # installs worker deps, applies D1 migrations locally,
+                       # starts the Worker on :8787, writes .env, launches Expo
 ```
 
-That's enough to use the whole app with **seed data** — no API keys needed. The seed ([supabase/seed.sql](supabase/seed.sql)) ships fictional artists playing real venues, mostly around San Francisco because that's the iOS simulator's default location. Open **Near Me**, tap a show, and follow artists from there (artist search needs a Spotify key, but following from Near Me doesn't).
+`npm run dev` ([scripts/dev.sh](scripts/dev.sh)) runs the whole stack locally
+against a local SQLite D1 database seeded with fictional artists at real venues
+(mostly SF, the simulator's default location). Press `w` / `i` / `a` in Expo.
+`npm run dev -- --no-app` runs just the Worker.
 
-### Real data (optional)
+### Real concert data (optional)
 
-Marquee is **local-first** (follows live on-device), so concert data is fetched
-on demand from where you actually are, rather than a nightly server job:
+Set a **Ticketmaster Discovery** key (and optionally Spotify for search) in
+`worker/.dev.vars`:
 
-- **`discover-events`** — the Near Me feed calls this with your location; it
-  pulls nearby music events from Ticketmaster and upserts them. Throttled per
-  area (see `discovery_log`), so it's cheap to call on every load.
-- **`refresh-artist-events`** — the app sends its on-device follow list; this
-  resolves each artist on Ticketmaster/Bandsintown and ingests their dates.
-  Runs on launch and pull-to-refresh.
-- **`search-artists`** — Spotify search proxy (artist search + follow).
-- `ingest-events` is the legacy nightly cron job; it depends on server-side
-  follows/profiles that the local-first pivot removed, so it's dormant.
-
-```sh
-# Configure function secrets (Spotify + Ticketmaster keys — see file for links)
-cp supabase/functions/.env.example supabase/functions/.env
-supabase functions serve        # serves all functions locally with hot reload
+```
+TICKETMASTER_API_KEY=your-key
+SPOTIFY_CLIENT_ID=…
+SPOTIFY_CLIENT_SECRET=…
 ```
 
-With a `TICKETMASTER_API_KEY` set, open **Near Me** on a device (real location)
-and pull to refresh — real shows around you flow into the feed. Without a key,
-the app runs on seed data and the discovery functions no-op gracefully.
+Then on a device with real location, open **Near Me** and pull to refresh — the
+app calls the Worker's `/discover-events`, which pulls nearby shows from
+Ticketmaster into D1. Without a key the app runs on seed data and the ingestion
+endpoints no-op gracefully.
+
+## API (Cloudflare Worker)
+
+| Route | Purpose |
+|---|---|
+| `GET /nearby?lat&lng&radius` | upcoming shows near a point (bbox + haversine) |
+| `GET /artists/:id` · `GET /artists/:id/events` | artist + their upcoming shows |
+| `GET /events/:id` | event detail |
+| `POST /search-artists` | Spotify artist search |
+| `POST /discover-events` | pull nearby shows from Ticketmaster (throttled per area) |
+| `POST /refresh-artist-events` | pull shows for the on-device follow list |
 
 ## Deploying
 
-1. `supabase link --project-ref <ref>` then `supabase db push`.
-2. `supabase secrets set --env-file supabase/functions/.env`
-3. `supabase functions deploy search-artists ingest-events`
-4. Run [supabase/schedule.sql](supabase/schedule.sql) (with placeholders filled in) in the SQL editor to schedule the nightly ingest.
-5. Build the app with EAS (`eas build`) — push notifications require a dev build or store build on a physical device.
+**Worker + D1:**
 
-## API keys needed
+```sh
+cd worker
+npx wrangler d1 create marquee          # paste the id into wrangler.toml
+npx wrangler d1 migrations apply marquee --remote
+npx wrangler secret put TICKETMASTER_API_KEY
+npx wrangler secret put SPOTIFY_CLIENT_ID
+npx wrangler secret put SPOTIFY_CLIENT_SECRET
+npx wrangler deploy                     # → https://marquee-worker.<sub>.workers.dev
+```
+
+**Web app → Cloudflare Pages:**
+
+```sh
+EXPO_PUBLIC_API_URL=https://marquee-worker.<sub>.workers.dev npx expo export -p web
+npx wrangler pages deploy dist --project-name marquee
+```
+
+**Native app:** build with EAS (`eas build`); set `EXPO_PUBLIC_API_URL` to the
+deployed Worker. Push/reminders need a dev or store build on a physical device.
+
+## API keys
 
 | Key | Where | Used by |
 |---|---|---|
+| Ticketmaster Discovery key | developer.ticketmaster.com | discover-events, refresh-artist-events |
 | Spotify client id/secret | developer.spotify.com | search-artists |
-| Ticketmaster Discovery key | developer.ticketmaster.com | ingest-events |
-| Bandsintown app id (optional) | artists.bandsintown.com | ingest-events |
+| Bandsintown app id (optional) | artists.bandsintown.com | refresh-artist-events |
 
 ## How it works
 
-- The app signs every device in **anonymously** on first launch; follows, home location, and push tokens hang off that user (upgradeable to email/social later).
-- **Following tab** — upcoming shows for artists you follow (`followed_events` RPC), with distance from your home area.
-- **Near Me tab** — shows within a radius of your current location from artists you *don't* follow (`nearby_events` RPC, PostGIS `ST_DWithin`).
-- **Nightly ingest** — pulls events for every followed artist (Ticketmaster + Bandsintown) and discovery events around every user metro, dedupes on `(source, source_event_id)`, then pushes notifications to followers whose home area is within their alert radius of newly-seen events.
+- **Local-first:** follows and prefs are stored on the device (AsyncStorage);
+  there's no account or server-side user state.
+- **Near Me** — the home feed calls `GET /nearby` for the device's location and
+  auto-triggers `POST /discover-events` (server-throttled per area) to keep the
+  area fresh. A Nearby/Following toggle filters to followed artists.
+- **Following** — the app POSTs its follow list to `refresh-artist-events` on
+  launch / pull-to-refresh to pull those artists' upcoming shows.
+- **Reminders** — local notifications scheduled on-device the day before a
+  followed artist's nearby show.

@@ -1,5 +1,3 @@
-import Constants from 'expo-constants';
-import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
@@ -15,41 +13,8 @@ Notifications.setNotificationHandler({
 });
 
 /**
- * Ask for notification permission and return this device's Expo push token,
- * or null if we can't get one (simulator, permission denied, no EAS project).
- */
-export async function registerForPushNotifications(): Promise<string | null> {
-  if (!Device.isDevice) return null;
-
-  let { status } = await Notifications.getPermissionsAsync();
-  if (status !== 'granted') {
-    ({ status } = await Notifications.requestPermissionsAsync());
-  }
-  if (status !== 'granted') return null;
-
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'Concert alerts',
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
-  }
-
-  const projectId =
-    Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-  try {
-    const token = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined,
-    );
-    return token.data;
-  } catch {
-    // No EAS project configured yet — fine in local dev
-    return null;
-  }
-}
-
-/**
- * Route a tapped concert alert to the relevant artist. Ingest attaches
- * `artistId` (and `eventId`) to every push; the artist page lists the show.
+ * Route a tapped concert reminder to the relevant artist. Reminders carry
+ * `artistId` (and `eventId`); the artist page lists the show.
  */
 function handleNotificationResponse(response: Notifications.NotificationResponse) {
   const artistId = response.notification.request.content.data?.artistId;

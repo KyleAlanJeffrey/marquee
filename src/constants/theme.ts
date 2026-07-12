@@ -74,8 +74,6 @@ export const Fonts = {
   bodySemibold: 'PlusJakartaSans_600SemiBold',
   label: 'SpaceGrotesk_500Medium',
   labelBold: 'SpaceGrotesk_700Bold',
-  // legacy alias used by themed-text `code`
-  mono: 'SpaceGrotesk_500Medium',
 } as const;
 
 export const Spacing = {
@@ -126,6 +124,3 @@ export const Spring = {
   snappy: { damping: 18, stiffness: 260, mass: 0.7 },
   gentle: { damping: 20, stiffness: 140, mass: 0.9 },
 } as const;
-
-export const BottomTabInset = 64;
-export const MaxContentWidth = 800;

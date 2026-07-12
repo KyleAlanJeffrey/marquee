@@ -49,3 +49,8 @@ supabase/.temp
 .env
 .env.*
 !.env.example
+
+# Cloudflare Worker
+worker/node_modules/
+worker/.wrangler/
+worker/.dev.vars

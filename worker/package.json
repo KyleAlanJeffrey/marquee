@@ -1,0 +1,19 @@
+{
+  "name": "marquee-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:apply:local": "wrangler d1 migrations apply marquee --local",
+    "db:apply": "wrangler d1 migrations apply marquee --remote"
+  },
+  "dependencies": {
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "~5.6.3",
+    "wrangler": "^3.114.0"
+  }
+}

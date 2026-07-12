@@ -1,0 +1,18 @@
+name = "marquee-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-27"
+
+# The concert database (Cloudflare D1 / SQLite).
+# For a real deploy: run `wrangler d1 create marquee` and paste the id below.
+# Local dev (`wrangler dev`) uses a local SQLite file and ignores the id.
+[[d1_databases]]
+binding = "DB"
+database_name = "marquee"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Secrets (set with `wrangler secret put <NAME>`; local dev reads .dev.vars):
+#   TICKETMASTER_API_KEY   — required for discovery/refresh
+#   SPOTIFY_CLIENT_ID      — required for artist search
+#   SPOTIFY_CLIENT_SECRET
+#   BANDSINTOWN_APP_ID     — optional
