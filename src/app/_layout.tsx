@@ -15,7 +15,6 @@ import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { MeshBackground } from '@/components/mesh-background';
 import { Colors, Fonts } from '@/constants/theme';
 import { FollowsProvider } from '@/lib/follows-store';
 import { useNotificationObserver } from '@/lib/notifications';
@@ -59,12 +58,12 @@ export default function RootLayout() {
           <PrefsProvider>
             <ThemeProvider value={navTheme}>
               <StatusBar style="light" />
-              <MeshBackground />
               {fontsLoaded && (
                 <Stack
                   screenOptions={{
                     headerShown: false,
-                    contentStyle: { backgroundColor: 'transparent' },
+                    // Opaque so screens don't bleed through each other on web.
+                    contentStyle: { backgroundColor: theme.background },
                     animation: 'slide_from_right',
                   }}>
                   <Stack.Screen name="(tabs)" />

@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { GlassCard } from '@/components/glass-card';
+import { MeshBackground } from '@/components/mesh-background';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
@@ -52,6 +53,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      <MeshBackground />
       <TopBar />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <ThemedText type="headline" style={styles.title}>

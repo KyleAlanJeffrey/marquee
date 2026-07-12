@@ -6,6 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { EventGridCard } from '@/components/event-grid-card';
 import { FeaturedCard } from '@/components/featured-card';
+import { MeshBackground } from '@/components/mesh-background';
 import { PressableScale } from '@/components/pressable-scale';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
 import { ThemedText } from '@/components/themed-text';
@@ -59,6 +60,7 @@ export default function BrowseScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      <MeshBackground />
       <TopBar onBack={() => router.back()} onSearchPress={() => router.push('/search')} />
 
       <FlatList

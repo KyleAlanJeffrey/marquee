@@ -10,6 +10,7 @@ import { ComingUpCard } from '@/components/coming-up-card';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorState } from '@/components/error-state';
 import { FeaturedCard } from '@/components/featured-card';
+import { MeshBackground } from '@/components/mesh-background';
 import { PressableScale } from '@/components/pressable-scale';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
 import { SectionTitle } from '@/components/section-title';
@@ -158,6 +159,7 @@ export default function ExploreScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      <MeshBackground />
       <TopBar onSearchPress={() => router.push('/search')} />
 
       {denied ? (
