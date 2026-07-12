@@ -25,6 +25,26 @@ export type ArtistEvent = {
   venue_region: string | null;
 };
 
+export type EventDetail = {
+  id: string;
+  name: string;
+  starts_at: string;
+  ticket_url: string | null;
+  source: string;
+  artist: {
+    id: string;
+    name: string;
+    spotify_id: string | null;
+    image_url: string | null;
+    genres: string[];
+  };
+  venue: {
+    name: string | null;
+    city: string | null;
+    region: string | null;
+  } | null;
+};
+
 export type Artist = {
   id: string;
   name: string;

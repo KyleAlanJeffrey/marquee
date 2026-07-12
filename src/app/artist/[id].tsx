@@ -1,17 +1,21 @@
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, FlatList, Linking, StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { DateBlock } from '@/components/date-block';
 import { FollowButton } from '@/components/follow-button';
+import { GenreChip } from '@/components/genre-chip';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Radius, Shadow, Spacing } from '@/constants/theme';
+import { TopBar } from '@/components/top-bar';
+import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { useArtist, useArtistEvents } from '@/lib/hooks';
-import { formatEventDateParts, formatTime, formatVenue } from '@/lib/format';
+import { formatTime, formatVenue } from '@/lib/format';
+import type { ArtistEvent } from '@/lib/types';
 
 export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,146 +28,163 @@ export default function ArtistScreen() {
 
   if (artist.isLoading) {
     return (
-      <ThemedView style={styles.center}>
-        <ActivityIndicator color={theme.tint} />
-      </ThemedView>
+      <View style={styles.center}>
+        <ActivityIndicator color={theme.primary} />
+      </View>
     );
   }
 
   const a = artist.data;
   if (!a) {
     return (
-      <ThemedView style={styles.center}>
+      <View style={styles.center}>
         <ThemedText themeColor="textSecondary">Artist not found.</ThemedText>
-      </ThemedView>
+      </View>
     );
   }
 
   return (
-    <ThemedView style={{ flex: 1 }}>
-      <Stack.Screen options={{ title: a.name }} />
-      <FlatList
+    <View style={{ flex: 1 }}>
+      <Animated.FlatList
         data={events.data ?? []}
-        keyExtractor={(e) => e.event_id}
+        keyExtractor={(e: ArtistEvent) => e.event_id}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Spacing.six }}
         ListHeaderComponent={
-          <Animated.View entering={FadeInDown.duration(400)} style={styles.header}>
-            <Image
-              source={a.image_url ? { uri: a.image_url } : undefined}
-              style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}
-              contentFit="cover"
-            />
-            <ThemedText style={styles.name}>{a.name}</ThemedText>
-            {a.genres.length > 0 && (
-              <ThemedText type="small" themeColor="textSecondary" style={styles.genres}>
-                {a.genres.slice(0, 3).join(' · ')}
-              </ThemedText>
-            )}
-            <View style={styles.followWrap}>
-              <FollowButton
-                following={following}
-                onToggle={() =>
-                  toggle({
-                    artistId: a.id,
-                    spotifyId: a.spotify_id,
-                    name: a.name,
-                    imageUrl: a.image_url,
-                    genres: a.genres,
-                  })
-                }
+          <View>
+            {/* Hero */}
+            <View style={styles.hero}>
+              <Image
+                source={a.image_url ? { uri: a.image_url } : undefined}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                transition={250}
               />
+              <LinearGradient
+                colors={['rgba(0,0,0,0.3)', 'transparent', theme.background]}
+                locations={[0, 0.35, 1]}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.heroBody}>
+                <ThemedText type="labelSm" style={{ color: theme.cyan, letterSpacing: 2 }}>
+                  FEATURED ARTIST
+                </ThemedText>
+                <ThemedText type="display" numberOfLines={2} style={styles.heroName}>
+                  {a.name}
+                </ThemedText>
+                <View style={styles.heroActions}>
+                  <FollowButton
+                    following={following}
+                    onToggle={() =>
+                      toggle({
+                        artistId: a.id,
+                        spotifyId: a.spotify_id,
+                        name: a.name,
+                        imageUrl: a.image_url,
+                        genres: a.genres,
+                      })
+                    }
+                  />
+                  {a.genres.length > 0 && (
+                    <View style={styles.heroGenres}>
+                      {a.genres.slice(0, 2).map((g, i) => (
+                        <GenreChip key={g} label={g} tone={i === 0 ? 'purple' : 'cyan'} />
+                      ))}
+                    </View>
+                  )}
+                </View>
+              </View>
             </View>
-            <ThemedText type="smallBold" themeColor="textSecondary" style={styles.sectionTitle}>
-              UPCOMING SHOWS
-            </ThemedText>
-          </Animated.View>
+
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+              <ThemedText type="title">Upcoming Tours</ThemedText>
+            </View>
+          </View>
         }
         ListEmptyComponent={
           events.isLoading ? (
-            <ActivityIndicator color={theme.tint} style={{ marginTop: Spacing.four }} />
+            <ActivityIndicator color={theme.primary} style={{ marginTop: Spacing.four }} />
           ) : (
             <ThemedText themeColor="textSecondary" style={styles.empty}>
               No upcoming shows on record. New dates are pulled in nightly.
             </ThemedText>
           )
         }
-        renderItem={({ item, index }) => {
-          const { weekday, day, month } = formatEventDateParts(item.starts_at);
-          return (
-            <Animated.View entering={FadeInDown.delay(Math.min(index * 45, 300)).duration(340)}>
-              <PressableScale
-                disabled={!item.ticket_url}
-                onPress={() => item.ticket_url && Linking.openURL(item.ticket_url)}
-                style={[styles.eventRow, { backgroundColor: theme.backgroundElement }, Shadow.card]}>
-                <View style={[styles.dateChip, { backgroundColor: theme.background }]}>
-                  <ThemedText style={[styles.chipWeekday, { color: theme.tint }]}>
-                    {weekday}
+        renderItem={({ item, index }: { item: ArtistEvent; index: number }) => (
+          <Animated.View entering={FadeInDown.delay(Math.min(index * 45, 300)).duration(340)}>
+            <View
+              style={[
+                styles.tourRow,
+                { backgroundColor: theme.backgroundElevated, borderColor: theme.border },
+              ]}>
+              <DateBlock startsAt={item.starts_at} />
+              <View style={{ flex: 1 }}>
+                <ThemedText type="smallBold" numberOfLines={1}>
+                  {formatVenue(item.venue_name, item.venue_city, item.venue_region)}
+                </ThemedText>
+                <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                  {formatTime(item.starts_at).toUpperCase()}
+                </ThemedText>
+              </View>
+              {item.ticket_url ? (
+                <PressableScale
+                  onPress={() => Linking.openURL(item.ticket_url!)}
+                  style={[styles.ticketBtn, { backgroundColor: theme.primary }, Glow.purple, { shadowOpacity: 0.25 }]}>
+                  <ThemedText type="label" style={{ color: theme.onPrimary, fontSize: 12 }}>
+                    Tickets
                   </ThemedText>
-                  <ThemedText style={styles.chipDay}>{day}</ThemedText>
-                  <ThemedText style={[styles.chipMonth, { color: theme.textTertiary }]}>
-                    {month}
+                </PressableScale>
+              ) : (
+                <View style={[styles.ticketBtn, { backgroundColor: theme.backgroundHigh }]}>
+                  <ThemedText type="label" style={{ color: theme.textTertiary, fontSize: 12 }}>
+                    Soon
                   </ThemedText>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="smallBold" numberOfLines={1}>
-                    {formatVenue(item.venue_name, item.venue_city, item.venue_region)}
-                  </ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {formatTime(item.starts_at)}
-                  </ThemedText>
-                </View>
-                {item.ticket_url && (
-                  <View style={[styles.ticketPill, { backgroundColor: theme.tint }]}>
-                    <ThemedText type="smallBold" style={{ color: theme.onTint }}>
-                      Tickets
-                    </ThemedText>
-                  </View>
-                )}
-              </PressableScale>
-            </Animated.View>
-          );
-        }}
+              )}
+            </View>
+          </Animated.View>
+        )}
       />
-    </ThemedView>
+
+      <View style={styles.topBarAbs}>
+        <TopBar transparent onBack={() => router.back()} />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  header: { alignItems: 'center', padding: Spacing.four, gap: Spacing.two },
-  avatar: { width: 132, height: 132, borderRadius: Radius.pill },
-  name: { fontSize: 30, fontWeight: '800', textAlign: 'center', letterSpacing: -0.5 },
-  genres: { textAlign: 'center' },
-  followWrap: { marginTop: Spacing.two },
-  sectionTitle: {
-    alignSelf: 'flex-start',
-    letterSpacing: 1.2,
-    fontSize: 12,
-    marginTop: Spacing.four,
+  hero: { height: 500, justifyContent: 'flex-end' },
+  heroBody: { padding: Spacing.three, gap: Spacing.one + 2 },
+  heroName: { color: '#fff' },
+  heroActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginTop: Spacing.two, flexWrap: 'wrap' },
+  heroGenres: { flexDirection: 'row', gap: Spacing.two },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.three,
   },
+  accentBar: { width: 4, height: 22, borderRadius: 2 },
   empty: { textAlign: 'center', padding: Spacing.four },
-  eventRow: {
+  tourRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
     padding: Spacing.two + 2,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.md,
+    borderWidth: 1,
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.two + 2,
   },
-  dateChip: {
-    width: 52,
-    height: 60,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipWeekday: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5, lineHeight: 14 },
-  chipDay: { fontSize: 22, fontWeight: '800', lineHeight: 26 },
-  chipMonth: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, lineHeight: 13 },
-  ticketPill: {
+  ticketBtn: {
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     borderRadius: Radius.pill,
   },
+  topBarAbs: { position: 'absolute', top: 0, left: 0, right: 0 },
 });

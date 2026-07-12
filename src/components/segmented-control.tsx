@@ -52,10 +52,14 @@ export function SegmentedControl({ segments, value, onChange }: Props) {
   return (
     <View
       onLayout={onLayout}
-      style={[styles.track, { backgroundColor: theme.backgroundElement }]}>
+      style={[styles.track, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
       {segWidth > 0 && (
         <Animated.View
-          style={[styles.indicator, { backgroundColor: theme.background }, indicatorStyle]}
+          style={[
+            styles.indicator,
+            { backgroundColor: theme.backgroundHigh, borderColor: theme.borderStrong },
+            indicatorStyle,
+          ]}
         />
       )}
       {segments.map((seg, i) => {
@@ -66,13 +70,13 @@ export function SegmentedControl({ segments, value, onChange }: Props) {
             onPress={() => select(i, seg.key)}
             style={styles.segment}>
             <ThemedText
-              type="smallBold"
-              style={{ color: active ? theme.text : theme.textSecondary }}>
+              type="label"
+              style={{ color: active ? theme.primary : theme.textSecondary, fontSize: 13 }}>
               {seg.label}
             </ThemedText>
             {seg.badge != null && seg.badge > 0 && (
-              <View style={[styles.badge, { backgroundColor: theme.tint }]}>
-                <ThemedText style={[styles.badgeText, { color: theme.onTint }]}>
+              <View style={[styles.badge, { backgroundColor: active ? theme.cyan : theme.backgroundHigh }]}>
+                <ThemedText style={[styles.badgeText, { color: active ? '#00363a' : theme.textSecondary }]}>
                   {seg.badge}
                 </ThemedText>
               </View>
@@ -92,6 +96,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     padding: PADDING,
     position: 'relative',
+    borderWidth: 1,
   },
   indicator: {
     position: 'absolute',
@@ -99,11 +104,7 @@ const styles = StyleSheet.create({
     left: PADDING,
     bottom: PADDING,
     borderRadius: Radius.pill,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    borderWidth: 1,
   },
   segment: {
     flex: 1,

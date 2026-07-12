@@ -11,32 +11,28 @@ import Animated, {
 
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing, Spring } from '@/constants/theme';
+import { Glow, Radius, Spacing, Spring } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type Props = {
   following: boolean;
   onToggle: () => void;
-  /** Compact icon-only pill (used in dense rows). */
   compact?: boolean;
 };
 
+/** Ghost border when unfollowed → solid electric purple + neon glow when following. */
 export function FollowButton({ following, onToggle, compact = false }: Props) {
   const theme = useTheme();
   const pop = useSharedValue(1);
 
-  // A little celebratory pop whenever the state flips.
   useEffect(() => {
-    pop.value = withSequence(
-      withSpring(1.12, Spring.snappy),
-      withSpring(1, Spring.snappy),
-    );
+    pop.value = withSequence(withSpring(1.12, Spring.snappy), withSpring(1, Spring.snappy));
   }, [following, pop]);
 
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
 
   return (
-    <Animated.View style={animatedStyle}>
+    <Animated.View style={[animatedStyle, following && Glow.purple]}>
       <PressableScale
         haptic={false}
         onPress={() => {
@@ -51,16 +47,18 @@ export function FollowButton({ following, onToggle, compact = false }: Props) {
           styles.button,
           compact && styles.compact,
           following
-            ? { backgroundColor: theme.backgroundSelected }
-            : { backgroundColor: theme.tint },
+            ? { backgroundColor: theme.primary, borderColor: theme.primary }
+            : { backgroundColor: 'transparent', borderColor: theme.primary },
         ]}>
         <Ionicons
-          name={following ? 'checkmark' : 'add'}
+          name={following ? 'heart' : 'heart-outline'}
           size={16}
-          color={following ? theme.text : theme.onTint}
+          color={following ? theme.onPrimary : theme.primary}
         />
         {!compact && (
-          <ThemedText type="smallBold" style={{ color: following ? theme.text : theme.onTint }}>
+          <ThemedText
+            type="label"
+            style={[styles.label, { color: following ? theme.onPrimary : theme.primary }]}>
             {following ? 'Following' : 'Follow'}
           </ThemedText>
         )}
@@ -74,17 +72,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    gap: Spacing.one + 2,
+    paddingHorizontal: Spacing.three + 4,
+    paddingVertical: Spacing.two + 2,
     borderRadius: Radius.pill,
-    minWidth: 108,
+    borderWidth: 1.5,
+    minWidth: 132,
   },
   compact: {
     minWidth: 0,
-    width: 38,
-    height: 38,
+    width: 40,
+    height: 40,
     paddingHorizontal: 0,
     paddingVertical: 0,
+    gap: 0,
   },
+  label: { fontSize: 13, letterSpacing: 0.5 },
 });

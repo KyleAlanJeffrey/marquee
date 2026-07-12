@@ -1,14 +1,9 @@
-/**
- * Learn more about light and dark modes:
- * https://docs.expo.dev/guides/color-schemes/
- */
-
 import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
+/**
+ * Marquee is dark-only ("Stage Black"), so the theme is constant. Kept as a
+ * hook so call sites don't change if theming returns later.
+ */
 export function useTheme() {
-  const scheme = useColorScheme();
-  const theme = scheme === 'unspecified' ? 'light' : scheme;
-
-  return Colors[theme];
+  return Colors.dark;
 }

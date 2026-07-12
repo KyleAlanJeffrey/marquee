@@ -5,9 +5,9 @@ import { ActivityIndicator, FlatList, StyleSheet, TextInput, View } from 'react-
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { FollowButton } from '@/components/follow-button';
+import { GenreChip } from '@/components/genre-chip';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Radius, Spacing } from '@/constants/theme';
+import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { useArtistSearch } from '@/lib/hooks';
@@ -17,6 +17,7 @@ export default function SearchScreen() {
   const { isFollowing, toggle } = useFollows();
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
+  const [focused, setFocused] = useState(false);
   const search = useArtistSearch(query);
 
   useEffect(() => {
@@ -25,14 +26,23 @@ export default function SearchScreen() {
   }, [input]);
 
   return (
-    <ThemedView style={{ flex: 1 }}>
-      <View style={[styles.searchBar, { backgroundColor: theme.backgroundElement }]}>
-        <Ionicons name="search" size={18} color={theme.textSecondary} />
+    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+      <View
+        style={[
+          styles.searchBar,
+          {
+            backgroundColor: theme.inputBg,
+            borderColor: focused ? theme.cyan : theme.border,
+          },
+        ]}>
+        <Ionicons name="search" size={18} color={focused ? theme.cyan : theme.textTertiary} />
         <TextInput
           value={input}
           onChangeText={setInput}
-          placeholder="Search artists…"
-          placeholderTextColor={theme.textSecondary}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder="Artists, venues, or vibes…"
+          placeholderTextColor={theme.textTertiary}
           autoFocus
           autoCorrect={false}
           returnKeyType="search"
@@ -50,7 +60,7 @@ export default function SearchScreen() {
 
       {search.isLoading && query.length >= 2 ? (
         <View style={styles.center}>
-          <ActivityIndicator color={theme.tint} />
+          <ActivityIndicator color={theme.primary} />
         </View>
       ) : (
         <FlatList
@@ -73,20 +83,17 @@ export default function SearchScreen() {
                 style={styles.row}>
                 <Image
                   source={item.image_url ? { uri: item.image_url } : undefined}
-                  style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}
+                  style={[styles.avatar, { backgroundColor: theme.backgroundElevated }]}
                   contentFit="cover"
                 />
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, gap: 4 }}>
                   <ThemedText type="smallBold" numberOfLines={1}>
                     {item.name}
                   </ThemedText>
-                  {item.genres.length > 0 && (
-                    <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                      {item.genres.slice(0, 3).join(' · ')}
-                    </ThemedText>
-                  )}
+                  {item.genres.length > 0 && <GenreChip label={item.genres[0]} tone="neutral" />}
                 </View>
                 <FollowButton
+                  compact
                   following={following}
                   onToggle={() =>
                     toggle({
@@ -103,11 +110,12 @@ export default function SearchScreen() {
           }}
         />
       )}
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1 },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -115,8 +123,9 @@ const styles = StyleSheet.create({
     margin: Spacing.three,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.md,
+    borderWidth: 1.5,
   },
-  input: { flex: 1, paddingVertical: Spacing.two + 4, fontSize: 16 },
+  input: { flex: 1, paddingVertical: Spacing.two + 4, fontSize: 16, fontFamily: Fonts.body },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingBottom: Spacing.five },
   hint: { textAlign: 'center', padding: Spacing.five },

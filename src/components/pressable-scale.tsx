@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { type ReactNode } from 'react';
-import { Platform, Pressable, type PressableProps, type ViewStyle } from 'react-native';
+import { Platform, Pressable, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -17,7 +17,7 @@ type Props = PressableProps & {
   scaleTo?: number;
   /** Fire a light haptic on press-in (native only). */
   haptic?: boolean;
-  style?: ViewStyle | ViewStyle[];
+  style?: StyleProp<ViewStyle>;
 };
 
 /**

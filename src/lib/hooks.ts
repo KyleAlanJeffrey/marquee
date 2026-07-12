@@ -1,7 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { supabase } from '@/lib/supabase';
-import type { Artist, ArtistEvent, ArtistSearchResult, Coords, NearbyEvent } from '@/lib/types';
+import type {
+  Artist,
+  ArtistEvent,
+  ArtistSearchResult,
+  Coords,
+  EventDetail,
+  NearbyEvent,
+} from '@/lib/types';
 
 /** Upcoming shows near a point, soonest first. Powers the home feed. */
 export function useNearbyEvents(coords: Coords | null, radiusMiles: number) {
@@ -16,6 +23,23 @@ export function useNearbyEvents(coords: Coords | null, radiusMiles: number) {
       });
       if (error) throw error;
       return data ?? [];
+    },
+  });
+}
+
+export function useEvent(eventId: string) {
+  return useQuery({
+    queryKey: ['event', eventId],
+    queryFn: async (): Promise<EventDetail> => {
+      const { data, error } = await supabase
+        .from('events')
+        .select(
+          'id, name, starts_at, ticket_url, source, artist:artists(id, name, spotify_id, image_url, genres), venue:venues(name, city, region)',
+        )
+        .eq('id', eventId)
+        .single();
+      if (error) throw error;
+      return data as unknown as EventDetail;
     },
   });
 }

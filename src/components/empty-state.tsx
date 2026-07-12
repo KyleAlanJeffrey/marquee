@@ -4,7 +4,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type Props = {
@@ -19,10 +19,16 @@ export function EmptyState({ icon, title, message, actionLabel, onAction }: Prop
   const theme = useTheme();
   return (
     <Animated.View entering={FadeInDown.duration(450)} style={styles.container}>
-      <View style={[styles.iconWrap, { backgroundColor: theme.backgroundElement }]}>
-        <Ionicons name={icon} size={40} color={theme.tint} />
+      <View
+        style={[
+          styles.iconWrap,
+          { backgroundColor: theme.backgroundElevated, borderColor: 'rgba(236,178,255,0.3)' },
+          Glow.purple,
+          { shadowOpacity: 0.25 },
+        ]}>
+        <Ionicons name={icon} size={38} color={theme.primary} />
       </View>
-      <ThemedText type="subtitle" style={styles.title}>
+      <ThemedText type="title" style={styles.title}>
         {title}
       </ThemedText>
       <ThemedText themeColor="textSecondary" style={styles.message}>
@@ -31,8 +37,8 @@ export function EmptyState({ icon, title, message, actionLabel, onAction }: Prop
       {actionLabel && onAction && (
         <PressableScale
           onPress={onAction}
-          style={[styles.button, { backgroundColor: theme.tint }]}>
-          <ThemedText type="smallBold" style={{ color: theme.onTint }}>
+          style={[styles.button, { backgroundColor: theme.primary }, Glow.purple]}>
+          <ThemedText type="label" style={{ color: theme.onPrimary, fontSize: 13 }}>
             {actionLabel}
           </ThemedText>
         </PressableScale>
@@ -50,22 +56,16 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   iconWrap: {
-    width: 88,
-    height: 88,
+    width: 92,
+    height: 92,
     borderRadius: Radius.pill,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.two,
   },
-  title: {
-    fontSize: 22,
-    lineHeight: 28,
-    textAlign: 'center',
-  },
-  message: {
-    textAlign: 'center',
-    maxWidth: 320,
-  },
+  title: { textAlign: 'center' },
+  message: { textAlign: 'center', maxWidth: 320 },
   button: {
     marginTop: Spacing.three,
     paddingHorizontal: Spacing.four,

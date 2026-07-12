@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 
+import { Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function TabsLayout() {
@@ -10,29 +11,31 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.tint,
+        sceneStyle: { backgroundColor: 'transparent' },
+        tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textTertiary,
         tabBarStyle: {
-          backgroundColor: theme.background,
+          backgroundColor: 'rgba(14,14,14,0.92)',
           borderTopColor: theme.border,
+          borderTopWidth: 1,
         },
-        tabBarLabelStyle: { fontWeight: '600' },
+        tabBarLabelStyle: { fontFamily: Fonts.label, fontSize: 11, letterSpacing: 0.5 },
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Near Me',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="location" size={size} color={color} />
+          title: 'Explore',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'compass' : 'compass-outline'} size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-sharp" size={size} color={color} />
+          title: 'Profile',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
           ),
         }}
       />

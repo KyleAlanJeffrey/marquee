@@ -1,22 +1,28 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
-export function SectionHeader({ children }: { children: string }) {
+/** Section title in the Sora headline voice, with an optional trailing accent. */
+export function SectionHeader({ children, accent }: { children: string; accent?: boolean }) {
+  const theme = useTheme();
   return (
-    <ThemedText type="smallBold" themeColor="textSecondary" style={styles.header}>
-      {children}
-    </ThemedText>
+    <View style={styles.row}>
+      {accent && <View style={[styles.bar, { backgroundColor: theme.primary }]} />}
+      <ThemedText type="title">{children}</ThemedText>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
     paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.two,
-    letterSpacing: 1.2,
-    fontSize: 12,
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.two + 2,
   },
+  bar: { width: 4, height: 22, borderRadius: 2 },
 });
