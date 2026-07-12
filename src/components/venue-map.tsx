@@ -11,19 +11,19 @@ export type MapPin = { lat: number; lng: number; following: boolean };
 
 type Props = {
   pins: MapPin[];
-  city: string | null;
-  count: number;
-  onExpand?: () => void;
+  locationLabel: string | null;
+  withinMiles: number | null;
+  onExplore?: () => void;
 };
 
 const GRID = 5;
 
 /**
  * A stylized, data-driven "map" — venue coordinates normalized onto a dark grid
- * with neon pins. Deliberately dependency-free (no native maps module) so it
- * renders identically on web and device.
+ * with neon pins. Dependency-free (no native maps module) so it renders
+ * identically on web and device.
  */
-export function VenueMap({ pins, city, count, onExpand }: Props) {
+export function VenueMap({ pins, locationLabel, withinMiles, onExplore }: Props) {
   const theme = useTheme();
 
   const lats = pins.map((p) => p.lat);
@@ -36,21 +36,19 @@ export function VenueMap({ pins, city, count, onExpand }: Props) {
   const spanLng = maxLng - minLng || 1;
 
   function pos(p: MapPin) {
-    // pad 12% so pins don't hug the edges; invert lat (north = up)
     const x = 0.12 + (0.76 * (p.lng - minLng)) / spanLng;
     const y = 0.12 + 0.76 * (1 - (p.lat - minLat) / spanLat);
     return { left: `${x * 100}%` as const, top: `${y * 100}%` as const };
   }
 
   return (
-    <PressableScale onPress={onExpand} scaleTo={0.99} style={[styles.card, { borderColor: theme.border }, Glow.cyan, { shadowOpacity: 0.2 }]}>
+    <View style={[styles.card, { borderColor: theme.border }, Glow.cyan, { shadowOpacity: 0.15 }]}>
       <LinearGradient
         colors={['#161422', '#0e0e0e']}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       />
-      {/* grid */}
       {Array.from({ length: GRID - 1 }).map((_, i) => (
         <View
           key={`h${i}`}
@@ -63,7 +61,6 @@ export function VenueMap({ pins, city, count, onExpand }: Props) {
           style={[styles.gridLine, { left: `${((i + 1) / GRID) * 100}%`, width: 1, top: 0, bottom: 0 }]}
         />
       ))}
-      {/* pins */}
       {pins.slice(0, 12).map((p, i) => {
         const c = p.following ? theme.primary : theme.cyan;
         return (
@@ -72,24 +69,44 @@ export function VenueMap({ pins, city, count, onExpand }: Props) {
           </View>
         );
       })}
-      <View style={styles.labelWrap}>
-        <View style={[styles.label, { backgroundColor: theme.glass, borderColor: theme.border }]}>
-          <Ionicons name="location" size={16} color={theme.cyan} />
-          <ThemedText type="label" style={{ color: theme.text, fontSize: 12 }}>
-            {count} live {count === 1 ? 'venue' : 'venues'}
-            {city ? ` in ${city}` : ' nearby'}
-          </ThemedText>
+
+      {/* Bottom overlay: location + distance + explore */}
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.8)']}
+        style={styles.overlay}>
+        <View style={styles.overlayRow}>
+          <View style={[styles.nearIcon, { backgroundColor: 'rgba(0,219,233,0.15)', borderColor: 'rgba(0,219,233,0.3)' }]}>
+            <Ionicons name="navigate" size={18} color={theme.cyan} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <ThemedText type="smallBold" style={{ color: '#fff' }} numberOfLines={1}>
+              {locationLabel ?? 'Your area'}
+            </ThemedText>
+            <ThemedText type="labelSm" style={{ color: theme.textSecondary }}>
+              {withinMiles != null
+                ? `You're within ${withinMiles} ${withinMiles === 1 ? 'mile' : 'miles'}`
+                : 'Live shows near you'}
+            </ThemedText>
+          </View>
+          <PressableScale
+            haptic={false}
+            onPress={onExplore}
+            style={[styles.exploreBtn, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: theme.border }]}>
+            <ThemedText type="label" style={{ color: '#fff', fontSize: 12 }}>
+              Explore Area
+            </ThemedText>
+          </PressableScale>
         </View>
-      </View>
-    </PressableScale>
+      </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    height: 176,
+    height: 224,
     marginHorizontal: Spacing.three,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -104,14 +121,28 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     elevation: 6,
   },
-  labelWrap: { position: 'absolute', left: Spacing.three, bottom: Spacing.three },
-  label: {
-    flexDirection: 'row',
+  overlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: Spacing.five,
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.three,
+  },
+  overlayRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 2 },
+  nearIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
     alignItems: 'center',
-    gap: Spacing.one + 2,
-    paddingHorizontal: Spacing.two + 2,
-    paddingVertical: Spacing.one + 3,
-    borderRadius: Radius.sm,
+    justifyContent: 'center',
+  },
+  exploreBtn: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.pill,
     borderWidth: 1,
   },
 });

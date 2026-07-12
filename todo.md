@@ -9,6 +9,20 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
 
 ---
 
+## Done — enhanced Explore + Browse All (this pass)
+
+- [x] Reworked the Explore sections to match the newer mockups (colors/fonts
+  unchanged): a search bar, "Nearby Venues" with a live-show count + View All
+  and a richer map overlay (location + "within N miles" + Explore Area), a wide
+  16:10 hero, a "Trending Nearby" list, and image-top "Coming Up Next" cards.
+- [x] New **Browse All** screen (`src/app/browse.tsx`): genre chips, result
+  count, grid/list toggle, a feature card, 2-up grid, Load More, floating Map
+  View. Reached from View All / Browse All.
+- [x] **Ticket price** ingested from Ticketmaster (`price_from`, migration
+  0003) and shown as "$N+" with a "Tickets"/"Free" fallback. Verified: real LA
+  pull returned prices (D.I. $28, Flying Lotus $19); seed events priced.
+- [x] Verified every section in-browser (mobile) against real + seed data.
+
 ## Done — Cloudflare migration (this pass)
 
 - [x] **Worker API** (`worker/`, Hono): `/nearby`, `/artists/:id`,

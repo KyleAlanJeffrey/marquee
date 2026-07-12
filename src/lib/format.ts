@@ -53,3 +53,10 @@ export function formatDistance(miles: number | null): string | null {
   if (miles == null) return null;
   return miles < 1 ? '<1 mi' : `${Math.round(miles)} mi`;
 }
+
+/** "$35+" for a known low price, else a neutral fallback. */
+export function formatPrice(from: number | null): string {
+  if (from == null) return 'Tickets';
+  if (from === 0) return 'Free';
+  return `$${Math.round(from)}+`;
+}

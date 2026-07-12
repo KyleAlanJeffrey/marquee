@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { ComingUpCard } from '@/components/coming-up-card';
@@ -136,6 +136,15 @@ export default function ExploreScreen() {
   }, [shown, isFollowing]);
 
   const cityLabel = label?.split(',')[0] ?? shown[0]?.venue_city ?? null;
+  const nearestMiles = useMemo(() => {
+    const dists = shown.map((e) => e.distance_miles).filter((d): d is number => d != null);
+    return dists.length ? Math.max(1, Math.round(Math.min(...dists))) : null;
+  }, [shown]);
+
+  function goBrowse() {
+    if (!coords) return;
+    router.push(`/browse?lat=${coords.lat}&lng=${coords.lng}&radius=${radiusMiles}`);
+  }
 
   function toggleFollow(e: NearbyEvent) {
     toggle({
@@ -175,6 +184,16 @@ export default function ExploreScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
           }>
+          {/* Search bar */}
+          <Pressable
+            onPress={() => router.push('/search')}
+            style={[styles.searchBar, { backgroundColor: theme.inputBg, borderColor: theme.border }]}>
+            <Ionicons name="search" size={18} color={theme.textTertiary} />
+            <ThemedText type="body" style={{ color: theme.textTertiary }}>
+              Artists, venues, or vibes…
+            </ThemedText>
+          </Pressable>
+
           {/* Head */}
           <View style={styles.head}>
             <ThemedText type="headline">Near Me</ThemedText>
@@ -257,8 +276,29 @@ export default function ExploreScreen() {
               {/* Nearby Venues map */}
               {pins.length > 0 && (
                 <>
-                  <SectionTitle title="Nearby Venues" accent actionLabel="Expand Map" onAction={openMaps} />
-                  <VenueMap pins={pins} city={cityLabel} count={pins.length} onExpand={openMaps} />
+                  <View style={styles.venuesHeader}>
+                    <View style={styles.venuesTitle}>
+                      <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+                      <View>
+                        <ThemedText type="title">Nearby Venues</ThemedText>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          {shown.length} live {shown.length === 1 ? 'show' : 'shows'} nearby
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <Pressable onPress={goBrowse} hitSlop={8} style={styles.viewAll}>
+                      <ThemedText type="label" style={{ color: theme.primary, fontSize: 12 }}>
+                        View All
+                      </ThemedText>
+                      <Ionicons name="arrow-forward" size={15} color={theme.primary} />
+                    </Pressable>
+                  </View>
+                  <VenueMap
+                    pins={pins}
+                    locationLabel={cityLabel}
+                    withinMiles={nearestMiles}
+                    onExplore={goBrowse}
+                  />
                 </>
               )}
 
@@ -287,7 +327,7 @@ export default function ExploreScreen() {
               {/* Coming Up */}
               {comingUp.length > 0 && (
                 <>
-                  <SectionTitle title="Coming Up" accent />
+                  <SectionTitle title="Coming Up Next" accent actionLabel="Browse All" onAction={goBrowse} />
                   <FlatList
                     horizontal
                     data={comingUp}
@@ -306,12 +346,6 @@ export default function ExploreScreen() {
       )}
     </View>
   );
-
-  function openMaps() {
-    if (!coords) return;
-    const url = `https://maps.google.com/?q=concerts@${coords.lat},${coords.lng}`;
-    Linking.openURL(url).catch(() => {});
-  }
 }
 
 function FollowingRail() {
@@ -377,6 +411,28 @@ function FeedEmpty({
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.three },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    marginHorizontal: Spacing.three,
+    marginTop: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two + 4,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  venuesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.four,
+    paddingBottom: Spacing.three,
+  },
+  venuesTitle: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  accentBar: { width: 4, height: 34, borderRadius: 2 },
+  viewAll: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, gap: Spacing.two },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 2 },
   radiusRow: { flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.one },

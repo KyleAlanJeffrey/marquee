@@ -55,6 +55,7 @@ export type EventInput = {
   name: string;
   starts_at: string;
   ticket_url: string | null;
+  price_from: number | null;
   artist_id: string;
   venue: VenueRow | null;
 };
@@ -66,7 +67,7 @@ export async function nearbyEvents(db: D1Database, lat: number, lng: number, rad
   const lngDelta = radiusMiles / (69 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
   const rows = await db
     .prepare(
-      `SELECT e.id event_id, e.name event_name, e.starts_at, e.ticket_url,
+      `SELECT e.id event_id, e.name event_name, e.starts_at, e.ticket_url, e.price_from,
               a.id artist_id, a.name artist_name, a.image_url artist_image_url,
               a.spotify_id artist_spotify_id, a.genres artist_genres,
               v.name venue_name, v.city venue_city, v.region venue_region,
@@ -106,7 +107,7 @@ export async function artistById(db: D1Database, id: string) {
 export async function artistEvents(db: D1Database, id: string) {
   const rows = await db
     .prepare(
-      `SELECT e.id event_id, e.name event_name, e.starts_at, e.ticket_url,
+      `SELECT e.id event_id, e.name event_name, e.starts_at, e.ticket_url, e.price_from,
               v.name venue_name, v.city venue_city, v.region venue_region
        FROM events e LEFT JOIN venues v ON v.id = e.venue_id
        WHERE e.artist_id = ?1 AND e.starts_at >= ?2
@@ -120,7 +121,7 @@ export async function artistEvents(db: D1Database, id: string) {
 export async function eventById(db: D1Database, id: string) {
   const r = await db
     .prepare(
-      `SELECT e.id, e.name, e.starts_at, e.ticket_url, e.source,
+      `SELECT e.id, e.name, e.starts_at, e.ticket_url, e.price_from, e.source,
               a.id a_id, a.name a_name, a.spotify_id a_spotify, a.image_url a_image, a.genres a_genres,
               v.name v_name, v.city v_city, v.region v_region
        FROM events e
@@ -136,6 +137,7 @@ export async function eventById(db: D1Database, id: string) {
     name: r.name,
     starts_at: r.starts_at,
     ticket_url: r.ticket_url,
+    price_from: r.price_from,
     source: r.source,
     artist: {
       id: r.a_id,
@@ -185,8 +187,8 @@ export async function persist(db: D1Database, inputs: EventInput[]): Promise<str
   const stmts = inputs.map((i) =>
     db
       .prepare(
-        `INSERT INTO events (id, artist_id, venue_id, name, starts_at, ticket_url, source, source_event_id)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
+        `INSERT INTO events (id, artist_id, venue_id, name, starts_at, ticket_url, price_from, source, source_event_id)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
          ON CONFLICT (source, source_event_id) DO NOTHING
          RETURNING id`,
       )
@@ -197,6 +199,7 @@ export async function persist(db: D1Database, inputs: EventInput[]): Promise<str
         i.name,
         i.starts_at,
         i.ticket_url,
+        i.price_from,
         i.source,
         i.source_event_id,
       ),
@@ -252,12 +255,14 @@ function tmVenue(e: any): VenueRow | null {
 function tmToEventInput(e: any, artistId: string): EventInput | null {
   const startsAt = e.dates?.start?.dateTime;
   if (!startsAt) return null;
+  const min = e.priceRanges?.[0]?.min;
   return {
     source: 'ticketmaster',
     source_event_id: e.id,
     name: e.name,
     starts_at: startsAt,
     ticket_url: e.url ?? null,
+    price_from: typeof min === 'number' ? min : null,
     artist_id: artistId,
     venue: tmVenue(e),
   };
@@ -321,6 +326,7 @@ async function bitEventsForArtist(
         name: e.title || `${artist.name} @ ${e.venue?.name ?? 'TBA'}`,
         starts_at: new Date(e.datetime).toISOString().slice(0, 19) + 'Z',
         ticket_url: e.offers?.[0]?.url ?? e.url ?? null,
+        price_from: null,
         artist_id: artist.id,
         venue: e.venue
           ? {

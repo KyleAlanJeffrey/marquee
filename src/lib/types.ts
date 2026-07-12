@@ -4,6 +4,7 @@ export type NearbyEvent = {
   event_name: string;
   starts_at: string;
   ticket_url: string | null;
+  price_from: number | null;
   artist_id: string;
   artist_name: string;
   artist_image_url: string | null;
@@ -22,6 +23,7 @@ export type ArtistEvent = {
   event_name: string;
   starts_at: string;
   ticket_url: string | null;
+  price_from: number | null;
   venue_name: string | null;
   venue_city: string | null;
   venue_region: string | null;
@@ -32,6 +34,7 @@ export type EventDetail = {
   name: string;
   starts_at: string;
   ticket_url: string | null;
+  price_from: number | null;
   source: string;
   artist: {
     id: string;
