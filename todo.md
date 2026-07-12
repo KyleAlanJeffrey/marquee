@@ -57,11 +57,27 @@ galleries (the artist image across varied crops). Wire real data when available:
 - [ ] **Support acts** from other events at the same venue/date.
 - [ ] **Ticket price** on the event Buy bar (needs a price field from ingest).
 
+## Done — client-driven concert data pipeline (this pass)
+
+- [x] **`discover-events`** edge function: location-driven Ticketmaster pull,
+  throttled per grid cell (`discovery_log` table). Near Me calls it on load +
+  pull-to-refresh and invalidates the feed when new events land.
+- [x] **`refresh-artist-events`** edge function: ingests shows for the on-device
+  follow list the client POSTs. Runs on launch + pull-to-refresh.
+- [x] Shared ingestion core in `supabase/functions/_shared/ingest.ts`.
+- [x] Verified locally: functions boot, JWT-gated (401 unauth), validate input
+  (400), and no-key path degrades gracefully. **Ticketmaster fetch itself is
+  untested — needs a real `TICKETMASTER_API_KEY`.**
+
 ## Next up
 
-- [ ] **Keep followed artists' events fresh** (carried over): ingest no longer
-  has server-side follows to pull for. Rely on the metro discovery sweep, or have
-  the client register followed artist ids for ingestion.
+- [ ] **Get a Ticketmaster Discovery key**, set it as a function secret, and
+  test discovery end-to-end on a device with real location.
+- [ ] **Refresh a single artist on follow** (currently launch + pull-to-refresh
+  only), so a just-followed artist's shows appear without a manual refresh.
+- [ ] **Retire or repurpose `ingest-events`** — it's dormant post-pivot. Either
+  delete it or convert it to a cron over a fixed launch-city list using
+  `_shared/ingest.ts`.
 - [ ] **Live glass blur.** Native has no cheap backdrop-blur for arbitrary
   content, so `GlassCard`/`TopBar` use translucent fills. Consider `expo-blur`
   (BlurView) for the top bar / nav / cards for true glassmorphism.

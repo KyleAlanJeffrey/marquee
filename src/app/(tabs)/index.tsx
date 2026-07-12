@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { ComingUpCard } from '@/components/coming-up-card';
@@ -18,6 +19,7 @@ import { TopBar } from '@/components/top-bar';
 import { VenueMap, type MapPin } from '@/components/venue-map';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { discoverEvents, refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
 import { useNearbyEvents } from '@/lib/hooks';
 import { getCurrentCoords, reverseGeocodeLabel } from '@/lib/location';
@@ -42,6 +44,9 @@ export default function ExploreScreen() {
   const [genre, setGenre] = useState<string>(ALL);
 
   const events = useNearbyEvents(coords, radiusMiles);
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshedFollows = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -54,6 +59,37 @@ export default function ExploreScreen() {
       setLabel(await reverseGeocodeLabel(c));
     })();
   }, []);
+
+  // Pull fresh nearby shows for this area (server throttles per cell).
+  useEffect(() => {
+    if (!coords) return;
+    let cancelled = false;
+    discoverEvents(coords, radiusMiles).then((n) => {
+      if (!cancelled && n > 0) queryClient.invalidateQueries({ queryKey: ['nearby-events'] });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [coords, radiusMiles, queryClient]);
+
+  // Refresh the followed artists' shows once per session.
+  useEffect(() => {
+    if (refreshedFollows.current || follows.length === 0) return;
+    refreshedFollows.current = true;
+    refreshArtistEvents(follows).then((n) => {
+      if (n > 0) queryClient.invalidateQueries({ queryKey: ['nearby-events'] });
+    });
+  }, [follows, queryClient]);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      if (coords) await Promise.all([discoverEvents(coords, radiusMiles), refreshArtistEvents(follows)]);
+      await events.refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const allEvents = useMemo(() => events.data ?? [], [events.data]);
 
@@ -136,7 +172,9 @@ export default function ExploreScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: Spacing.six + Spacing.four }}
-          refreshControl={undefined}>
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
+          }>
           {/* Head */}
           <View style={styles.head}>
             <ThemedText type="headline">Near Me</ThemedText>

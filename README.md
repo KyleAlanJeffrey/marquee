@@ -55,18 +55,28 @@ That's enough to use the whole app with **seed data** — no API keys needed. Th
 
 ### Real data (optional)
 
+Marquee is **local-first** (follows live on-device), so concert data is fetched
+on demand from where you actually are, rather than a nightly server job:
+
+- **`discover-events`** — the Near Me feed calls this with your location; it
+  pulls nearby music events from Ticketmaster and upserts them. Throttled per
+  area (see `discovery_log`), so it's cheap to call on every load.
+- **`refresh-artist-events`** — the app sends its on-device follow list; this
+  resolves each artist on Ticketmaster/Bandsintown and ingests their dates.
+  Runs on launch and pull-to-refresh.
+- **`search-artists`** — Spotify search proxy (artist search + follow).
+- `ingest-events` is the legacy nightly cron job; it depends on server-side
+  follows/profiles that the local-first pivot removed, so it's dormant.
+
 ```sh
-# Configure function secrets (Spotify/Ticketmaster keys — see file for links)
+# Configure function secrets (Spotify + Ticketmaster keys — see file for links)
 cp supabase/functions/.env.example supabase/functions/.env
-supabase functions serve        # runs search-artists + ingest-events locally
+supabase functions serve        # serves all functions locally with hot reload
 ```
 
-Then trigger ingestion by hand:
-
-```sh
-curl -X POST http://127.0.0.1:54321/functions/v1/ingest-events \
-  -H "x-cron-secret: $CRON_SECRET"
-```
+With a `TICKETMASTER_API_KEY` set, open **Near Me** on a device (real location)
+and pull to refresh — real shows around you flow into the feed. Without a key,
+the app runs on seed data and the discovery functions no-op gracefully.
 
 ## Deploying
 
