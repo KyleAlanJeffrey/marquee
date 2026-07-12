@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ErrorState } from '@/components/error-state';
 import { GalleryStrip } from '@/components/gallery-strip';
 import { GenreChip } from '@/components/genre-chip';
 import { GlassCard } from '@/components/glass-card';
@@ -59,6 +60,14 @@ export default function EventScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={theme.primary} />
+      </View>
+    );
+  }
+
+  if (event.isError) {
+    return (
+      <View style={styles.center}>
+        <ErrorState onRetry={() => event.refetch()} />
       </View>
     );
   }

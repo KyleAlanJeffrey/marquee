@@ -6,6 +6,7 @@ import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { DateBlock } from '@/components/date-block';
+import { ErrorState } from '@/components/error-state';
 import { FollowButton } from '@/components/follow-button';
 import { GalleryStrip } from '@/components/gallery-strip';
 import { GenreChip } from '@/components/genre-chip';
@@ -41,6 +42,14 @@ export default function ArtistScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={theme.primary} />
+      </View>
+    );
+  }
+
+  if (artist.isError) {
+    return (
+      <View style={styles.center}>
+        <ErrorState onRetry={() => artist.refetch()} />
       </View>
     );
   }
