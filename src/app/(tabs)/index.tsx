@@ -286,7 +286,7 @@ export default function ExploreScreen() {
                         </ThemedText>
                       </View>
                     </View>
-                    <Pressable onPress={goBrowse} hitSlop={8} style={styles.viewAll}>
+                    <Pressable onPress={goBrowse} hitSlop={16} style={styles.viewAll}>
                       <ThemedText type="label" style={{ color: theme.primary, fontSize: 12 }}>
                         View All
                       </ThemedText>
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
   },
   venuesTitle: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   accentBar: { width: 4, height: 34, borderRadius: 2 },
-  viewAll: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  viewAll: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: Spacing.two, paddingLeft: Spacing.three },
   head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, gap: Spacing.two },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 2 },
   radiusRow: { flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.one },
