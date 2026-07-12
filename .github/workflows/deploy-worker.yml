@@ -1,0 +1,35 @@
+name: Deploy Worker
+
+# Auto-deploy the Cloudflare Worker (worker/) on pushes to main that touch it.
+# The web app deploys separately via the Cloudflare Pages Git integration.
+#
+# Requires two GitHub repo secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   — token with the "Edit Cloudflare Workers" permission
+#   CLOUDFLARE_ACCOUNT_ID  — your account id (Workers dashboard → right sidebar)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/deploy-worker.yml'
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install worker dependencies
+        working-directory: worker
+        run: npm ci
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
