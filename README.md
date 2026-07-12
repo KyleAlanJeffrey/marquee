@@ -62,38 +62,43 @@ endpoints no-op gracefully.
 
 ## API (Cloudflare Worker)
 
+One Worker serves the web build (static assets) and the API under `/api/*`.
+
 | Route | Purpose |
 |---|---|
-| `GET /nearby?lat&lng&radius` | upcoming shows near a point (bbox + haversine) |
-| `GET /artists/:id` · `GET /artists/:id/events` | artist + their upcoming shows |
-| `GET /events/:id` | event detail |
-| `POST /search-artists` | Spotify artist search |
-| `POST /discover-events` | pull nearby shows from Ticketmaster (throttled per area) |
-| `POST /refresh-artist-events` | pull shows for the on-device follow list |
+| `GET /api/nearby?lat&lng&radius` | upcoming shows near a point (bbox + haversine) |
+| `GET /api/artists/:id` · `GET /api/artists/:id/events` | artist + their upcoming shows |
+| `GET /api/events/:id` | event detail |
+| `POST /api/search-artists` | Spotify artist search |
+| `POST /api/discover-events` | pull nearby shows from Ticketmaster (throttled per area) |
+| `POST /api/refresh-artist-events` | pull shows for the on-device follow list |
 
 ## Deploying
 
-**Worker + D1:**
+One Cloudflare Worker serves the web build **and** the API, and auto-deploys via
+**Cloudflare Workers Builds** (Git integration) — on each push it runs
+`npm run build` (Expo web export → `./dist`) then `npx wrangler deploy`, which
+uploads the Worker and the static assets together. The D1 database is
+auto-created by name on first deploy (no id pinned in `wrangler.jsonc`).
+
+After the first deploy, one time:
 
 ```sh
-cd worker
-npx wrangler d1 create marquee          # paste the id into wrangler.toml
-npx wrangler d1 execute marquee --remote --file=schema.sql
+# load the schema + seed into the remote D1 (or paste worker/schema.sql in the
+# D1 Console: Storage & Databases → D1 → marquee → Console)
+npm run db:apply
+# set the Worker's secrets (Worker → Settings → Variables and Secrets, or CLI)
 npx wrangler secret put TICKETMASTER_API_KEY
 npx wrangler secret put SPOTIFY_CLIENT_ID
 npx wrangler secret put SPOTIFY_CLIENT_SECRET
-npx wrangler deploy                     # → https://marquee-worker.<sub>.workers.dev
 ```
 
-**Web app → Cloudflare Pages:**
+The web is served same-origin, so it needs no API URL. Deploy by hand with
+`npm run deploy` (after `npm run build`).
 
-```sh
-EXPO_PUBLIC_API_URL=https://marquee-worker.<sub>.workers.dev npx expo export -p web
-npx wrangler pages deploy dist --project-name marquee
-```
-
-**Native app:** build with EAS (`eas build`); set `EXPO_PUBLIC_API_URL` to the
-deployed Worker. Push/reminders need a dev or store build on a physical device.
+**Native app:** build with EAS (`eas build`) and set `EXPO_PUBLIC_API_URL` to the
+deployed Worker origin (native can't use same-origin relative URLs).
+Push/reminders need a dev or store build on a physical device.
 
 ## API keys
 

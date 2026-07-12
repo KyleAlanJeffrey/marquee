@@ -6,7 +6,9 @@
 #   npm run dev -- --no-app  # just the Worker
 #
 # Installs deps, loads the D1 schema into a local SQLite database, starts the
-# Worker (wrangler dev on :8787), writes the app's .env, and launches Expo.
+# Worker (wrangler dev on :8787, serving /api), writes .env, and launches Expo.
+# One Worker serves both the web build and the API in production; in dev the app
+# runs on the Expo dev server and calls the Worker's /api.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -21,21 +23,22 @@ done
 
 info() { printf '\033[1;34m▶\033[0m %s\n' "$1"; }
 
-# 1. Dependencies
-[ -d node_modules ] || { info "Installing app dependencies…"; npm install; }
-[ -d worker/node_modules ] || { info "Installing worker dependencies…"; (cd worker && npm install); }
+# 1. Dependencies (single root package covers the app + the Worker)
+[ -d node_modules ] || { info "Installing dependencies…"; npm install; }
 
 # 2. Local D1 schema + seed
 info "Loading the D1 schema + seed into the local database…"
-(cd worker && npx wrangler d1 execute marquee --local --file=schema.sql)
+npx wrangler d1 execute marquee --local --file=worker/schema.sql
 
 # 3. App env → local Worker
 info "Writing .env (EXPO_PUBLIC_API_URL=http://localhost:8787)…"
 printf 'EXPO_PUBLIC_API_URL=http://localhost:8787\n' > .env
 
-# 4. Start the Worker (background)
+# 4. Start the Worker (background). Assets serve from ./dist, so make sure it
+#    exists (the web build isn't needed in dev — the app runs on Expo).
+mkdir -p dist
 info "Starting the Worker on http://localhost:8787 …"
-(cd worker && npx wrangler dev --port 8787) &
+npx wrangler dev --port 8787 &
 WORKER_PID=$!
 trap 'kill $WORKER_PID 2>/dev/null || true' EXIT
 

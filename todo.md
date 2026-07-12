@@ -9,6 +9,20 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
 
 ---
 
+## Done — unified single-Worker deploy (this pass)
+
+- [x] One Worker now serves the web build (static `assets`) **and** the API at
+  `/api/*` (run_worker_first + SPA fallback). Root `wrangler.jsonc`; the worker
+  is flattened into the root package (hono + wrangler in root deps).
+- [x] Auto-deploys via **Cloudflare Workers Builds** (Git integration):
+  `npm run build` → `npx wrangler deploy`. Removed the separate Pages deploy and
+  the GitHub Action; deleted `worker/package.json` / `wrangler.toml`.
+- [x] Client calls same-origin `/api` (EXPO_PUBLIC_API_URL optional on web,
+  required for native). `npm run deploy` / `db:apply` scripts added.
+- [x] Verified locally: one `wrangler dev` serves `/api/nearby` (14 rows, prices),
+  `/` (Expo index), `/browse` (static), `/artist/:id` (SPA fallback). tsc + lint
+  + build clean.
+
 ## Done — enhanced Explore + Browse All (this pass)
 
 - [x] Reworked the Explore sections to match the newer mockups (colors/fonts

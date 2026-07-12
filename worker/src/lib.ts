@@ -1,7 +1,8 @@
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, Fetcher } from '@cloudflare/workers-types';
 
 export type Env = {
   DB: D1Database;
+  ASSETS: Fetcher;
   TICKETMASTER_API_KEY?: string;
   SPOTIFY_CLIENT_ID?: string;
   SPOTIFY_CLIENT_SECRET?: string;
