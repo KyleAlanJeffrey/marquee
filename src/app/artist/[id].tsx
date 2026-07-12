@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -6,7 +7,9 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { DateBlock } from '@/components/date-block';
 import { FollowButton } from '@/components/follow-button';
+import { GalleryStrip } from '@/components/gallery-strip';
 import { GenreChip } from '@/components/genre-chip';
+import { GlassCard } from '@/components/glass-card';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
@@ -16,6 +19,14 @@ import { useFollows } from '@/lib/follows-store';
 import { useArtist, useArtistEvents } from '@/lib/hooks';
 import { formatTime, formatVenue } from '@/lib/format';
 import type { ArtistEvent } from '@/lib/types';
+
+/** A short, honestly-derived blurb (we don't store real bios). */
+function aboutText(name: string, genres: string[]): string {
+  const g = genres.slice(0, 2).join(' and ');
+  const article = g && /^[aeiou]/i.test(g) ? 'an' : 'a';
+  const lead = g ? `${name} is ${article} ${g} act` : `${name} is a live act`;
+  return `${lead} on Marquee. Follow to get a reminder before their next show near you, and grab tickets from the dates above.`;
+}
 
 export default function ArtistScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -93,6 +104,25 @@ export default function ArtistScreen() {
                     </View>
                   )}
                 </View>
+                <View style={styles.heroStats}>
+                  <View style={styles.stat}>
+                    <ThemedText type="title" style={{ fontSize: 18 }}>
+                      {events.data?.length ?? '—'}
+                    </ThemedText>
+                    <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                      UPCOMING SHOWS
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
+                  <View style={styles.stat}>
+                    <ThemedText type="title" style={{ fontSize: 18 }}>
+                      {a.genres.length || '—'}
+                    </ThemedText>
+                    <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                      GENRES
+                    </ThemedText>
+                  </View>
+                </View>
               </View>
             </View>
 
@@ -145,6 +175,67 @@ export default function ArtistScreen() {
             </View>
           </Animated.View>
         )}
+        ListFooterComponent={
+          <View>
+            {/* Top Tracks */}
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+              <ThemedText type="title">Top Tracks</ThemedText>
+            </View>
+            <GlassCard style={styles.tracksCard}>
+              {[0, 1, 2].map((i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.trackRow,
+                    i < 2 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+                  ]}>
+                  <LinearGradient
+                    colors={i % 2 ? ['#00dbe9', '#0e0e0e'] : ['#bd00ff', '#0e0e0e']}
+                    style={styles.trackArt}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  />
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <View style={[styles.skeleton, { width: `${70 - i * 12}%`, backgroundColor: theme.backgroundHigh }]} />
+                    <View style={[styles.skeleton, { width: '30%', height: 8, backgroundColor: theme.backgroundHigh }]} />
+                  </View>
+                  <Ionicons name="play" size={18} color={theme.textTertiary} />
+                </View>
+              ))}
+              <ThemedText type="labelSm" style={{ color: theme.textTertiary, padding: Spacing.three, paddingTop: Spacing.two }}>
+                STREAMING PREVIEWS COMING SOON
+              </ThemedText>
+            </GlassCard>
+
+            {/* About */}
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+              <ThemedText type="title">About</ThemedText>
+            </View>
+            <View style={styles.section}>
+              <GlassCard style={styles.aboutCard}>
+                <ThemedText type="body" themeColor="textSecondary" style={{ lineHeight: 24 }}>
+                  {aboutText(a.name, a.genres)}
+                </ThemedText>
+                {a.genres.length > 0 && (
+                  <View style={styles.aboutChips}>
+                    {a.genres.slice(0, 4).map((g) => (
+                      <GenreChip key={g} label={g} tone="neutral" />
+                    ))}
+                  </View>
+                )}
+              </GlassCard>
+            </View>
+
+            {/* Artist Gallery */}
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+              <ThemedText type="title">Artist Gallery</ThemedText>
+            </View>
+            <GalleryStrip imageUrl={a.image_url} />
+          </View>
+        }
       />
 
       <View style={styles.topBarAbs}>
@@ -161,6 +252,9 @@ const styles = StyleSheet.create({
   heroName: { color: '#fff' },
   heroActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginTop: Spacing.two, flexWrap: 'wrap' },
   heroGenres: { flexDirection: 'row', gap: Spacing.two },
+  heroStats: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginTop: Spacing.three },
+  stat: { gap: 2 },
+  statDivider: { width: 1, height: 32 },
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -186,5 +280,12 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     borderRadius: Radius.pill,
   },
+  section: { paddingHorizontal: Spacing.three },
+  tracksCard: { marginHorizontal: Spacing.three, overflow: 'hidden' },
+  trackRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, padding: Spacing.three },
+  trackArt: { width: 44, height: 44, borderRadius: Radius.sm },
+  skeleton: { height: 12, borderRadius: 4 },
+  aboutCard: { padding: Spacing.three, gap: Spacing.three },
+  aboutChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   topBarAbs: { position: 'absolute', top: 0, left: 0, right: 0 },
 });

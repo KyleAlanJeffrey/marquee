@@ -35,6 +35,28 @@ glassmorphism, gradient CTAs, and image-forward concert cards. Fonts: Sora
   gradient hero card, event-detail screen, sticky Buy Tickets bar, follow
   persistence, segmented toggle — no console errors. tsc + lint + web bundle clean.
 
+## Done — full design sections (this pass)
+
+- [x] **Explore:** genre filter chips (derived from nearby genres, filter the
+  feed), Nearby Venues map (dependency-free stylized map, real venue pins via
+  `venue_lat/lng` added to `nearby_events`), This Weekend hero + bento secondary
+  cards, Coming Up horizontal carousel with per-card Remind Me (one-off local
+  notification).
+- [x] **Event detail:** The Lineup (headliner + support tiles), The Venue
+  (stylized map card + Open in Maps), Fan Gallery strip.
+- [x] **Artist:** hero stat row (upcoming shows / genres), Top Tracks, About
+  (derived blurb + genre chips), Artist Gallery.
+- [x] Verified every section in-browser (mobile viewport) against seed data.
+
+Placeholders where we lack a data source (clearly non-fabricated): support acts
+("To be announced"), Top Tracks (skeleton + "streaming previews coming soon"),
+galleries (the artist image across varied crops). Wire real data when available:
+
+- [ ] **Top Tracks + galleries from Spotify** (needs an artist-top-tracks edge
+  function + real spotify ids; seed artists have placeholder ids).
+- [ ] **Support acts** from other events at the same venue/date.
+- [ ] **Ticket price** on the event Buy bar (needs a price field from ingest).
+
 ## Next up
 
 - [ ] **Keep followed artists' events fresh** (carried over): ingest no longer

@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GalleryStrip } from '@/components/gallery-strip';
 import { GenreChip } from '@/components/genre-chip';
 import { GlassCard } from '@/components/glass-card';
 import { GradientButton } from '@/components/gradient-button';
@@ -147,7 +148,78 @@ export default function EventScreen() {
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.textTertiary} />
           </PressableScale>
+
+          <View style={styles.supportRow}>
+            {['Support', 'Support'].map((s, i) => (
+              <View
+                key={i}
+                style={[styles.supportTile, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
+                <LinearGradient
+                  colors={i === 0 ? ['rgba(189,0,255,0.25)', 'transparent'] : ['rgba(0,219,233,0.22)', 'transparent']}
+                  style={StyleSheet.absoluteFill}
+                  start={{ x: 0, y: 1 }}
+                  end={{ x: 1, y: 0 }}
+                />
+                <ThemedText type="labelSm" style={{ color: theme.textSecondary }}>
+                  {s.toUpperCase()}
+                </ThemedText>
+                <ThemedText type="smallBold" style={{ color: theme.text }}>
+                  To be announced
+                </ThemedText>
+              </View>
+            ))}
+          </View>
         </View>
+
+        {/* The Venue */}
+        <View style={styles.sectionTitleRow}>
+          <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+          <ThemedText type="title">The Venue</ThemedText>
+        </View>
+        <View style={styles.section}>
+          <GlassCard style={styles.venueCard}>
+            <View style={styles.venueMap}>
+              <LinearGradient colors={['#161422', '#0e0e0e']} style={StyleSheet.absoluteFill} />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <View key={`h${i}`} style={[styles.vGrid, { top: `${((i + 1) / 5) * 100}%`, left: 0, right: 0, height: 1 }]} />
+              ))}
+              {Array.from({ length: 4 }).map((_, i) => (
+                <View key={`v${i}`} style={[styles.vGrid, { left: `${((i + 1) / 5) * 100}%`, top: 0, bottom: 0, width: 1 }]} />
+              ))}
+              <View style={styles.venuePinWrap}>
+                <Ionicons name="location" size={26} color={theme.cyan} />
+              </View>
+            </View>
+            <View style={styles.venueInfo}>
+              <ThemedText type="title" numberOfLines={1}>
+                {e.venue?.name ?? 'Venue TBA'}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {[e.venue?.city, e.venue?.region].filter(Boolean).join(', ') || 'Location to be announced'}
+              </ThemedText>
+              <PressableScale
+                onPress={() =>
+                  Linking.openURL(
+                    `https://maps.google.com/?q=${encodeURIComponent(
+                      [e.venue?.name, e.venue?.city, e.venue?.region].filter(Boolean).join(' '),
+                    )}`,
+                  )
+                }
+                style={[styles.mapsBtn, { borderColor: theme.cyan }]}>
+                <ThemedText type="label" style={{ color: theme.cyan, fontSize: 12 }}>
+                  OPEN IN MAPS
+                </ThemedText>
+              </PressableScale>
+            </View>
+          </GlassCard>
+        </View>
+
+        {/* Fan Gallery */}
+        <View style={styles.sectionTitleRow}>
+          <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+          <ThemedText type="title">Fan Gallery</ThemedText>
+        </View>
+        <GalleryStrip imageUrl={e.artist.image_url} />
       </Animated.ScrollView>
 
       {/* Floating top bar with back */}
@@ -239,6 +311,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   headlinerImg: { width: 56, height: 56, borderRadius: Radius.sm },
+  supportRow: { flexDirection: 'row', gap: Spacing.two + 2, marginTop: Spacing.two },
+  supportTile: {
+    flex: 1,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    padding: Spacing.three,
+    height: 92,
+    justifyContent: 'flex-end',
+    gap: 2,
+    overflow: 'hidden',
+  },
+  venueCard: { overflow: 'hidden' },
+  venueMap: { height: 130 },
+  vGrid: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.05)' },
+  venuePinWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  venueInfo: { padding: Spacing.three, gap: Spacing.one + 2 },
+  mapsBtn: {
+    alignSelf: 'flex-start',
+    marginTop: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.pill,
+    borderWidth: 1.5,
+  },
   topBarAbs: { position: 'absolute', top: 0, left: 0, right: 0 },
   buyBar: {
     position: 'absolute',

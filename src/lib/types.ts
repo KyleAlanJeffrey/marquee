@@ -12,6 +12,8 @@ export type NearbyEvent = {
   venue_name: string | null;
   venue_city: string | null;
   venue_region: string | null;
+  venue_lat: number | null;
+  venue_lng: number | null;
   distance_miles: number | null;
 };
 

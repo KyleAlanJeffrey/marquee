@@ -24,6 +24,38 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   return status === 'granted';
 }
 
+/**
+ * Schedule a single "Remind Me" notification (a day before, else at show time)
+ * for an event the user isn't necessarily following. Returns whether it was set.
+ */
+export async function scheduleOneOffReminder(event: {
+  event_id: string;
+  artist_name: string;
+  venue_name: string | null;
+  venue_city: string | null;
+  starts_at: string;
+}): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  const granted = await ensureNotificationPermission();
+  if (!granted) return false;
+  const when = reminderDate(event.starts_at) ?? new Date(Date.now() + 60_000);
+  const where = event.venue_city ?? event.venue_name ?? 'near you';
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: `${OWNED_PREFIX}${event.event_id}`,
+      content: {
+        title: `${event.artist_name} — show reminder`,
+        body: `${event.venue_name ?? 'A venue'} in ${where}. Tap for tickets.`,
+        data: { eventId: event.event_id },
+      },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: when },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function reminderDate(startsAt: string): Date | null {
   const showTime = new Date(startsAt).getTime();
   // A day before the show, but never in the past.
