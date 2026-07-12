@@ -23,7 +23,7 @@ src/
 worker/
   src/index.ts    Hono routes (reads + ingestion endpoints)
   src/lib.ts      Ticketmaster/Spotify/Bandsintown + D1 persistence + geo
-  migrations/     D1 schema (0001_init) + dev seed (0002_seed)
+  schema.sql      D1 schema + dev seed (one file; apply with `d1 execute`)
   wrangler.toml   Worker + D1 binding
 scripts/dev.sh    one-command local dev (Worker + local D1 + Expo)
 ```
@@ -35,7 +35,7 @@ Prereqs: Node 20+, and (for the backend) Wrangler — installed automatically as
 
 ```sh
 npm install
-npm run dev            # installs worker deps, applies D1 migrations locally,
+npm run dev            # installs worker deps, loads the D1 schema locally,
                        # starts the Worker on :8787, writes .env, launches Expo
 ```
 
@@ -78,7 +78,7 @@ endpoints no-op gracefully.
 ```sh
 cd worker
 npx wrangler d1 create marquee          # paste the id into wrangler.toml
-npx wrangler d1 migrations apply marquee --remote
+npx wrangler d1 execute marquee --remote --file=schema.sql
 npx wrangler secret put TICKETMASTER_API_KEY
 npx wrangler secret put SPOTIFY_CLIENT_ID
 npx wrangler secret put SPOTIFY_CLIENT_SECRET

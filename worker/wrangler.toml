@@ -8,8 +8,7 @@ compatibility_date = "2024-11-27"
 [[d1_databases]]
 binding = "DB"
 database_name = "marquee"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
-migrations_dir = "migrations"
+database_id = "3905e807-3b98-465c-874d-ba558bf319da"
 
 # Secrets (set with `wrangler secret put <NAME>`; local dev reads .dev.vars):
 #   TICKETMASTER_API_KEY   — required for discovery/refresh

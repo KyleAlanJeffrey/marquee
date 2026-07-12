@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:apply:local": "wrangler d1 migrations apply marquee --local",
-    "db:apply": "wrangler d1 migrations apply marquee --remote"
+    "db:apply:local": "wrangler d1 execute marquee --local --file=schema.sql",
+    "db:apply": "wrangler d1 execute marquee --remote --file=schema.sql"
   },
   "dependencies": {
     "hono": "^4.6.14"

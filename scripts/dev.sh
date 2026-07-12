@@ -5,7 +5,7 @@
 #   npm run dev              # backend (Worker + local D1) + app
 #   npm run dev -- --no-app  # just the Worker
 #
-# Installs deps, applies D1 migrations to a local SQLite database, starts the
+# Installs deps, loads the D1 schema into a local SQLite database, starts the
 # Worker (wrangler dev on :8787), writes the app's .env, and launches Expo.
 
 set -euo pipefail
@@ -26,8 +26,8 @@ info() { printf '\033[1;34m▶\033[0m %s\n' "$1"; }
 [ -d worker/node_modules ] || { info "Installing worker dependencies…"; (cd worker && npm install); }
 
 # 2. Local D1 schema + seed
-info "Applying D1 migrations to the local database…"
-(cd worker && npx wrangler d1 migrations apply marquee --local)
+info "Loading the D1 schema + seed into the local database…"
+(cd worker && npx wrangler d1 execute marquee --local --file=schema.sql)
 
 # 3. App env → local Worker
 info "Writing .env (EXPO_PUBLIC_API_URL=http://localhost:8787)…"
