@@ -6,6 +6,7 @@ import {
   artistEvents,
   artistSpotify,
   discover,
+  ensureArtistRecord,
   eventById,
   nearbyEvents,
   refreshArtists,
@@ -105,6 +106,22 @@ api.post('/search-artists', async (c) => {
   } catch (err) {
     return c.json({ error: String(err) }, 500);
   }
+});
+
+// Resolve/create an artist (e.g. from a Spotify search hit) so we can open
+// their page even before any of their shows have been ingested.
+api.post('/artists/ensure', async (c) => {
+  const b = await c.req.json().catch(() => ({}));
+  if (!b?.spotifyId && !b?.artistId) return c.json({ error: 'spotifyId or artistId required' }, 400);
+  if (!b?.name && !b?.artistId) return c.json({ error: 'name required' }, 400);
+  const artist = await ensureArtistRecord(c.env, {
+    artistId: b.artistId ?? null,
+    spotifyId: b.spotifyId ?? null,
+    name: b.name,
+    imageUrl: b.imageUrl ?? null,
+    genres: Array.isArray(b.genres) ? b.genres : [],
+  });
+  return artist ? c.json(artist) : c.json({ error: 'could not resolve artist' }, 400);
 });
 
 // --- Ingestion (client-driven) ---------------------------------------------

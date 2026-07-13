@@ -467,6 +467,15 @@ async function ensureArtist(db: D1Database, a: IncomingArtist) {
   return null;
 }
 
+/** Upsert a single artist (typically from a Spotify search result) and return
+ *  the full stored record. Fast — no external event fetch; the artist screen
+ *  pulls the schedule on open. */
+export async function ensureArtistRecord(env: Env, a: IncomingArtist) {
+  const row = await ensureArtist(env.DB, a);
+  if (!row) return null;
+  return artistById(env.DB, row.id);
+}
+
 export async function refreshArtists(env: Env, artists: IncomingArtist[]) {
   const newIds: string[] = [];
   for (const a of artists.slice(0, 25)) {

@@ -1,5 +1,5 @@
 import { apiPost } from '@/lib/api';
-import type { Coords } from '@/lib/types';
+import type { Artist, Coords } from '@/lib/types';
 
 /** Minimal artist identity the refresh endpoint needs. */
 export type RefreshableArtist = {
@@ -25,6 +25,23 @@ export async function discoverEvents(coords: Coords, radiusMiles: number): Promi
     return data.ingested ?? 0;
   } catch {
     return 0;
+  }
+}
+
+/** Ensure an artist (e.g. a Spotify search hit) exists in the DB so we can open
+ *  their page. Returns the stored artist id, or null on failure. */
+export async function ensureArtist(a: RefreshableArtist): Promise<string | null> {
+  try {
+    const artist = await apiPost<Artist>('/artists/ensure', {
+      artistId: a.artistId,
+      spotifyId: a.spotifyId,
+      name: a.name,
+      imageUrl: a.imageUrl,
+      genres: a.genres,
+    });
+    return artist.id ?? null;
+  } catch {
+    return null;
   }
 }
 

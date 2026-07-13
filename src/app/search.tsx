@@ -1,16 +1,20 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, TextInput, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { FollowButton } from '@/components/follow-button';
 import { GenreChip } from '@/components/genre-chip';
+import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { ensureArtist } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
 import { useArtistSearch } from '@/lib/hooks';
+import type { ArtistSearchResult } from '@/lib/types';
 
 export default function SearchScreen() {
   const theme = useTheme();
@@ -18,12 +22,29 @@ export default function SearchScreen() {
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
+  const [opening, setOpening] = useState<string | null>(null);
   const search = useArtistSearch(query);
 
   useEffect(() => {
     const t = setTimeout(() => setQuery(input), 350);
     return () => clearTimeout(t);
   }, [input]);
+
+  // Resolve the Spotify hit to a stored artist, then open their page (which
+  // pulls their upcoming shows from Ticketmaster on open).
+  async function openArtist(item: ArtistSearchResult) {
+    if (opening) return;
+    setOpening(item.spotify_id);
+    const id = await ensureArtist({
+      artistId: null,
+      spotifyId: item.spotify_id,
+      name: item.name,
+      imageUrl: item.image_url,
+      genres: item.genres,
+    });
+    setOpening(null);
+    if (id) router.push(`/artist/${id}`);
+  }
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -77,21 +98,32 @@ export default function SearchScreen() {
           }
           renderItem={({ item, index }) => {
             const following = isFollowing({ spotifyId: item.spotify_id });
+            const isOpening = opening === item.spotify_id;
             return (
               <Animated.View
                 entering={FadeInDown.delay(Math.min(index * 40, 300)).duration(320)}
                 style={styles.row}>
-                <Image
-                  source={item.image_url ? { uri: item.image_url } : undefined}
-                  style={[styles.avatar, { backgroundColor: theme.backgroundElevated }]}
-                  contentFit="cover"
-                />
-                <View style={{ flex: 1, gap: 4 }}>
-                  <ThemedText type="smallBold" numberOfLines={1}>
-                    {item.name}
-                  </ThemedText>
-                  {item.genres.length > 0 && <GenreChip label={item.genres[0]} tone="neutral" />}
-                </View>
+                <PressableScale
+                  haptic={false}
+                  onPress={() => openArtist(item)}
+                  style={styles.rowMain}>
+                  <Image
+                    source={item.image_url ? { uri: item.image_url } : undefined}
+                    style={[styles.avatar, { backgroundColor: theme.backgroundElevated }]}
+                    contentFit="cover"
+                  />
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <ThemedText type="smallBold" numberOfLines={1}>
+                      {item.name}
+                    </ThemedText>
+                    {item.genres.length > 0 && <GenreChip label={item.genres[0]} tone="neutral" />}
+                  </View>
+                  {isOpening ? (
+                    <ActivityIndicator color={theme.textTertiary} />
+                  ) : (
+                    <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+                  )}
+                </PressableScale>
                 <FollowButton
                   compact
                   following={following}
@@ -132,9 +164,10 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
+    gap: Spacing.two,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two + 2,
   },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   avatar: { width: 52, height: 52, borderRadius: Radius.pill },
 });
