@@ -13,10 +13,12 @@ type Props = {
   transparent?: boolean;
   /** Show a back chevron (falls back to Home when there's no history). */
   back?: boolean;
+  /** Contextual page label shown in place of the MARQUEE wordmark. */
+  title?: string;
 };
 
 /** The signature glass top bar with the neon MARQUEE wordmark. */
-export function TopBar({ onSearchPress, transparent, back }: Props) {
+export function TopBar({ onSearchPress, transparent, back, title }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -42,7 +44,13 @@ export function TopBar({ onSearchPress, transparent, back }: Props) {
           </Pressable>
         )}
       </View>
-      <ThemedText style={[styles.wordmark, { color: theme.primary }]}>MARQUEE</ThemedText>
+      {title ? (
+        <ThemedText numberOfLines={1} style={[styles.title, { color: theme.text }]}>
+          {title}
+        </ThemedText>
+      ) : (
+        <ThemedText style={[styles.wordmark, { color: theme.primary }]}>MARQUEE</ThemedText>
+      )}
       <View style={[styles.side, styles.right]}>
         {onSearchPress && (
           <Pressable onPress={onSearchPress} hitSlop={10}>
@@ -68,5 +76,16 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.headline,
     fontSize: 24,
     letterSpacing: 1,
+  },
+  title: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: Fonts.label,
+    fontSize: 15,
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 8,
   },
 });

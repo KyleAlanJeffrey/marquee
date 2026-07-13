@@ -244,7 +244,7 @@ export default function EventScreen() {
 
       {/* Floating top bar with back */}
       <View style={styles.topBarAbs}>
-        <TopBar transparent back />
+        <TopBar transparent back title="Event" />
       </View>
 
       {/* Sticky buy bar */}

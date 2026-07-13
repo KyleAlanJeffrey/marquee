@@ -310,7 +310,7 @@ export default function ArtistScreen() {
       />
 
       <View style={styles.topBarAbs}>
-        <TopBar transparent back />
+        <TopBar transparent back title="Artist" />
       </View>
     </View>
   );

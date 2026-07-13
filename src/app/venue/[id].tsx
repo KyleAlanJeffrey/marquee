@@ -171,7 +171,7 @@ export default function VenueScreen() {
       />
 
       <View style={styles.topBarAbs}>
-        <TopBar transparent back />
+        <TopBar transparent back title="Venue" />
       </View>
     </View>
   );
