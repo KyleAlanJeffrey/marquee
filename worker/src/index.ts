@@ -4,6 +4,7 @@ import { cors } from 'hono/cors';
 import {
   artistById,
   artistEvents,
+  artistSpotify,
   discover,
   eventById,
   nearbyEvents,
@@ -45,6 +46,26 @@ api.get('/artists/:id', async (c) => {
 
 api.get('/artists/:id/events', async (c) => {
   return c.json(await artistEvents(c.env.DB, c.req.param('id')));
+});
+
+api.get('/artists/:id/spotify', async (c) => {
+  const empty = {
+    spotify_id: null,
+    followers: null,
+    popularity: null,
+    genres: [],
+    image_url: null,
+    external_url: null,
+    top_tracks: [],
+  };
+  if (!c.env.SPOTIFY_CLIENT_ID) return c.json(empty);
+  try {
+    const data = await artistSpotify(c.env, c.req.param('id'));
+    return data ? c.json(data) : c.json({ error: 'not found' }, 404);
+  } catch (err) {
+    console.error(err);
+    return c.json(empty);
+  }
 });
 
 api.get('/events/:id', async (c) => {

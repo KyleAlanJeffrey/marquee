@@ -60,3 +60,11 @@ export function formatPrice(from: number | null): string {
   if (from === 0) return 'Free';
   return `$${Math.round(from)}+`;
 }
+
+/** Compact count: 1234 -> "1.2K", 1_500_000 -> "1.5M". */
+export function formatCount(n: number | null): string {
+  if (n == null) return '—';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`;
+  return String(n);
+}

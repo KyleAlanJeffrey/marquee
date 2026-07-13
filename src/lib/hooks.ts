@@ -5,6 +5,7 @@ import type {
   Artist,
   ArtistEvent,
   ArtistSearchResult,
+  ArtistSpotify,
   Coords,
   EventDetail,
   NearbyEvent,
@@ -52,6 +53,15 @@ export function useArtistEvents(artistId: string) {
   return useQuery({
     queryKey: ['artist-events', artistId],
     queryFn: (): Promise<ArtistEvent[]> => apiGet(`/artists/${artistId}/events`),
+  });
+}
+
+/** Live Spotify enrichment (followers, top tracks) for an artist. */
+export function useArtistSpotify(artistId: string) {
+  return useQuery({
+    queryKey: ['artist-spotify', artistId],
+    staleTime: 60 * 60 * 1000,
+    queryFn: (): Promise<ArtistSpotify> => apiGet(`/artists/${artistId}/spotify`),
   });
 }
 

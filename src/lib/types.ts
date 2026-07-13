@@ -85,6 +85,26 @@ export type Artist = {
   genres: string[];
 };
 
+export type SpotifyTrack = {
+  id: string;
+  name: string;
+  album: string | null;
+  image_url: string | null;
+  preview_url: string | null;
+  spotify_url: string | null;
+};
+
+/** Live Spotify enrichment for an artist (followers, popularity, top tracks). */
+export type ArtistSpotify = {
+  spotify_id: string | null;
+  followers: number | null;
+  popularity: number | null;
+  genres: string[];
+  image_url: string | null;
+  external_url: string | null;
+  top_tracks: SpotifyTrack[];
+};
+
 export type ArtistSearchResult = {
   spotify_id: string;
   name: string;

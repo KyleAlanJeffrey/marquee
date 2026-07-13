@@ -525,14 +525,18 @@ async function spotifyAccessToken(env: Env): Promise<string> {
   return spotifyToken.value;
 }
 
-export async function searchArtists(env: Env, query: string) {
+async function spotifyGet(env: Env, path: string): Promise<any> {
   const token = await spotifyAccessToken(env);
-  const res = await fetch(
-    `https://api.spotify.com/v1/search?type=artist&limit=15&q=${encodeURIComponent(query)}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!res.ok) throw new Error(`Spotify search failed: ${res.status}`);
-  const json = await res.json<any>();
+  const res = await fetch(`https://api.spotify.com/v1${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Spotify ${path.split('?')[0]}: ${res.status}`);
+  return res.json<any>();
+}
+
+export async function searchArtists(env: Env, query: string) {
+  // Spotify caps search `limit` at 10 for apps in development mode.
+  const json = await spotifyGet(env, `/search?type=artist&limit=10&q=${encodeURIComponent(query)}`);
   return (json.artists?.items ?? []).map((a: any) => ({
     spotify_id: a.id,
     name: a.name,
@@ -540,4 +544,79 @@ export async function searchArtists(env: Env, query: string) {
     genres: a.genres ?? [],
     popularity: a.popularity ?? 0,
   }));
+}
+
+/** Enrich an artist with live Spotify data: followers, popularity, genres and
+ *  top tracks. Resolves the Spotify id from the stored id or by name, and
+ *  backfills the id/image/genres into D1 so future feed cards benefit too. */
+export async function artistSpotify(env: Env, artistId: string) {
+  const row = await env.DB.prepare(`SELECT id, name, spotify_id, image_url, genres FROM artists WHERE id = ?1`)
+    .bind(artistId)
+    .first<any>();
+  if (!row) return null;
+
+  const empty = {
+    spotify_id: null as string | null,
+    followers: null as number | null,
+    popularity: null as number | null,
+    genres: parseGenres(row.genres),
+    image_url: row.image_url as string | null,
+    external_url: null as string | null,
+    top_tracks: [] as any[],
+  };
+
+  let sid: string | null = row.spotify_id;
+  if (!sid) {
+    const found = await spotifyGet(env, `/search?type=artist&limit=1&q=${encodeURIComponent(row.name)}`);
+    sid = found.artists?.items?.[0]?.id ?? null;
+    // Backfill the resolved id (ignore a unique collision with another row).
+    if (sid) {
+      await env.DB.prepare(`UPDATE artists SET spotify_id = ?1 WHERE id = ?2`)
+        .bind(sid, artistId)
+        .run()
+        .catch(() => {});
+    }
+  }
+  if (!sid) return empty;
+
+  const artist = await spotifyGet(env, `/artists/${sid}`);
+
+  // Top tracks are restricted for apps in development mode (403); treat them as
+  // best-effort so the rest of the enrichment still lands.
+  const top = await spotifyGet(env, `/artists/${sid}/top-tracks?market=US`).catch(() => null);
+
+  const image = artist.images?.[0]?.url ?? null;
+  const genres: string[] = artist.genres ?? [];
+
+  // Opportunistically fill in a missing image / genres from Spotify.
+  if ((!row.image_url && image) || (parseGenres(row.genres).length === 0 && genres.length > 0)) {
+    await env.DB.prepare(
+      `UPDATE artists
+         SET image_url = COALESCE(image_url, ?1),
+             genres = CASE WHEN genres IS NULL OR genres = '[]' THEN ?2 ELSE genres END
+       WHERE id = ?3`,
+    )
+      .bind(image, JSON.stringify(genres), artistId)
+      .run()
+      .catch(() => {});
+  }
+
+  const top_tracks = (top?.tracks ?? []).slice(0, 5).map((t: any) => ({
+    id: t.id,
+    name: t.name,
+    album: t.album?.name ?? null,
+    image_url: t.album?.images?.[1]?.url ?? t.album?.images?.[0]?.url ?? null,
+    preview_url: t.preview_url ?? null,
+    spotify_url: t.external_urls?.spotify ?? null,
+  }));
+
+  return {
+    spotify_id: sid,
+    followers: artist.followers?.total ?? null,
+    popularity: artist.popularity ?? null,
+    genres: genres.length ? genres : empty.genres,
+    image_url: image ?? row.image_url ?? null,
+    external_url: artist.external_urls?.spotify ?? null,
+    top_tracks,
+  };
 }

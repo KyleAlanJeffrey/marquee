@@ -20,8 +20,8 @@ import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
-import { useArtist, useArtistEvents } from '@/lib/hooks';
-import { formatTime, formatVenue } from '@/lib/format';
+import { useArtist, useArtistEvents, useArtistSpotify } from '@/lib/hooks';
+import { formatCount, formatTime, formatVenue } from '@/lib/format';
 import type { ArtistEvent } from '@/lib/types';
 
 /** A short, honestly-derived blurb (we don't store real bios). */
@@ -37,6 +37,7 @@ export default function ArtistScreen() {
   const theme = useTheme();
   const artist = useArtist(id);
   const events = useArtistEvents(id);
+  const spotify = useArtistSpotify(id);
   const { isFollowing, toggle } = useFollows();
   const queryClient = useQueryClient();
 
@@ -80,6 +81,17 @@ export default function ArtistScreen() {
     );
   }
 
+  const followers = spotify.data?.followers ?? null;
+  const heroStats: { value: string | number; label: string }[] = [
+    { value: events.data?.length ?? '—', label: 'UPCOMING SHOWS' },
+    ...(followers != null ? [{ value: formatCount(followers), label: 'FOLLOWERS' }] : []),
+    { value: a.genres.length || '—', label: 'GENRES' },
+  ];
+  const tracks = spotify.data?.top_tracks ?? [];
+  const spotifyUrl = spotify.data?.external_url ?? null;
+  // Prefer Spotify's artist photo (usually higher-res) when we have one.
+  const heroImage = spotify.data?.image_url ?? a.image_url;
+
   return (
     <View style={{ flex: 1 }}>
       <Animated.FlatList
@@ -92,7 +104,7 @@ export default function ArtistScreen() {
             {/* Hero */}
             <View style={styles.hero}>
               <Image
-                source={a.image_url ? { uri: a.image_url } : undefined}
+                source={heroImage ? { uri: heroImage } : undefined}
                 style={StyleSheet.absoluteFill}
                 contentFit="cover"
                 transition={250}
@@ -131,23 +143,19 @@ export default function ArtistScreen() {
                   )}
                 </View>
                 <View style={styles.heroStats}>
-                  <View style={styles.stat}>
-                    <ThemedText type="title" style={{ fontSize: 18 }}>
-                      {events.data?.length ?? '—'}
-                    </ThemedText>
-                    <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                      UPCOMING SHOWS
-                    </ThemedText>
-                  </View>
-                  <View style={[styles.statDivider, { backgroundColor: theme.border }]} />
-                  <View style={styles.stat}>
-                    <ThemedText type="title" style={{ fontSize: 18 }}>
-                      {a.genres.length || '—'}
-                    </ThemedText>
-                    <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                      GENRES
-                    </ThemedText>
-                  </View>
+                  {heroStats.map((s, i) => (
+                    <View key={s.label} style={styles.statItem}>
+                      {i > 0 && <View style={[styles.statDivider, { backgroundColor: theme.border }]} />}
+                      <View style={styles.stat}>
+                        <ThemedText type="title" style={{ fontSize: 18 }}>
+                          {s.value}
+                        </ThemedText>
+                        <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                          {s.label}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  ))}
                 </View>
               </View>
             </View>
@@ -212,36 +220,54 @@ export default function ArtistScreen() {
         )}
         ListFooterComponent={
           <View>
-            {/* Top Tracks */}
-            <View style={styles.sectionTitleRow}>
-              <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
-              <ThemedText type="title">Top Tracks</ThemedText>
-            </View>
-            <GlassCard style={styles.tracksCard}>
-              {[0, 1, 2].map((i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.trackRow,
-                    i < 2 && { borderBottomWidth: 1, borderBottomColor: theme.border },
-                  ]}>
-                  <LinearGradient
-                    colors={i % 2 ? ['#00dbe9', '#0e0e0e'] : ['#bd00ff', '#0e0e0e']}
-                    style={styles.trackArt}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                  />
-                  <View style={{ flex: 1, gap: 6 }}>
-                    <View style={[styles.skeleton, { width: `${70 - i * 12}%`, backgroundColor: theme.backgroundHigh }]} />
-                    <View style={[styles.skeleton, { width: '30%', height: 8, backgroundColor: theme.backgroundHigh }]} />
+            {/* Top Tracks — populated when Spotify grants catalog access. */}
+            {tracks.length > 0 && (
+              <>
+                <View style={styles.sectionTitleRow}>
+                  <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+                  <ThemedText type="title">Top Tracks</ThemedText>
+                  <View style={styles.spotifyTag}>
+                    <Ionicons name="musical-notes" size={12} color="#1DB954" />
+                    <ThemedText type="labelSm" style={{ color: '#1DB954' }}>
+                      SPOTIFY
+                    </ThemedText>
                   </View>
-                  <Ionicons name="play" size={18} color={theme.textTertiary} />
                 </View>
-              ))}
-              <ThemedText type="labelSm" style={{ color: theme.textTertiary, padding: Spacing.three, paddingTop: Spacing.two }}>
-                STREAMING PREVIEWS COMING SOON
-              </ThemedText>
-            </GlassCard>
+                <GlassCard style={styles.tracksCard}>
+                  {tracks.map((t, i) => (
+                    <PressableScale
+                      key={t.id}
+                      haptic={false}
+                      disabled={!t.spotify_url}
+                      onPress={() => t.spotify_url && Linking.openURL(t.spotify_url)}
+                      style={[
+                        styles.trackRow,
+                        i < tracks.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+                      ]}>
+                      <ThemedText type="label" style={{ width: 18, color: theme.textTertiary }}>
+                        {i + 1}
+                      </ThemedText>
+                      <Image
+                        source={t.image_url ? { uri: t.image_url } : undefined}
+                        style={[styles.trackArt, { backgroundColor: theme.backgroundHigh }]}
+                        contentFit="cover"
+                      />
+                      <View style={{ flex: 1 }}>
+                        <ThemedText type="smallBold" numberOfLines={1}>
+                          {t.name}
+                        </ThemedText>
+                        {t.album && (
+                          <ThemedText type="labelSm" numberOfLines={1} style={{ color: theme.textTertiary }}>
+                            {t.album}
+                          </ThemedText>
+                        )}
+                      </View>
+                      {t.spotify_url && <Ionicons name="play-circle" size={24} color="#1DB954" />}
+                    </PressableScale>
+                  ))}
+                </GlassCard>
+              </>
+            )}
 
             {/* About */}
             <View style={styles.sectionTitleRow}>
@@ -259,6 +285,16 @@ export default function ArtistScreen() {
                       <GenreChip key={g} label={g} tone="neutral" />
                     ))}
                   </View>
+                )}
+                {spotifyUrl && (
+                  <PressableScale
+                    onPress={() => Linking.openURL(spotifyUrl)}
+                    style={[styles.spotifyBtn, { borderColor: '#1DB954' }]}>
+                    <Ionicons name="musical-notes" size={16} color="#1DB954" />
+                    <ThemedText type="label" style={{ color: '#1DB954', fontSize: 13 }}>
+                      Listen on Spotify
+                    </ThemedText>
+                  </PressableScale>
                 )}
               </GlassCard>
             </View>
@@ -287,7 +323,8 @@ const styles = StyleSheet.create({
   heroName: { color: '#fff' },
   heroActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginTop: Spacing.two, flexWrap: 'wrap' },
   heroGenres: { flexDirection: 'row', gap: Spacing.two },
-  heroStats: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginTop: Spacing.three },
+  heroStats: { flexDirection: 'row', alignItems: 'center', marginTop: Spacing.three },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   stat: { gap: 2 },
   statDivider: { width: 1, height: 32 },
   sectionTitleRow: {
@@ -299,6 +336,7 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.three,
   },
   accentBar: { width: 4, height: 22, borderRadius: 2 },
+  spotifyTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
   empty: { textAlign: 'center', padding: Spacing.four },
   tourRow: {
     flexDirection: 'row',
@@ -320,8 +358,17 @@ const styles = StyleSheet.create({
   tracksCard: { marginHorizontal: Spacing.three, overflow: 'hidden' },
   trackRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, padding: Spacing.three },
   trackArt: { width: 44, height: 44, borderRadius: Radius.sm },
-  skeleton: { height: 12, borderRadius: 4 },
   aboutCard: { padding: Spacing.three, gap: Spacing.three },
   aboutChips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  spotifyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.pill,
+    borderWidth: 1.5,
+  },
   topBarAbs: { position: 'absolute', top: 0, left: 0, right: 0 },
 });
