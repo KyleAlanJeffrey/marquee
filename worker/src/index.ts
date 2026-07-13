@@ -8,6 +8,7 @@ import {
   eventById,
   nearbyEvents,
   refreshArtists,
+  refreshVenue,
   searchArtists,
   venueById,
   type Env,
@@ -51,6 +52,16 @@ api.get('/events/:id', async (c) => {
 api.get('/venues/:id', async (c) => {
   const venue = await venueById(c.env.DB, c.req.param('id'));
   return venue ? c.json(venue) : c.json({ error: 'not found' }, 404);
+});
+
+api.post('/venues/:id/refresh', async (c) => {
+  if (!c.env.TICKETMASTER_API_KEY) return c.json({ ingested: 0 });
+  try {
+    return c.json(await refreshVenue(c.env, c.req.param('id')));
+  } catch (err) {
+    console.error(err);
+    return c.json({ error: String(err), ingested: 0 }, 500);
+  }
 });
 
 // --- Spotify search ---------------------------------------------------------

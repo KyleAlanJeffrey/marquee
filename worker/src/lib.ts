@@ -109,7 +109,7 @@ export async function artistEvents(db: D1Database, id: string) {
   const rows = await db
     .prepare(
       `SELECT e.id event_id, e.name event_name, e.starts_at, e.ticket_url, e.price_from,
-              v.name venue_name, v.city venue_city, v.region venue_region
+              v.id venue_id, v.name venue_name, v.city venue_city, v.region venue_region
        FROM events e LEFT JOIN venues v ON v.id = e.venue_id
        WHERE e.artist_id = ?1 AND e.starts_at >= ?2
        ORDER BY e.starts_at`,
@@ -171,6 +171,31 @@ export async function venueById(db: D1Database, id: string) {
     .all();
   const events = (rows.results as any[]).map((r) => ({ ...r, artist_genres: parseGenres(r.artist_genres) }));
   return { ...v, events };
+}
+
+/** Pull this venue's full upcoming lineup from Ticketmaster into D1. Only works
+ *  for Ticketmaster venues (seed venues have no TM id). Returns new-event count. */
+export async function refreshVenue(env: Env, venueId: string): Promise<{ ingested: number }> {
+  const v = await env.DB.prepare(`SELECT source, source_venue_id FROM venues WHERE id = ?1`)
+    .bind(venueId)
+    .first<any>();
+  if (!v || v.source !== 'ticketmaster') return { ingested: 0 };
+
+  const json = await tmFetch(env, 'events.json', {
+    venueId: v.source_venue_id,
+    size: '100',
+    sort: 'date,asc',
+    classificationName: 'music',
+  });
+  const events = json._embedded?.events ?? [];
+  const inputs: EventInput[] = [];
+  for (const e of events) {
+    const artistId = await upsertTmArtist(env.DB, e._embedded?.attractions?.[0]);
+    if (!artistId) continue;
+    const input = tmToEventInput(e, artistId);
+    if (input) inputs.push(input);
+  }
+  return { ingested: (await persist(env.DB, inputs)).length };
 }
 
 // --- Persistence ------------------------------------------------------------

@@ -28,6 +28,16 @@ export async function discoverEvents(coords: Coords, radiusMiles: number): Promi
   }
 }
 
+/** Pull a venue's full upcoming lineup from Ticketmaster. Returns new-event count. */
+export async function refreshVenueEvents(venueId: string): Promise<number> {
+  try {
+    const data = await apiPost<{ ingested?: number }>(`/venues/${venueId}/refresh`, {});
+    return data.ingested ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Pull upcoming shows for a set of artists. Returns new-event count. */
 export async function refreshArtistEvents(artists: RefreshableArtist[]): Promise<number> {
   if (artists.length === 0) return 0;

@@ -1,7 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { ActivityIndicator, FlatList, Linking, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -13,6 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { refreshVenueEvents } from '@/lib/discovery';
 import { formatPrice, formatTime } from '@/lib/format';
 import { useVenue } from '@/lib/hooks';
 import type { VenueEvent } from '@/lib/types';
@@ -21,6 +24,17 @@ export default function VenueScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const venue = useVenue(id);
+  const queryClient = useQueryClient();
+
+  // On open, pull the venue's full upcoming lineup from Ticketmaster, then refetch.
+  const refreshed = useRef(false);
+  useEffect(() => {
+    if (refreshed.current) return;
+    refreshed.current = true;
+    refreshVenueEvents(id).then((n) => {
+      if (n > 0) queryClient.invalidateQueries({ queryKey: ['venue', id] });
+    });
+  }, [id, queryClient]);
 
   if (venue.isLoading) {
     return (

@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -175,14 +175,23 @@ export default function ArtistScreen() {
                 { backgroundColor: theme.backgroundElevated, borderColor: theme.border },
               ]}>
               <DateBlock startsAt={item.starts_at} />
-              <View style={{ flex: 1 }}>
-                <ThemedText type="smallBold" numberOfLines={1}>
-                  {formatVenue(item.venue_name, item.venue_city, item.venue_region)}
-                </ThemedText>
+              <PressableScale
+                haptic={false}
+                disabled={!item.venue_id}
+                onPress={() => item.venue_id && router.push(`/venue/${item.venue_id}`)}
+                style={{ flex: 1 }}>
+                <View style={styles.venueRow}>
+                  <ThemedText type="smallBold" numberOfLines={1} style={{ flexShrink: 1 }}>
+                    {formatVenue(item.venue_name, item.venue_city, item.venue_region)}
+                  </ThemedText>
+                  {item.venue_id && (
+                    <Ionicons name="chevron-forward" size={12} color={theme.textTertiary} />
+                  )}
+                </View>
                 <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
                   {formatTime(item.starts_at).toUpperCase()}
                 </ThemedText>
-              </View>
+              </PressableScale>
               {item.ticket_url ? (
                 <PressableScale
                   onPress={() => Linking.openURL(item.ticket_url!)}
@@ -301,6 +310,7 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.two + 2,
   },
+  venueRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   ticketBtn: {
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,

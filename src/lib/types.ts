@@ -24,6 +24,7 @@ export type ArtistEvent = {
   starts_at: string;
   ticket_url: string | null;
   price_from: number | null;
+  venue_id: string | null;
   venue_name: string | null;
   venue_city: string | null;
   venue_region: string | null;
