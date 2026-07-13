@@ -9,6 +9,26 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
 
 ---
 
+## Done — infinite scroll, Spotify, headers, tickets (this pass)
+
+- [x] **TanStack infinite scroll** on Browse + Venue (`useInfiniteNearby`,
+  `useInfiniteVenueEvents`); `/api/nearby` and `/api/venues/:id/events` paginate
+  with `{items, nextCursor}`. Explore/Following/Artist/Search stay single-shot.
+- [x] **Spotify artist enrichment** (`/api/artists/:id/spotify`): resolves by
+  stored id or name, backfills spotify_id/image/genres into D1, prefers
+  Spotify's higher-res photo, adds a "Listen on Spotify" link. Followers/
+  top-tracks render only when returned (gated on Spotify extended quota).
+- [x] **Fixed broken artist search**: dev-mode Spotify caps `limit` at 10; we
+  were sending 15 (HTTP 400 → zero results). Lowered to 10.
+- [x] **Contextual page headers** (Event / Artist / Venue / Browse) via a
+  `TopBar` `title` prop; tab screens keep the MARQUEE wordmark.
+- [x] **Capped the featured card on web** (560px, centered) so the 16:10 hero
+  isn't screen-filling on desktop.
+- [x] **Tappable search results**: `/api/artists/ensure` upserts a Spotify hit
+  into D1, then opens their page (which pulls the TM schedule on open).
+- [x] **StubHub** resale option in the event "Get Tickets" section (search deep
+  link); buy bar is always actionable ("Buy Tickets" or "Find on StubHub").
+
 ## Done — unified single-Worker deploy (this pass)
 
 - [x] One Worker now serves the web build (static `assets`) **and** the API at
@@ -60,16 +80,15 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
 
 ## Next up
 
-- [ ] **Deploy for real:** `wrangler d1 create marquee` (paste id into
-  `wrangler.toml`), apply migrations `--remote`, `wrangler secret put` the keys,
-  `wrangler deploy`; then `expo export -p web` + `wrangler pages deploy dist`.
-- [ ] **Rotate the Ticketmaster key** (shared in chat) and set the fresh one as a
-  Worker secret + in `worker/.dev.vars`.
-- [ ] **Refresh a single artist on follow** (currently launch + pull-to-refresh).
+- [ ] **Ship it:** `git push` — Cloudflare Workers Builds auto-deploys
+  (`npm run build` → `wrangler deploy`). Then apply the schema to remote D1
+  (`npm run db:apply`) and set the prod secrets:
+  `wrangler secret put TICKETMASTER_API_KEY` / `SPOTIFY_CLIENT_ID` /
+  `SPOTIFY_CLIENT_SECRET`.
+- [ ] **Rotate the Ticketmaster key** (shared in chat); update the root
+  `.dev.vars` and the prod Worker secret.
 - [ ] **Scheduled discovery** (optional): a Cloudflare Cron Trigger that sweeps a
   fixed launch-city list into D1 so feeds are warm before the first visitor.
-- [ ] **Same-origin option:** serve the web build from the Worker via Workers
-  Static Assets to drop the separate Pages deploy + CORS.
 
 ## Later — ticketing & enrichment
 
