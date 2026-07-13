@@ -71,10 +71,27 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
 - [ ] **Same-origin option:** serve the web build from the Worker via Workers
   Static Assets to drop the separate Pages deploy + CORS.
 
-## Design-section placeholders (unchanged, need real data)
+## Later — ticketing & enrichment
 
-- [ ] Top Tracks + galleries from Spotify; support acts from same-venue events;
-  ticket price on the event Buy bar.
+- [ ] **StubHub Partner API** (Partnerize): today the event page's StubHub
+  option is a **search deep link** (`stubhub.com/explore?q=artist+city`) — no
+  open listings API without an affiliate account. With Partner creds, swap it
+  for real per-event listings + prices (and affiliate credit on sales).
+- [ ] **More resale sources**: add SeatGeek / Vivid Seats alongside StubHub in
+  the event "Get Tickets" section (same `ticketSources()` pattern in
+  `src/lib/tickets.ts`).
+- [ ] **Spotify extended quota**: the current app is in **development mode**, so
+  `/artists/:id` returns a stripped payload (no followers/popularity/genres) and
+  `top-tracks` is 403. Request extended quota to light those up — the enrichment
+  code (`artistSpotify` + the artist screen) already handles them when present.
+
+## Design-section placeholders (need real data)
+
+- [~] Spotify artist enrichment wired (`/api/artists/:id/spotify`): higher-res
+  photo + "Listen on Spotify" live now; followers/top-tracks gated on Spotify
+  extended quota (see above).
+- [ ] Fan/artist galleries from real images; support acts from same-venue
+  events; ticket price on the event Buy bar.
 
 ## Known limitations (by design)
 
