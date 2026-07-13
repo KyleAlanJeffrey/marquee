@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
@@ -97,6 +97,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
     marginHorizontal: Spacing.three,
+    // On web the app stretches to the full browser width, which makes a
+    // full-bleed 16:10 hero enormous. Cap it and center it like a card
+    // (auto margins collapse to 0 on narrow viewports — no overflow).
+    ...(Platform.OS === 'web'
+      ? { maxWidth: 560, width: '100%' as const, alignSelf: 'center' as const, marginHorizontal: 0 }
+      : null),
   },
   dateChip: {
     position: 'absolute',
