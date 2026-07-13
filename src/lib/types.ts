@@ -44,10 +44,34 @@ export type EventDetail = {
     genres: string[];
   };
   venue: {
+    id: string;
     name: string | null;
     city: string | null;
     region: string | null;
   } | null;
+};
+
+/** A venue and its upcoming shows (the /api/venues/:id response). */
+export type VenueEvent = {
+  event_id: string;
+  event_name: string;
+  starts_at: string;
+  ticket_url: string | null;
+  price_from: number | null;
+  artist_id: string;
+  artist_name: string;
+  artist_image_url: string | null;
+  artist_genres: string[];
+};
+
+export type VenueDetail = {
+  id: string;
+  name: string;
+  city: string | null;
+  region: string | null;
+  lat: number | null;
+  lng: number | null;
+  events: VenueEvent[];
 };
 
 export type Artist = {

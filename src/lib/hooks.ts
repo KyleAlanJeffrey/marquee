@@ -1,7 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { apiGet, apiPost } from '@/lib/api';
-import type { Artist, ArtistEvent, ArtistSearchResult, Coords, EventDetail, NearbyEvent } from '@/lib/types';
+import type {
+  Artist,
+  ArtistEvent,
+  ArtistSearchResult,
+  Coords,
+  EventDetail,
+  NearbyEvent,
+  VenueDetail,
+} from '@/lib/types';
 
 /** Upcoming shows near a point, soonest first. Powers the home feed. */
 export function useNearbyEvents(coords: Coords | null, radiusMiles: number) {
@@ -31,6 +39,13 @@ export function useEvent(eventId: string) {
   return useQuery({
     queryKey: ['event', eventId],
     queryFn: (): Promise<EventDetail> => apiGet(`/events/${eventId}`),
+  });
+}
+
+export function useVenue(venueId: string) {
+  return useQuery({
+    queryKey: ['venue', venueId],
+    queryFn: (): Promise<VenueDetail> => apiGet(`/venues/${venueId}`),
   });
 }
 

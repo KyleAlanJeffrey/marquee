@@ -1,6 +1,14 @@
 import { apiPost } from '@/lib/api';
-import type { FollowedArtist } from '@/lib/follows-store';
 import type { Coords } from '@/lib/types';
+
+/** Minimal artist identity the refresh endpoint needs. */
+export type RefreshableArtist = {
+  artistId: string | null;
+  spotifyId: string | null;
+  name: string;
+  imageUrl: string | null;
+  genres: string[];
+};
 
 /**
  * Ask the Worker to pull fresh nearby shows for this location. The server
@@ -20,8 +28,8 @@ export async function discoverEvents(coords: Coords, radiusMiles: number): Promi
   }
 }
 
-/** Pull upcoming shows for the on-device follow list. Returns new-event count. */
-export async function refreshArtistEvents(artists: FollowedArtist[]): Promise<number> {
+/** Pull upcoming shows for a set of artists. Returns new-event count. */
+export async function refreshArtistEvents(artists: RefreshableArtist[]): Promise<number> {
   if (artists.length === 0) return 0;
   try {
     const data = await apiPost<{ ingested?: number }>('/refresh-artist-events', {

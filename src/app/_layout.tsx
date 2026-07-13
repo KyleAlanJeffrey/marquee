@@ -80,6 +80,7 @@ export default function RootLayout() {
                   />
                   <Stack.Screen name="artist/[id]" />
                   <Stack.Screen name="event/[id]" />
+                  <Stack.Screen name="venue/[id]" />
                   <Stack.Screen name="browse" />
                 </Stack>
               )}

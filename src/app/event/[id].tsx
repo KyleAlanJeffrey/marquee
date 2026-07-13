@@ -206,19 +206,30 @@ export default function EventScreen() {
               <ThemedText type="small" themeColor="textSecondary">
                 {[e.venue?.city, e.venue?.region].filter(Boolean).join(', ') || 'Location to be announced'}
               </ThemedText>
-              <PressableScale
-                onPress={() =>
-                  Linking.openURL(
-                    `https://maps.google.com/?q=${encodeURIComponent(
-                      [e.venue?.name, e.venue?.city, e.venue?.region].filter(Boolean).join(' '),
-                    )}`,
-                  )
-                }
-                style={[styles.mapsBtn, { borderColor: theme.cyan }]}>
-                <ThemedText type="label" style={{ color: theme.cyan, fontSize: 12 }}>
-                  OPEN IN MAPS
-                </ThemedText>
-              </PressableScale>
+              <View style={styles.venueBtns}>
+                {e.venue?.id && (
+                  <PressableScale
+                    onPress={() => router.push(`/venue/${e.venue!.id}`)}
+                    style={[styles.mapsBtn, { backgroundColor: theme.cyan, borderColor: theme.cyan }]}>
+                    <ThemedText type="label" style={{ color: '#00363a', fontSize: 12 }}>
+                      VIEW VENUE
+                    </ThemedText>
+                  </PressableScale>
+                )}
+                <PressableScale
+                  onPress={() =>
+                    Linking.openURL(
+                      `https://maps.google.com/?q=${encodeURIComponent(
+                        [e.venue?.name, e.venue?.city, e.venue?.region].filter(Boolean).join(' '),
+                      )}`,
+                    )
+                  }
+                  style={[styles.mapsBtn, { borderColor: theme.cyan }]}>
+                  <ThemedText type="label" style={{ color: theme.cyan, fontSize: 12 }}>
+                    OPEN IN MAPS
+                  </ThemedText>
+                </PressableScale>
+              </View>
             </View>
           </GlassCard>
         </View>
@@ -344,9 +355,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   venueInfo: { padding: Spacing.three, gap: Spacing.one + 2 },
+  venueBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.two },
   mapsBtn: {
-    alignSelf: 'flex-start',
-    marginTop: Spacing.one,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     borderRadius: Radius.pill,

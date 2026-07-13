@@ -9,6 +9,7 @@ import {
   nearbyEvents,
   refreshArtists,
   searchArtists,
+  venueById,
   type Env,
 } from './lib';
 
@@ -45,6 +46,11 @@ api.get('/artists/:id/events', async (c) => {
 api.get('/events/:id', async (c) => {
   const event = await eventById(c.env.DB, c.req.param('id'));
   return event ? c.json(event) : c.json({ error: 'not found' }, 404);
+});
+
+api.get('/venues/:id', async (c) => {
+  const venue = await venueById(c.env.DB, c.req.param('id'));
+  return venue ? c.json(venue) : c.json({ error: 'not found' }, 404);
 });
 
 // --- Spotify search ---------------------------------------------------------

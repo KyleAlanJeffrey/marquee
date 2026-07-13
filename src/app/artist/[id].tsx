@@ -1,7 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -16,6 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
 import { useArtist, useArtistEvents } from '@/lib/hooks';
 import { formatTime, formatVenue } from '@/lib/format';
@@ -35,8 +38,23 @@ export default function ArtistScreen() {
   const artist = useArtist(id);
   const events = useArtistEvents(id);
   const { isFollowing, toggle } = useFollows();
+  const queryClient = useQueryClient();
 
   const following = isFollowing({ artistId: id });
+
+  // On open, pull this artist's full upcoming schedule from Ticketmaster into
+  // the DB (not just what a nearby sweep happened to catch), then refetch.
+  const refreshed = useRef(false);
+  const a = artist.data;
+  useEffect(() => {
+    if (refreshed.current || !a) return;
+    refreshed.current = true;
+    refreshArtistEvents([
+      { artistId: a.id, spotifyId: a.spotify_id, name: a.name, imageUrl: a.image_url, genres: a.genres },
+    ]).then((n) => {
+      if (n > 0) queryClient.invalidateQueries({ queryKey: ['artist-events', id] });
+    });
+  }, [a, id, queryClient]);
 
   if (artist.isLoading) {
     return (
@@ -54,7 +72,6 @@ export default function ArtistScreen() {
     );
   }
 
-  const a = artist.data;
   if (!a) {
     return (
       <View style={styles.center}>

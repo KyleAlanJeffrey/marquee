@@ -124,7 +124,7 @@ export async function eventById(db: D1Database, id: string) {
     .prepare(
       `SELECT e.id, e.name, e.starts_at, e.ticket_url, e.price_from, e.source,
               a.id a_id, a.name a_name, a.spotify_id a_spotify, a.image_url a_image, a.genres a_genres,
-              v.name v_name, v.city v_city, v.region v_region
+              v.id v_id, v.name v_name, v.city v_city, v.region v_region
        FROM events e
        JOIN artists a ON a.id = e.artist_id
        LEFT JOIN venues v ON v.id = e.venue_id
@@ -147,8 +147,30 @@ export async function eventById(db: D1Database, id: string) {
       image_url: r.a_image,
       genres: parseGenres(r.a_genres),
     },
-    venue: r.v_name ? { name: r.v_name, city: r.v_city, region: r.v_region } : null,
+    venue: r.v_name ? { id: r.v_id, name: r.v_name, city: r.v_city, region: r.v_region } : null,
   };
+}
+
+/** A venue with its upcoming shows. */
+export async function venueById(db: D1Database, id: string) {
+  const v = await db
+    .prepare(`SELECT id, name, city, region, lat, lng FROM venues WHERE id = ?1`)
+    .bind(id)
+    .first<any>();
+  if (!v) return null;
+  const rows = await db
+    .prepare(
+      `SELECT e.id event_id, e.name event_name, e.starts_at, e.ticket_url, e.price_from,
+              a.id artist_id, a.name artist_name, a.image_url artist_image_url, a.genres artist_genres
+       FROM events e
+       JOIN artists a ON a.id = e.artist_id
+       WHERE e.venue_id = ?1 AND e.starts_at >= ?2
+       ORDER BY e.starts_at`,
+    )
+    .bind(id, nowIso())
+    .all();
+  const events = (rows.results as any[]).map((r) => ({ ...r, artist_genres: parseGenres(r.artist_genres) }));
+  return { ...v, events };
 }
 
 // --- Persistence ------------------------------------------------------------
