@@ -18,6 +18,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { useEvent } from '@/lib/hooks';
 import { formatEventDate, formatTime, formatVenue } from '@/lib/format';
+import { ticketSources } from '@/lib/tickets';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 function InfoRow({
@@ -83,6 +84,8 @@ export default function EventScreen() {
 
   const following = isFollowing({ artistId: e.artist.id, spotifyId: e.artist.spotify_id });
   const hasTickets = !!e.ticket_url;
+  const sources = ticketSources(e);
+  const primaryUrl = e.ticket_url ?? sources[sources.length - 1].url;
 
   return (
     <View style={{ flex: 1 }}>
@@ -128,10 +131,39 @@ export default function EventScreen() {
           <InfoRow
             icon="pricetag"
             label="Availability"
-            value={hasTickets ? 'Tickets available' : 'Check back for tickets'}
+            value={hasTickets ? 'Tickets available' : 'Resale on StubHub'}
             valueColor={hasTickets ? theme.cyan : theme.orange}
           />
         </Animated.View>
+
+        {/* Get Tickets */}
+        <View style={styles.sectionTitleRow}>
+          <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+          <ThemedText type="title">Get Tickets</ThemedText>
+        </View>
+        <View style={styles.section}>
+          {sources.map((s) => {
+            const resale = s.kind === 'resale';
+            const accent = resale ? theme.orange : theme.cyan;
+            return (
+              <PressableScale
+                key={s.id}
+                onPress={() => Linking.openURL(s.url)}
+                style={[styles.ticketSource, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
+                <View style={[styles.ticketIcon, { backgroundColor: theme.backgroundHigh }]}>
+                  <Ionicons name={resale ? 'swap-horizontal' : 'ticket'} size={20} color={accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="smallBold">{s.label}</ThemedText>
+                  <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                    {resale ? 'RESALE MARKETPLACE' : 'OFFICIAL TICKETS'}
+                  </ThemedText>
+                </View>
+                <Ionicons name="open-outline" size={18} color={theme.textTertiary} />
+              </PressableScale>
+            );
+          })}
+        </View>
 
         {/* Headliner */}
         <View style={styles.sectionTitleRow}>
@@ -287,9 +319,10 @@ export default function EventScreen() {
               color={following ? theme.onPrimary : theme.primary}
             />
           </PressableScale>
-          {hasTickets && (
-            <GradientButton label="Buy Tickets" onPress={() => Linking.openURL(e.ticket_url!)} />
-          )}
+          <GradientButton
+            label={hasTickets ? 'Buy Tickets' : 'Find on StubHub'}
+            onPress={() => Linking.openURL(primaryUrl)}
+          />
         </View>
       </View>
     </View>
@@ -322,6 +355,21 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.three,
   },
   accentBar: { width: 4, height: 22, borderRadius: 2 },
+  ticketSource: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    padding: Spacing.two + 2,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  ticketIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headliner: {
     flexDirection: 'row',
     alignItems: 'center',
