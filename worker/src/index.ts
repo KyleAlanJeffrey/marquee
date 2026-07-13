@@ -11,6 +11,7 @@ import {
   refreshVenue,
   searchArtists,
   venueById,
+  venueEvents,
   type Env,
 } from './lib';
 
@@ -29,10 +30,12 @@ api.get('/nearby', async (c) => {
   const lat = Number(c.req.query('lat'));
   const lng = Number(c.req.query('lng'));
   const radius = Number(c.req.query('radius') ?? 50);
+  const limit = Math.min(Number(c.req.query('limit') ?? 400) || 400, 400);
+  const offset = Math.max(Number(c.req.query('offset') ?? 0) || 0, 0);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return c.json({ error: 'lat and lng are required' }, 400);
   }
-  return c.json(await nearbyEvents(c.env.DB, lat, lng, Number.isFinite(radius) ? radius : 50));
+  return c.json(await nearbyEvents(c.env.DB, lat, lng, Number.isFinite(radius) ? radius : 50, limit, offset));
 });
 
 api.get('/artists/:id', async (c) => {
@@ -52,6 +55,12 @@ api.get('/events/:id', async (c) => {
 api.get('/venues/:id', async (c) => {
   const venue = await venueById(c.env.DB, c.req.param('id'));
   return venue ? c.json(venue) : c.json({ error: 'not found' }, 404);
+});
+
+api.get('/venues/:id/events', async (c) => {
+  const limit = Math.min(Number(c.req.query('limit') ?? 20) || 20, 50);
+  const offset = Math.max(Number(c.req.query('offset') ?? 0) || 0, 0);
+  return c.json(await venueEvents(c.env.DB, c.req.param('id'), limit, offset));
 });
 
 api.post('/venues/:id/refresh', async (c) => {

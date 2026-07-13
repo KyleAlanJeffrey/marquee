@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import { apiGet, apiPost } from '@/lib/api';
 import type {
@@ -8,16 +8,36 @@ import type {
   Coords,
   EventDetail,
   NearbyEvent,
+  Page,
   VenueDetail,
+  VenueEvent,
 } from '@/lib/types';
 
-/** Upcoming shows near a point, soonest first. Powers the home feed. */
+/** Upcoming shows near a point (curated set for the Explore dashboard). */
 export function useNearbyEvents(coords: Coords | null, radiusMiles: number) {
   return useQuery({
     queryKey: ['nearby-events', coords, radiusMiles],
     enabled: coords != null,
-    queryFn: (): Promise<NearbyEvent[]> =>
-      apiGet(`/nearby?lat=${coords!.lat}&lng=${coords!.lng}&radius=${radiusMiles}`),
+    queryFn: async (): Promise<NearbyEvent[]> => {
+      const page = await apiGet<Page<NearbyEvent>>(
+        `/nearby?lat=${coords!.lat}&lng=${coords!.lng}&radius=${radiusMiles}&limit=400&offset=0`,
+      );
+      return page.items;
+    },
+  });
+}
+
+/** Paginated nearby shows for infinite scroll (Browse). */
+export function useInfiniteNearby(coords: Coords | null, radiusMiles: number, pageSize = 12) {
+  return useInfiniteQuery({
+    queryKey: ['nearby-infinite', coords, radiusMiles],
+    enabled: coords != null,
+    initialPageParam: 0,
+    queryFn: ({ pageParam }): Promise<Page<NearbyEvent>> =>
+      apiGet(
+        `/nearby?lat=${coords!.lat}&lng=${coords!.lng}&radius=${radiusMiles}&limit=${pageSize}&offset=${pageParam}`,
+      ),
+    getNextPageParam: (last) => last.nextCursor,
   });
 }
 
@@ -46,6 +66,17 @@ export function useVenue(venueId: string) {
   return useQuery({
     queryKey: ['venue', venueId],
     queryFn: (): Promise<VenueDetail> => apiGet(`/venues/${venueId}`),
+  });
+}
+
+/** Paginated upcoming shows at a venue for infinite scroll. */
+export function useInfiniteVenueEvents(venueId: string, pageSize = 20) {
+  return useInfiniteQuery({
+    queryKey: ['venue-events', venueId],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }): Promise<Page<VenueEvent>> =>
+      apiGet(`/venues/${venueId}/events?limit=${pageSize}&offset=${pageParam}`),
+    getNextPageParam: (last) => last.nextCursor,
   });
 }
 

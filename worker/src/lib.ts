@@ -63,7 +63,14 @@ export type EventInput = {
 
 // --- Reads (feed / detail) --------------------------------------------------
 
-export async function nearbyEvents(db: D1Database, lat: number, lng: number, radiusMiles: number) {
+export async function nearbyEvents(
+  db: D1Database,
+  lat: number,
+  lng: number,
+  radiusMiles: number,
+  limit = 400,
+  offset = 0,
+) {
   const latDelta = radiusMiles / 69;
   const lngDelta = radiusMiles / (69 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
   const rows = await db
@@ -79,12 +86,12 @@ export async function nearbyEvents(db: D1Database, lat: number, lng: number, rad
        WHERE e.starts_at >= ?1 AND e.starts_at <= ?2
          AND v.lat BETWEEN ?3 AND ?4 AND v.lng BETWEEN ?5 AND ?6
        ORDER BY e.starts_at
-       LIMIT 400`,
+       LIMIT ?7 OFFSET ?8`,
     )
-    .bind(nowIso(), isoInDays(120), lat - latDelta, lat + latDelta, lng - lngDelta, lng + lngDelta)
+    .bind(nowIso(), isoInDays(120), lat - latDelta, lat + latDelta, lng - lngDelta, lng + lngDelta, limit, offset)
     .all();
 
-  return (rows.results as any[])
+  const items = (rows.results as any[])
     .map((r) => ({
       ...r,
       artist_genres: parseGenres(r.artist_genres),
@@ -94,6 +101,11 @@ export async function nearbyEvents(db: D1Database, lat: number, lng: number, rad
           : null,
     }))
     .filter((r) => r.distance_miles == null || r.distance_miles <= radiusMiles);
+
+  // Page on the SQL row count (pre-haversine) so we keep advancing even when a
+  // page loses a few corner-of-the-bbox rows to the radius filter.
+  const nextCursor = rows.results.length === limit ? offset + limit : null;
+  return { items, nextCursor };
 }
 
 export async function artistById(db: D1Database, id: string) {
@@ -151,13 +163,16 @@ export async function eventById(db: D1Database, id: string) {
   };
 }
 
-/** A venue with its upcoming shows. */
+/** Venue metadata. */
 export async function venueById(db: D1Database, id: string) {
-  const v = await db
+  return db
     .prepare(`SELECT id, name, city, region, lat, lng FROM venues WHERE id = ?1`)
     .bind(id)
     .first<any>();
-  if (!v) return null;
+}
+
+/** A page of a venue's upcoming shows. */
+export async function venueEvents(db: D1Database, id: string, limit = 20, offset = 0) {
   const rows = await db
     .prepare(
       `SELECT e.id event_id, e.name event_name, e.starts_at, e.ticket_url, e.price_from,
@@ -165,12 +180,13 @@ export async function venueById(db: D1Database, id: string) {
        FROM events e
        JOIN artists a ON a.id = e.artist_id
        WHERE e.venue_id = ?1 AND e.starts_at >= ?2
-       ORDER BY e.starts_at`,
+       ORDER BY e.starts_at
+       LIMIT ?3 OFFSET ?4`,
     )
-    .bind(id, nowIso())
+    .bind(id, nowIso(), limit, offset)
     .all();
-  const events = (rows.results as any[]).map((r) => ({ ...r, artist_genres: parseGenres(r.artist_genres) }));
-  return { ...v, events };
+  const items = (rows.results as any[]).map((r) => ({ ...r, artist_genres: parseGenres(r.artist_genres) }));
+  return { items, nextCursor: rows.results.length === limit ? offset + limit : null };
 }
 
 /** Pull this venue's full upcoming lineup from Ticketmaster into D1. Only works

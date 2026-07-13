@@ -72,8 +72,10 @@ export type VenueDetail = {
   region: string | null;
   lat: number | null;
   lng: number | null;
-  events: VenueEvent[];
 };
+
+/** A page of a paginated list (cursor = next offset, or null when done). */
+export type Page<T> = { items: T[]; nextCursor: number | null };
 
 export type Artist = {
   id: string;

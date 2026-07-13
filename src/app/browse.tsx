@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -14,11 +14,10 @@ import { TopBar } from '@/components/top-bar';
 import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
-import { useNearbyEvents } from '@/lib/hooks';
+import { useInfiniteNearby } from '@/lib/hooks';
 import type { Coords, NearbyEvent } from '@/lib/types';
 
 const ALL = 'All';
-const PAGE = 6;
 const ref = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_spotify_id });
 
 export default function BrowseScreen() {
@@ -27,13 +26,12 @@ export default function BrowseScreen() {
   const { isFollowing, toggle } = useFollows();
 
   const coords: Coords | null = lat && lng ? { lat: Number(lat), lng: Number(lng) } : null;
-  const events = useNearbyEvents(coords, Number(radius) || 50);
+  const q = useInfiniteNearby(coords, Number(radius) || 50);
 
   const [genre, setGenre] = useState(ALL);
   const [mode, setMode] = useState<'grid' | 'list'>('grid');
-  const [limit, setLimit] = useState(PAGE);
 
-  const all = useMemo(() => events.data ?? [], [events.data]);
+  const all = useMemo(() => q.data?.pages.flatMap((p) => p.items) ?? [], [q.data]);
   const genres = useMemo(() => {
     const c = new Map<string, number>();
     for (const e of all) for (const g of e.artist_genres ?? []) c.set(g, (c.get(g) ?? 0) + 1);
@@ -46,7 +44,15 @@ export default function BrowseScreen() {
   );
   const feature = filtered[0];
   const rest = filtered.slice(1);
-  const shown = rest.slice(0, limit);
+
+  // Keep pulling pages until the (possibly genre-filtered) list fills a screen.
+  useEffect(() => {
+    if (q.hasNextPage && !q.isFetchingNextPage && rest.length < 8) q.fetchNextPage();
+  }, [q, rest.length]);
+
+  function loadMore() {
+    if (q.hasNextPage && !q.isFetchingNextPage) q.fetchNextPage();
+  }
 
   function toggleFollow(e: NearbyEvent) {
     toggle({
@@ -65,15 +71,16 @@ export default function BrowseScreen() {
 
       <FlatList
         key={mode}
-        data={shown}
+        data={rest}
         numColumns={mode === 'grid' ? 2 : 1}
         keyExtractor={(e) => e.event_id}
         showsVerticalScrollIndicator={false}
         columnWrapperStyle={mode === 'grid' ? styles.col : undefined}
         contentContainerStyle={styles.content}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.6}
         ListHeaderComponent={
           <View>
-            {/* Genre chips */}
             <FlatList
               horizontal
               data={genres}
@@ -84,10 +91,7 @@ export default function BrowseScreen() {
                 const active = g === genre;
                 return (
                   <Pressable
-                    onPress={() => {
-                      setGenre(g);
-                      setLimit(PAGE);
-                    }}
+                    onPress={() => setGenre(g)}
                     style={[
                       styles.chip,
                       active
@@ -102,12 +106,12 @@ export default function BrowseScreen() {
               }}
             />
 
-            {/* Title + view toggle */}
             <View style={styles.titleRow}>
               <View style={styles.titleLeft}>
                 <ThemedText type="title">Browse All</ThemedText>
                 <ThemedText type="label" style={{ color: theme.textTertiary }}>
-                  ({filtered.length})
+                  {filtered.length}
+                  {q.hasNextPage ? '+' : ''}
                 </ThemedText>
               </View>
               <View style={styles.toggle}>
@@ -126,7 +130,7 @@ export default function BrowseScreen() {
               </View>
             </View>
 
-            {events.isLoading ? (
+            {q.isLoading ? (
               <ActivityIndicator color={theme.primary} style={{ marginTop: Spacing.five }} />
             ) : feature ? (
               <View style={styles.feature}>
@@ -146,9 +150,7 @@ export default function BrowseScreen() {
         }
         renderItem={({ item, index }) =>
           mode === 'grid' ? (
-            <Animated.View
-              entering={FadeInDown.delay(Math.min(index * 40, 300)).duration(320)}
-              style={{ flex: 1 }}>
+            <Animated.View entering={FadeInDown.delay(Math.min(index * 30, 240)).duration(320)} style={{ flex: 1 }}>
               <EventGridCard
                 event={item}
                 following={isFollowing(ref(item))}
@@ -165,14 +167,8 @@ export default function BrowseScreen() {
           )
         }
         ListFooterComponent={
-          rest.length > limit ? (
-            <PressableScale
-              onPress={() => setLimit((l) => l + PAGE)}
-              style={[styles.loadMore, { borderColor: theme.primary }]}>
-              <ThemedText type="label" style={{ color: theme.primary, fontSize: 13 }}>
-                Load More Events
-              </ThemedText>
-            </PressableScale>
+          q.isFetchingNextPage ? (
+            <ActivityIndicator color={theme.primary} style={{ marginVertical: Spacing.four }} />
           ) : null
         }
       />
@@ -191,7 +187,7 @@ export default function BrowseScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: Spacing.six + Spacing.four },
+  content: { paddingTop: Spacing.two, paddingBottom: Spacing.six + Spacing.four },
   chips: { paddingHorizontal: Spacing.three, gap: Spacing.two, paddingTop: Spacing.three, paddingBottom: Spacing.two },
   chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.one + 3, borderRadius: Radius.pill, borderWidth: 1 },
   titleRow: {
@@ -208,14 +204,6 @@ const styles = StyleSheet.create({
   feature: { marginBottom: Spacing.three },
   col: { gap: Spacing.two + 2, paddingHorizontal: Spacing.three, marginBottom: Spacing.two + 2 },
   empty: { textAlign: 'center', padding: Spacing.five },
-  loadMore: {
-    alignSelf: 'center',
-    marginTop: Spacing.four,
-    paddingHorizontal: Spacing.five,
-    paddingVertical: Spacing.two + 4,
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-  },
   mapBtn: {
     position: 'absolute',
     right: Spacing.three,

@@ -17,14 +17,17 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshVenueEvents } from '@/lib/discovery';
 import { formatPrice, formatTime } from '@/lib/format';
-import { useVenue } from '@/lib/hooks';
+import { useInfiniteVenueEvents, useVenue } from '@/lib/hooks';
 import type { VenueEvent } from '@/lib/types';
 
 export default function VenueScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const venue = useVenue(id);
+  const shows = useInfiniteVenueEvents(id);
   const queryClient = useQueryClient();
+
+  const events = shows.data?.pages.flatMap((p) => p.items) ?? [];
 
   // On open, pull the venue's full upcoming lineup from Ticketmaster, then refetch.
   const refreshed = useRef(false);
@@ -32,7 +35,7 @@ export default function VenueScreen() {
     if (refreshed.current) return;
     refreshed.current = true;
     refreshVenueEvents(id).then((n) => {
-      if (n > 0) queryClient.invalidateQueries({ queryKey: ['venue', id] });
+      if (n > 0) queryClient.invalidateQueries({ queryKey: ['venue-events', id] });
     });
   }, [id, queryClient]);
 
@@ -65,10 +68,19 @@ export default function VenueScreen() {
     <View style={{ flex: 1 }}>
       <MeshBackground />
       <FlatList
-        data={v.events}
+        data={events}
         keyExtractor={(e: VenueEvent) => e.event_id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: 56 + 24, paddingBottom: Spacing.six }}
+        onEndReachedThreshold={0.6}
+        onEndReached={() => {
+          if (shows.hasNextPage && !shows.isFetchingNextPage) shows.fetchNextPage();
+        }}
+        ListFooterComponent={
+          shows.isFetchingNextPage ? (
+            <ActivityIndicator color={theme.primary} style={{ marginVertical: Spacing.four }} />
+          ) : null
+        }
         ListHeaderComponent={
           <Animated.View entering={FadeInDown.duration(400)}>
             {/* Stylized map */}
@@ -121,9 +133,13 @@ export default function VenueScreen() {
           </Animated.View>
         }
         ListEmptyComponent={
-          <ThemedText themeColor="textSecondary" style={styles.empty}>
-            No upcoming shows on record at this venue yet.
-          </ThemedText>
+          shows.isLoading ? (
+            <ActivityIndicator color={theme.primary} style={{ marginTop: Spacing.four }} />
+          ) : (
+            <ThemedText themeColor="textSecondary" style={styles.empty}>
+              No upcoming shows on record at this venue yet.
+            </ThemedText>
+          )
         }
         renderItem={({ item, index }: { item: VenueEvent; index: number }) => (
           <Animated.View entering={FadeInDown.delay(Math.min(index * 45, 300)).duration(340)}>
