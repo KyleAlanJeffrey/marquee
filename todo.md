@@ -14,10 +14,11 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
 - [x] **TanStack infinite scroll** on Browse + Venue (`useInfiniteNearby`,
   `useInfiniteVenueEvents`); `/api/nearby` and `/api/venues/:id/events` paginate
   with `{items, nextCursor}`. Explore/Following/Artist/Search stay single-shot.
-- [x] **Spotify artist enrichment** (`/api/artists/:id/spotify`): resolves by
-  stored id or name, backfills spotify_id/image/genres into D1, prefers
-  Spotify's higher-res photo, adds a "Listen on Spotify" link. Followers/
-  top-tracks render only when returned (gated on Spotify extended quota).
+- [x] **Artist info** (`/api/artists/:id/info`, multi-source, parallel):
+  Spotify photo + profile link (backfilled to D1), **top tracks + fan count
+  from Deezer** (open API, no key — album art + 30s preview + link), and a
+  **bio from Wikipedia** (CC BY-SA, shown "via Wikipedia"). Routes around
+  Spotify dev-mode limits (no bio field, top-tracks 403, stripped payload).
 - [x] **Fixed broken artist search**: dev-mode Spotify caps `limit` at 10; we
   were sending 15 (HTTP 400 → zero results). Lowered to 10.
 - [x] **Contextual page headers** (Event / Artist / Venue / Browse) via a
@@ -105,16 +106,17 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
 - [ ] **More resale sources**: add SeatGeek / Vivid Seats alongside StubHub in
   the event "Get Tickets" section (same `ticketSources()` pattern in
   `src/lib/tickets.ts`).
-- [ ] **Spotify extended quota**: the current app is in **development mode**, so
-  `/artists/:id` returns a stripped payload (no followers/popularity/genres) and
-  `top-tracks` is 403. Request extended quota to light those up — the enrichment
-  code (`artistSpotify` + the artist screen) already handles them when present.
+- [ ] **Spotify extended quota** (optional now — routed around via Deezer/
+  Wikipedia): the app is in **development mode**, so `/artists/:id` is stripped
+  (no genres/popularity) and `top-tracks` is 403. Extended quota would let us
+  source top tracks/genres from Spotify directly instead of Deezer.
+- [ ] **In-app track previews**: Deezer top tracks include a 30s `preview_url`
+  (`ArtistTrack.preview_url`) — wire an audio player (expo-av) so tapping a
+  track plays the preview instead of opening the link.
 
 ## Design-section placeholders (need real data)
 
-- [~] Spotify artist enrichment wired (`/api/artists/:id/spotify`): higher-res
-  photo + "Listen on Spotify" live now; followers/top-tracks gated on Spotify
-  extended quota (see above).
+- [x] Artist bio (Wikipedia), top tracks + fans (Deezer), photo + Spotify link.
 - [ ] Fan/artist galleries from real images; support acts from same-venue
   events; ticket price on the event Buy bar.
 
