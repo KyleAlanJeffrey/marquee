@@ -113,6 +113,8 @@ export async function nearbyEvents(
         between(venues.lng, lng - lngDelta, lng + lngDelta),
       ),
     )
+    // Collapse the same show listed under multiple TM ids (VIP/packages/etc.).
+    .groupBy(events.artistId, events.venueId, events.startsAt)
     .orderBy(events.startsAt)
     .limit(limit)
     .offset(offset);
@@ -166,6 +168,7 @@ export async function artistEvents(db: DB, id: string) {
     .from(events)
     .leftJoin(venues, eq(venues.id, events.venueId))
     .where(and(eq(events.artistId, id), gte(events.startsAt, nowIso())))
+    .groupBy(events.artistId, events.venueId, events.startsAt)
     .orderBy(events.startsAt);
 }
 
@@ -250,6 +253,7 @@ export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))
     .where(and(eq(events.venueId, id), gte(events.startsAt, nowIso())))
+    .groupBy(events.artistId, events.venueId, events.startsAt)
     .orderBy(events.startsAt)
     .limit(limit)
     .offset(offset);

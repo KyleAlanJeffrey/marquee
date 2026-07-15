@@ -330,6 +330,13 @@ export default function EventScreen() {
                   <ThemedText type="small" numberOfLines={4}>
                     {p.text}
                   </ThemedText>
+                  {p.image && (
+                    <Image
+                      source={{ uri: p.image }}
+                      style={[styles.postImage, { backgroundColor: theme.backgroundHigh }]}
+                      contentFit="cover"
+                    />
+                  )}
                   <View style={styles.postStats}>
                     <Ionicons name="heart-outline" size={14} color={theme.textTertiary} />
                     <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
@@ -481,6 +488,7 @@ const styles = StyleSheet.create({
   postCard: { padding: Spacing.three, borderRadius: Radius.md, borderWidth: 1, gap: Spacing.two },
   postHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   postAvatar: { width: 26, height: 26, borderRadius: Radius.pill },
+  postImage: { width: '100%', height: 160, borderRadius: Radius.sm },
   postStats: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   headliner: {
     flexDirection: 'row',

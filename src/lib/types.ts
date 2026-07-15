@@ -94,6 +94,7 @@ export type BuzzPost = {
   handle: string;
   avatar: string | null;
   text: string;
+  image: string | null;
   likes: number;
   replies: number;
   reposts: number;

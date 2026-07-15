@@ -374,12 +374,27 @@ async function blueskyPosts(artist: string, venue: string | null): Promise<any[]
       handle: p.author.handle as string,
       avatar: p.author.avatar ?? null,
       text: p.record.text as string,
+      image: blueskyEmbedImage(p.embed),
       likes: p.likeCount ?? 0,
       replies: p.replyCount ?? 0,
       reposts: p.repostCount ?? 0,
       created_at: p.record.createdAt ?? null,
       url: `https://bsky.app/profile/${p.author.handle}/post/${String(p.uri).split('/').pop()}`,
     }));
+}
+
+/** A thumbnail from a Bluesky post's attached media (image, quote, video, or
+ *  link card), if any. */
+function blueskyEmbedImage(embed: any): string | null {
+  if (!embed) return null;
+  return (
+    embed.images?.[0]?.thumb ?? // images
+    embed.thumbnail ?? // video
+    embed.external?.thumb ?? // link card
+    embed.media?.images?.[0]?.thumb ?? // recordWithMedia
+    embed.media?.external?.thumb ??
+    null
+  );
 }
 
 /** Discussion about a specific show: real Bluesky posts (best-effort). */
