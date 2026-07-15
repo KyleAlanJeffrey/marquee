@@ -329,6 +329,17 @@ export async function persist(db: DB, inputs: EventInput[]): Promise<string[]> {
   return newIds;
 }
 
+/** Ticketmaster returns several resolutions per attraction; pick the sharpest
+ *  (widest, non-fallback) instead of whatever happens to be first. */
+export function bestTmImage(images: any): string | null {
+  if (!Array.isArray(images)) return null;
+  const usable = images.filter((i) => i?.url);
+  if (!usable.length) return null;
+  const byWidth = [...usable].sort((a, b) => (b.width || 0) - (a.width || 0));
+  const nonFallback = byWidth.filter((i) => !i.fallback);
+  return (nonFallback[0] ?? byWidth[0]).url;
+}
+
 export async function upsertTmArtist(db: DB, attraction: any): Promise<string | null> {
   if (!attraction?.id || !attraction?.name) return null;
   const genres = (attraction.classifications ?? [])
@@ -340,7 +351,7 @@ export async function upsertTmArtist(db: DB, attraction: any): Promise<string | 
       id: uuid(),
       ticketmasterId: attraction.id,
       name: attraction.name,
-      imageUrl: attraction.images?.[0]?.url ?? null,
+      imageUrl: bestTmImage(attraction.images),
       genres: JSON.stringify(genres),
     })
     .onConflictDoUpdate({

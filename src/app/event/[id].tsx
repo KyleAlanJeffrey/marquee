@@ -18,6 +18,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { useEvent } from '@/lib/hooks';
 import { formatEventDate, formatTime, formatVenue } from '@/lib/format';
+import { socialLinks } from '@/lib/social';
 import { ticketSources } from '@/lib/tickets';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -89,6 +90,7 @@ export default function EventScreen() {
   const genre = e.artist.genres?.[0];
   // Only show the artist line when it adds info (event name is often the artist).
   const showArtist = !!e.artist.name && e.artist.name.toLowerCase() !== e.name.toLowerCase();
+  const buzz = socialLinks(e.artist.name, e.venue?.name);
 
   return (
     <View style={{ flex: 1 }}>
@@ -277,6 +279,32 @@ export default function EventScreen() {
           </GlassCard>
         </View>
 
+        {/* The Buzz */}
+        <View style={styles.sectionTitleRow}>
+          <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+          <ThemedText type="title">The Buzz</ThemedText>
+        </View>
+        <View style={styles.section}>
+          <ThemedText type="small" themeColor="textSecondary">
+            See what fans are saying about this show.
+          </ThemedText>
+          <View style={styles.buzzGrid}>
+            {buzz.map((s) => (
+              <PressableScale
+                key={s.id}
+                haptic={false}
+                onPress={() => Linking.openURL(s.url)}
+                style={[styles.buzzChip, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
+                <Ionicons name={s.icon} size={20} color={s.color} />
+                <ThemedText type="smallBold" numberOfLines={1} style={{ flex: 1 }}>
+                  {s.label}
+                </ThemedText>
+                <Ionicons name="open-outline" size={15} color={theme.textTertiary} />
+              </PressableScale>
+            ))}
+          </View>
+        </View>
+
         {/* Fan Gallery */}
         <View style={styles.sectionTitleRow}>
           <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
@@ -392,6 +420,18 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  buzzGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two + 2, marginTop: Spacing.two + 2 },
+  buzzChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    flexBasis: '47%',
+    flexGrow: 1,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two + 2,
+    borderRadius: Radius.md,
+    borderWidth: 1,
   },
   headliner: {
     flexDirection: 'row',
