@@ -9,6 +9,15 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
 
 ---
 
+## Done — backend module structure (this pass)
+
+- [x] Split the monolithic worker into modules: `env.ts` (types), `schema.ts`
+  (Drizzle tables), `db.ts` (client), `data.ts` (repository — reads/writes),
+  `sources.ts` (Ticketmaster/Spotify/Deezer/Wikipedia + orchestrators),
+  `schemas.ts` (zod), and per-resource routers in `routes/`
+  (`artists`, `venues`, `events`, `feed`, `search`) mounted by a thin
+  `index.ts`. Deleted `lib.ts`. All endpoints re-verified.
+
 ## Done — Drizzle ORM + validated Hono API (this pass)
 
 - [x] **Drizzle ORM** for D1: table defs in `worker/src/schema.ts` (+ `getDb()`
