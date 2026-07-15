@@ -175,7 +175,9 @@ export default function BrowseScreen() {
 
       {/* Floating Map View */}
       <PressableScale
-        onPress={() => router.back()}
+        onPress={() =>
+          coords && router.push(`/map?lat=${coords.lat}&lng=${coords.lng}&radius=${Number(radius) || 50}`)
+        }
         style={[styles.mapBtn, { backgroundColor: theme.cyan }, Glow.cyan]}>
         <Ionicons name="map" size={20} color="#00363a" />
         <ThemedText type="label" style={{ color: '#00363a', fontSize: 13 }}>
