@@ -3,13 +3,23 @@ import { Hono } from 'hono';
 import { eventById } from '../data';
 import { getDb } from '../db';
 import type { AppEnv } from '../env';
-import { eventBuzz } from '../sources';
+import { eventBuzz, eventLineup } from '../sources';
 
 export const events = new Hono<AppEnv>();
 
 events.get('/:id', async (c) => {
   const event = await eventById(getDb(c.env.DB), c.req.param('id'));
   return event ? c.json(event) : c.json({ error: 'not found' }, 404);
+});
+
+// Supporting acts for the show (Ticketmaster attractions, best-effort).
+events.get('/:id/lineup', async (c) => {
+  try {
+    return c.json(await eventLineup(c.env, c.req.param('id')));
+  } catch (err) {
+    console.error(err);
+    return c.json({ support: [] });
+  }
 });
 
 // Real discussion about the show (Bluesky, best-effort).

@@ -9,6 +9,7 @@ import type {
   Coords,
   EventBuzz,
   EventDetail,
+  EventLineup,
   NearbyEvent,
   Page,
   VenueDetail,
@@ -79,6 +80,15 @@ export function useEventBuzz(eventId: string) {
     queryKey: ['event-buzz', eventId],
     staleTime: 5 * 60 * 1000,
     queryFn: (): Promise<EventBuzz> => apiGet(`/events/${eventId}/buzz`),
+  });
+}
+
+/** Supporting acts for a show (Ticketmaster attractions). */
+export function useEventLineup(eventId: string) {
+  return useQuery({
+    queryKey: ['event-lineup', eventId],
+    staleTime: 60 * 60 * 1000,
+    queryFn: (): Promise<EventLineup> => apiGet(`/events/${eventId}/lineup`),
   });
 }
 

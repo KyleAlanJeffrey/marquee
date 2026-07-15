@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 
 import {
+  bestTmImage,
   ensureArtist,
   nowIso,
   persist,
@@ -345,6 +346,36 @@ async function wikipediaBio(name: string): Promise<{ text: string; url: string |
     if (hit) bio = await summary(hit);
   }
   return bio;
+}
+
+// --- Lineup (support acts) --------------------------------------------------
+
+/** Supporting acts for a show, from the Ticketmaster event's attractions
+ *  (everything but the headliner). Empty for non-TM events or shows with no
+ *  additional acts listed. */
+export async function eventLineup(env: Env, eventId: string) {
+  const db = getDb(env.DB);
+  const ev = await db
+    .select({ source: events.source, sourceEventId: events.sourceEventId, headliner: artists.name })
+    .from(events)
+    .innerJoin(artists, eq(artists.id, events.artistId))
+    .where(eq(events.id, eventId))
+    .get();
+  if (!ev || ev.source !== 'ticketmaster' || !env.TICKETMASTER_API_KEY) return { support: [] };
+
+  const json = await tmFetch(env, `events/${ev.sourceEventId}.json`, {});
+  const attractions = json._embedded?.attractions ?? [];
+  const seen = new Set<string>([ev.headliner.toLowerCase()]);
+  const support: { name: string; image_url: string | null }[] = [];
+  for (const a of attractions) {
+    const name = a?.name;
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    support.push({ name, image_url: bestTmImage(a.images) });
+  }
+  return { support: support.slice(0, 6) };
 }
 
 // --- Buzz (Bluesky) ---------------------------------------------------------

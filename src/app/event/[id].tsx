@@ -16,7 +16,7 @@ import { TopBar } from '@/components/top-bar';
 import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
-import { useEvent, useEventBuzz } from '@/lib/hooks';
+import { useEvent, useEventBuzz, useEventLineup } from '@/lib/hooks';
 import { formatEventDate, formatTime, formatVenue } from '@/lib/format';
 import { socialLinks } from '@/lib/social';
 import { ticketSources } from '@/lib/tickets';
@@ -57,6 +57,7 @@ export default function EventScreen() {
   const insets = useSafeAreaInsets();
   const event = useEvent(id);
   const buzzPosts = useEventBuzz(id);
+  const lineup = useEventLineup(id);
   const { isFollowing, toggle } = useFollows();
 
   if (event.isLoading) {
@@ -92,6 +93,7 @@ export default function EventScreen() {
   // Only show the artist line when it adds info (event name is often the artist).
   const showArtist = !!e.artist.name && e.artist.name.toLowerCase() !== e.name.toLowerCase();
   const buzz = socialLinks(e.artist.name, e.venue?.name);
+  const support = lineup.data?.support ?? [];
 
   return (
     <View style={{ flex: 1 }}>
@@ -210,26 +212,31 @@ export default function EventScreen() {
             <Ionicons name="chevron-forward" size={20} color={theme.textTertiary} />
           </PressableScale>
 
-          <View style={styles.supportRow}>
-            {['Support', 'Support'].map((s, i) => (
-              <View
-                key={i}
-                style={[styles.supportTile, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
-                <LinearGradient
-                  colors={i === 0 ? ['rgba(189,0,255,0.25)', 'transparent'] : ['rgba(0,219,233,0.22)', 'transparent']}
-                  style={StyleSheet.absoluteFill}
-                  start={{ x: 0, y: 1 }}
-                  end={{ x: 1, y: 0 }}
-                />
-                <ThemedText type="labelSm" style={{ color: theme.textSecondary }}>
-                  {s.toUpperCase()}
-                </ThemedText>
-                <ThemedText type="smallBold" style={{ color: theme.text }}>
-                  To be announced
-                </ThemedText>
-              </View>
-            ))}
-          </View>
+          {support.length > 0 && (
+            <View style={styles.supportRow}>
+              {support.slice(0, 3).map((s) => (
+                <View
+                  key={s.name}
+                  style={[styles.supportTile, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
+                  {s.image_url && (
+                    <Image source={{ uri: s.image_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                  )}
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.85)']}
+                    style={StyleSheet.absoluteFill}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                  />
+                  <ThemedText type="labelSm" style={{ color: theme.cyan }}>
+                    SUPPORT
+                  </ThemedText>
+                  <ThemedText type="smallBold" numberOfLines={1} style={{ color: '#fff' }}>
+                    {s.name}
+                  </ThemedText>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* The Venue */}

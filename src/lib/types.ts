@@ -104,6 +104,9 @@ export type BuzzPost = {
 
 export type EventBuzz = { posts: BuzzPost[] };
 
+export type SupportAct = { name: string; image_url: string | null };
+export type EventLineup = { support: SupportAct[] };
+
 export type ArtistTrack = {
   id: string;
   name: string;
