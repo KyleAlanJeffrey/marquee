@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BrandMark } from '@/components/brand-logo';
 import { ThemedText } from '@/components/themed-text';
 import { Fonts, Glow, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -49,7 +50,10 @@ export function TopBar({ onSearchPress, transparent, back, title }: Props) {
           {title}
         </ThemedText>
       ) : (
-        <ThemedText style={[styles.wordmark, { color: theme.primary }]}>MARQUEE</ThemedText>
+        <View style={styles.brand}>
+          <BrandMark size={26} />
+          <ThemedText style={[styles.wordmark, { color: theme.primary }]}>Marquee</ThemedText>
+        </View>
       )}
       <View style={[styles.side, styles.right]}>
         {onSearchPress && (
@@ -72,10 +76,11 @@ const styles = StyleSheet.create({
   side: { width: 40, justifyContent: 'center' },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   right: { alignItems: 'flex-end' },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   wordmark: {
     fontFamily: Fonts.headline,
-    fontSize: 24,
-    letterSpacing: 1,
+    fontSize: 23,
+    letterSpacing: 0.5,
   },
   title: {
     flex: 1,
