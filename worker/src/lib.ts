@@ -1,4 +1,8 @@
 import type { D1Database, Fetcher } from '@cloudflare/workers-types';
+import { and, between, eq, gte, lte, sql } from 'drizzle-orm';
+
+import { getDb, type DB } from './db';
+import { artists, discoveryLog, events, venues } from './schema';
 
 export type Env = {
   DB: D1Database;
@@ -64,7 +68,7 @@ export type EventInput = {
 // --- Reads (feed / detail) --------------------------------------------------
 
 export async function nearbyEvents(
-  db: D1Database,
+  db: DB,
   lat: number,
   lng: number,
   radiusMiles: number,
@@ -73,25 +77,43 @@ export async function nearbyEvents(
 ) {
   const latDelta = radiusMiles / 69;
   const lngDelta = radiusMiles / (69 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
-  const rows = await db
-    .prepare(
-      `SELECT e.id event_id, e.name event_name, e.starts_at, e.ticket_url, e.price_from,
-              a.id artist_id, a.name artist_name, a.image_url artist_image_url,
-              a.spotify_id artist_spotify_id, a.genres artist_genres,
-              v.name venue_name, v.city venue_city, v.region venue_region,
-              v.lat venue_lat, v.lng venue_lng
-       FROM events e
-       JOIN artists a ON a.id = e.artist_id
-       JOIN venues v ON v.id = e.venue_id
-       WHERE e.starts_at >= ?1 AND e.starts_at <= ?2
-         AND v.lat BETWEEN ?3 AND ?4 AND v.lng BETWEEN ?5 AND ?6
-       ORDER BY e.starts_at
-       LIMIT ?7 OFFSET ?8`,
-    )
-    .bind(nowIso(), isoInDays(120), lat - latDelta, lat + latDelta, lng - lngDelta, lng + lngDelta, limit, offset)
-    .all();
 
-  const items = (rows.results as any[])
+  // Bounding-box prefilter on the indexed lat/lng; the exact radius check is the
+  // haversine below (SQLite has no spherical distance).
+  const rows = await db
+    .select({
+      event_id: events.id,
+      event_name: events.name,
+      starts_at: events.startsAt,
+      ticket_url: events.ticketUrl,
+      price_from: events.priceFrom,
+      artist_id: artists.id,
+      artist_name: artists.name,
+      artist_image_url: artists.imageUrl,
+      artist_spotify_id: artists.spotifyId,
+      artist_genres: artists.genres,
+      venue_name: venues.name,
+      venue_city: venues.city,
+      venue_region: venues.region,
+      venue_lat: venues.lat,
+      venue_lng: venues.lng,
+    })
+    .from(events)
+    .innerJoin(artists, eq(artists.id, events.artistId))
+    .innerJoin(venues, eq(venues.id, events.venueId))
+    .where(
+      and(
+        gte(events.startsAt, nowIso()),
+        lte(events.startsAt, isoInDays(120)),
+        between(venues.lat, lat - latDelta, lat + latDelta),
+        between(venues.lng, lng - lngDelta, lng + lngDelta),
+      ),
+    )
+    .orderBy(events.startsAt)
+    .limit(limit)
+    .offset(offset);
+
+  const items = rows
     .map((r) => ({
       ...r,
       artist_genres: parseGenres(r.artist_genres),
@@ -104,46 +126,69 @@ export async function nearbyEvents(
 
   // Page on the SQL row count (pre-haversine) so we keep advancing even when a
   // page loses a few corner-of-the-bbox rows to the radius filter.
-  const nextCursor = rows.results.length === limit ? offset + limit : null;
+  const nextCursor = rows.length === limit ? offset + limit : null;
   return { items, nextCursor };
 }
 
-export async function artistById(db: D1Database, id: string) {
+export async function artistById(db: DB, id: string) {
   const r = await db
-    .prepare(`SELECT id, name, spotify_id, image_url, genres FROM artists WHERE id = ?1`)
-    .bind(id)
-    .first<any>();
+    .select({
+      id: artists.id,
+      name: artists.name,
+      spotify_id: artists.spotifyId,
+      image_url: artists.imageUrl,
+      genres: artists.genres,
+    })
+    .from(artists)
+    .where(eq(artists.id, id))
+    .get();
   if (!r) return null;
   return { ...r, genres: parseGenres(r.genres) };
 }
 
-export async function artistEvents(db: D1Database, id: string) {
-  const rows = await db
-    .prepare(
-      `SELECT e.id event_id, e.name event_name, e.starts_at, e.ticket_url, e.price_from,
-              v.id venue_id, v.name venue_name, v.city venue_city, v.region venue_region
-       FROM events e LEFT JOIN venues v ON v.id = e.venue_id
-       WHERE e.artist_id = ?1 AND e.starts_at >= ?2
-       ORDER BY e.starts_at`,
-    )
-    .bind(id, nowIso())
-    .all();
-  return rows.results;
+export async function artistEvents(db: DB, id: string) {
+  return db
+    .select({
+      event_id: events.id,
+      event_name: events.name,
+      starts_at: events.startsAt,
+      ticket_url: events.ticketUrl,
+      price_from: events.priceFrom,
+      venue_id: venues.id,
+      venue_name: venues.name,
+      venue_city: venues.city,
+      venue_region: venues.region,
+    })
+    .from(events)
+    .leftJoin(venues, eq(venues.id, events.venueId))
+    .where(and(eq(events.artistId, id), gte(events.startsAt, nowIso())))
+    .orderBy(events.startsAt);
 }
 
-export async function eventById(db: D1Database, id: string) {
+export async function eventById(db: DB, id: string) {
   const r = await db
-    .prepare(
-      `SELECT e.id, e.name, e.starts_at, e.ticket_url, e.price_from, e.source,
-              a.id a_id, a.name a_name, a.spotify_id a_spotify, a.image_url a_image, a.genres a_genres,
-              v.id v_id, v.name v_name, v.city v_city, v.region v_region
-       FROM events e
-       JOIN artists a ON a.id = e.artist_id
-       LEFT JOIN venues v ON v.id = e.venue_id
-       WHERE e.id = ?1`,
-    )
-    .bind(id)
-    .first<any>();
+    .select({
+      id: events.id,
+      name: events.name,
+      starts_at: events.startsAt,
+      ticket_url: events.ticketUrl,
+      price_from: events.priceFrom,
+      source: events.source,
+      a_id: artists.id,
+      a_name: artists.name,
+      a_spotify: artists.spotifyId,
+      a_image: artists.imageUrl,
+      a_genres: artists.genres,
+      v_id: venues.id,
+      v_name: venues.name,
+      v_city: venues.city,
+      v_region: venues.region,
+    })
+    .from(events)
+    .innerJoin(artists, eq(artists.id, events.artistId))
+    .leftJoin(venues, eq(venues.id, events.venueId))
+    .where(eq(events.id, id))
+    .get();
   if (!r) return null;
   return {
     id: r.id,
@@ -164,85 +209,118 @@ export async function eventById(db: D1Database, id: string) {
 }
 
 /** Venue metadata. */
-export async function venueById(db: D1Database, id: string) {
-  return db
-    .prepare(`SELECT id, name, city, region, lat, lng FROM venues WHERE id = ?1`)
-    .bind(id)
-    .first<any>();
+export async function venueById(db: DB, id: string) {
+  const r = await db
+    .select({
+      id: venues.id,
+      name: venues.name,
+      city: venues.city,
+      region: venues.region,
+      lat: venues.lat,
+      lng: venues.lng,
+    })
+    .from(venues)
+    .where(eq(venues.id, id))
+    .get();
+  return r ?? null;
 }
 
 /** A page of a venue's upcoming shows. */
-export async function venueEvents(db: D1Database, id: string, limit = 20, offset = 0) {
+export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
   const rows = await db
-    .prepare(
-      `SELECT e.id event_id, e.name event_name, e.starts_at, e.ticket_url, e.price_from,
-              a.id artist_id, a.name artist_name, a.image_url artist_image_url, a.genres artist_genres
-       FROM events e
-       JOIN artists a ON a.id = e.artist_id
-       WHERE e.venue_id = ?1 AND e.starts_at >= ?2
-       ORDER BY e.starts_at
-       LIMIT ?3 OFFSET ?4`,
-    )
-    .bind(id, nowIso(), limit, offset)
-    .all();
-  const items = (rows.results as any[]).map((r) => ({ ...r, artist_genres: parseGenres(r.artist_genres) }));
-  return { items, nextCursor: rows.results.length === limit ? offset + limit : null };
+    .select({
+      event_id: events.id,
+      event_name: events.name,
+      starts_at: events.startsAt,
+      ticket_url: events.ticketUrl,
+      price_from: events.priceFrom,
+      artist_id: artists.id,
+      artist_name: artists.name,
+      artist_image_url: artists.imageUrl,
+      artist_genres: artists.genres,
+    })
+    .from(events)
+    .innerJoin(artists, eq(artists.id, events.artistId))
+    .where(and(eq(events.venueId, id), gte(events.startsAt, nowIso())))
+    .orderBy(events.startsAt)
+    .limit(limit)
+    .offset(offset);
+  const items = rows.map((r) => ({ ...r, artist_genres: parseGenres(r.artist_genres) }));
+  return { items, nextCursor: rows.length === limit ? offset + limit : null };
 }
 
 /** Pull this venue's full upcoming lineup from Ticketmaster into D1. Only works
  *  for Ticketmaster venues (seed venues have no TM id). Returns new-event count. */
 export async function refreshVenue(env: Env, venueId: string): Promise<{ ingested: number }> {
-  const v = await env.DB.prepare(`SELECT source, source_venue_id FROM venues WHERE id = ?1`)
-    .bind(venueId)
-    .first<any>();
+  const db = getDb(env.DB);
+  const v = await db
+    .select({ source: venues.source, sourceVenueId: venues.sourceVenueId })
+    .from(venues)
+    .where(eq(venues.id, venueId))
+    .get();
   if (!v || v.source !== 'ticketmaster') return { ingested: 0 };
 
   const json = await tmFetch(env, 'events.json', {
-    venueId: v.source_venue_id,
+    venueId: v.sourceVenueId,
     size: '100',
     sort: 'date,asc',
     classificationName: 'music',
   });
-  const events = json._embedded?.events ?? [];
+  const tmEvents = json._embedded?.events ?? [];
   const inputs: EventInput[] = [];
-  for (const e of events) {
-    const artistId = await upsertTmArtist(env.DB, e._embedded?.attractions?.[0]);
+  for (const e of tmEvents) {
+    const artistId = await upsertTmArtist(db, e._embedded?.attractions?.[0]);
     if (!artistId) continue;
     const input = tmToEventInput(e, artistId);
     if (input) inputs.push(input);
   }
-  return { ingested: (await persist(env.DB, inputs)).length };
+  return { ingested: (await persist(db, inputs)).length };
 }
 
 // --- Persistence ------------------------------------------------------------
 
 /** Upsert venues + insert unseen events; returns ids of newly inserted events. */
-export async function persist(db: D1Database, inputs: EventInput[]): Promise<string[]> {
+export async function persist(db: DB, inputs: EventInput[]): Promise<string[]> {
   if (inputs.length === 0) return [];
 
   // Venues: upsert each, map (source:id) -> venue uuid.
-  const venues = new Map<string, VenueRow>();
-  for (const i of inputs) if (i.venue) venues.set(`${i.venue.source}:${i.venue.source_venue_id}`, i.venue);
+  const venueRows = new Map<string, VenueRow>();
+  for (const i of inputs) if (i.venue) venueRows.set(`${i.venue.source}:${i.venue.source_venue_id}`, i.venue);
 
   const venueIdByKey = new Map<string, string>();
-  const venueKeys = [...venues.keys()];
+  const venueKeys = [...venueRows.keys()];
   if (venueKeys.length) {
     const stmts = venueKeys.map((k) => {
-      const v = venues.get(k)!;
+      const v = venueRows.get(k)!;
       return db
-        .prepare(
-          `INSERT INTO venues (id, source, source_venue_id, name, city, region, country, lat, lng)
-           VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
-           ON CONFLICT (source, source_venue_id) DO UPDATE SET
-             name = excluded.name, city = excluded.city, region = excluded.region,
-             country = excluded.country, lat = excluded.lat, lng = excluded.lng
-           RETURNING id`,
-        )
-        .bind(uuid(), v.source, v.source_venue_id, v.name, v.city, v.region, v.country, v.lat, v.lng);
+        .insert(venues)
+        .values({
+          id: uuid(),
+          source: v.source,
+          sourceVenueId: v.source_venue_id,
+          name: v.name,
+          city: v.city,
+          region: v.region,
+          country: v.country,
+          lat: v.lat,
+          lng: v.lng,
+        })
+        .onConflictDoUpdate({
+          target: [venues.source, venues.sourceVenueId],
+          set: {
+            name: sql`excluded.name`,
+            city: sql`excluded.city`,
+            region: sql`excluded.region`,
+            country: sql`excluded.country`,
+            lat: sql`excluded.lat`,
+            lng: sql`excluded.lng`,
+          },
+        })
+        .returning({ id: venues.id });
     });
-    const res = await db.batch<any>(stmts);
-    res.forEach((r, idx) => {
-      const id = r.results?.[0]?.id;
+    const res = await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+    res.forEach((rows, idx) => {
+      const id = rows[0]?.id;
       if (id) venueIdByKey.set(venueKeys[idx], id);
     });
   }
@@ -250,45 +328,47 @@ export async function persist(db: D1Database, inputs: EventInput[]): Promise<str
   // Events: insert-if-new, RETURNING only new rows.
   const stmts = inputs.map((i) =>
     db
-      .prepare(
-        `INSERT INTO events (id, artist_id, venue_id, name, starts_at, ticket_url, price_from, source, source_event_id)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
-         ON CONFLICT (source, source_event_id) DO NOTHING
-         RETURNING id`,
-      )
-      .bind(
-        uuid(),
-        i.artist_id,
-        i.venue ? venueIdByKey.get(`${i.venue.source}:${i.venue.source_venue_id}`) ?? null : null,
-        i.name,
-        i.starts_at,
-        i.ticket_url,
-        i.price_from,
-        i.source,
-        i.source_event_id,
-      ),
+      .insert(events)
+      .values({
+        id: uuid(),
+        artistId: i.artist_id,
+        venueId: i.venue ? venueIdByKey.get(`${i.venue.source}:${i.venue.source_venue_id}`) ?? null : null,
+        name: i.name,
+        startsAt: i.starts_at,
+        ticketUrl: i.ticket_url,
+        priceFrom: i.price_from,
+        source: i.source,
+        sourceEventId: i.source_event_id,
+      })
+      .onConflictDoNothing({ target: [events.source, events.sourceEventId] })
+      .returning({ id: events.id }),
   );
-  const res = await db.batch<any>(stmts);
+  const res = await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
   const newIds: string[] = [];
-  for (const r of res) if (r.results?.[0]?.id) newIds.push(r.results[0].id);
+  for (const rows of res) if (rows[0]?.id) newIds.push(rows[0].id);
   return newIds;
 }
 
-async function upsertTmArtist(db: D1Database, attraction: any): Promise<string | null> {
+async function upsertTmArtist(db: DB, attraction: any): Promise<string | null> {
   if (!attraction?.id || !attraction?.name) return null;
   const genres = (attraction.classifications ?? [])
     .map((c: any) => c.genre?.name)
     .filter((g: string) => g && g !== 'Undefined');
   const r = await db
-    .prepare(
-      `INSERT INTO artists (id, ticketmaster_id, name, image_url, genres)
-       VALUES (?1,?2,?3,?4,?5)
-       ON CONFLICT (ticketmaster_id) DO UPDATE SET
-         name = excluded.name, image_url = excluded.image_url, genres = excluded.genres
-       RETURNING id`,
-    )
-    .bind(uuid(), attraction.id, attraction.name, attraction.images?.[0]?.url ?? null, JSON.stringify(genres))
-    .first<any>();
+    .insert(artists)
+    .values({
+      id: uuid(),
+      ticketmasterId: attraction.id,
+      name: attraction.name,
+      imageUrl: attraction.images?.[0]?.url ?? null,
+      genres: JSON.stringify(genres),
+    })
+    .onConflictDoUpdate({
+      target: artists.ticketmasterId,
+      set: { name: sql`excluded.name`, imageUrl: sql`excluded.image_url`, genres: sql`excluded.genres` },
+    })
+    .returning({ id: artists.id })
+    .get();
   return r?.id ?? null;
 }
 
@@ -412,28 +492,31 @@ async function bitEventsForArtist(
 // --- Public operations ------------------------------------------------------
 
 export async function discover(env: Env, lat: number, lng: number, radius: number) {
+  const db = getDb(env.DB);
   const cell = `${lat.toFixed(1)},${lng.toFixed(1)},${Math.round(radius)}`;
-  const log = await env.DB.prepare(`SELECT fetched_at FROM discovery_log WHERE cell = ?1`).bind(cell).first<any>();
-  if (log && Date.now() - new Date(log.fetched_at).getTime() < 6 * 3600_000) {
+  const log = await db
+    .select({ fetchedAt: discoveryLog.fetchedAt })
+    .from(discoveryLog)
+    .where(eq(discoveryLog.cell, cell))
+    .get();
+  if (log && Date.now() - new Date(log.fetchedAt).getTime() < 6 * 3600_000) {
     return { skipped: true, reason: 'recently fetched', ingested: 0 };
   }
 
-  const events = await tmEventsNear(env, lat, lng, radius);
+  const tmEvents = await tmEventsNear(env, lat, lng, radius);
   const inputs: EventInput[] = [];
-  for (const e of events) {
-    const artistId = await upsertTmArtist(env.DB, e._embedded?.attractions?.[0]);
+  for (const e of tmEvents) {
+    const artistId = await upsertTmArtist(db, e._embedded?.attractions?.[0]);
     if (!artistId) continue;
     const input = tmToEventInput(e, artistId);
     if (input) inputs.push(input);
   }
-  const newIds = await persist(env.DB, inputs);
-  await env.DB.prepare(
-    `INSERT INTO discovery_log (cell, fetched_at) VALUES (?1, ?2)
-     ON CONFLICT (cell) DO UPDATE SET fetched_at = excluded.fetched_at`,
-  )
-    .bind(cell, nowIso())
-    .run();
-  return { ingested: newIds.length, scanned: events.length };
+  const newIds = await persist(db, inputs);
+  await db
+    .insert(discoveryLog)
+    .values({ cell, fetchedAt: nowIso() })
+    .onConflictDoUpdate({ target: discoveryLog.cell, set: { fetchedAt: sql`excluded.fetched_at` } });
+  return { ingested: newIds.length, scanned: tmEvents.length };
 }
 
 type IncomingArtist = {
@@ -444,25 +527,36 @@ type IncomingArtist = {
   genres?: string[];
 };
 
-async function ensureArtist(db: D1Database, a: IncomingArtist) {
+type ArtistIdentity = { id: string; name: string; ticketmaster_id: string | null; bandsintown_name: string | null };
+
+async function ensureArtist(db: DB, a: IncomingArtist): Promise<ArtistIdentity | null> {
+  const cols = {
+    id: artists.id,
+    name: artists.name,
+    ticketmaster_id: artists.ticketmasterId,
+    bandsintown_name: artists.bandsintownName,
+  };
   if (a.artistId) {
-    const r = await db
-      .prepare(`SELECT id, name, ticketmaster_id, bandsintown_name FROM artists WHERE id = ?1`)
-      .bind(a.artistId)
-      .first<any>();
+    const r = await db.select(cols).from(artists).where(eq(artists.id, a.artistId)).get();
     if (r) return r;
   }
   if (a.spotifyId) {
-    return db
-      .prepare(
-        `INSERT INTO artists (id, spotify_id, name, image_url, genres)
-         VALUES (?1,?2,?3,?4,?5)
-         ON CONFLICT (spotify_id) DO UPDATE SET
-           name = excluded.name, image_url = excluded.image_url, genres = excluded.genres
-         RETURNING id, name, ticketmaster_id, bandsintown_name`,
-      )
-      .bind(uuid(), a.spotifyId, a.name, a.imageUrl ?? null, JSON.stringify(a.genres ?? []))
-      .first<any>();
+    const r = await db
+      .insert(artists)
+      .values({
+        id: uuid(),
+        spotifyId: a.spotifyId,
+        name: a.name,
+        imageUrl: a.imageUrl ?? null,
+        genres: JSON.stringify(a.genres ?? []),
+      })
+      .onConflictDoUpdate({
+        target: artists.spotifyId,
+        set: { name: sql`excluded.name`, imageUrl: sql`excluded.image_url`, genres: sql`excluded.genres` },
+      })
+      .returning(cols)
+      .get();
+    return r ?? null;
   }
   return null;
 }
@@ -471,42 +565,48 @@ async function ensureArtist(db: D1Database, a: IncomingArtist) {
  *  the full stored record. Fast — no external event fetch; the artist screen
  *  pulls the schedule on open. */
 export async function ensureArtistRecord(env: Env, a: IncomingArtist) {
-  const row = await ensureArtist(env.DB, a);
+  const db = getDb(env.DB);
+  const row = await ensureArtist(db, a);
   if (!row) return null;
-  return artistById(env.DB, row.id);
+  return artistById(db, row.id);
 }
 
-export async function refreshArtists(env: Env, artists: IncomingArtist[]) {
+export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {
+  const db = getDb(env.DB);
   const newIds: string[] = [];
-  for (const a of artists.slice(0, 25)) {
+  for (const a of incoming.slice(0, 25)) {
     if (!a?.name) continue;
     try {
-      const row = await ensureArtist(env.DB, a);
+      const row = await ensureArtist(db, a);
       if (!row) continue;
 
       // Resolve the Ticketmaster attraction, reconciling with any existing row
       // that already owns that ticketmaster_id (e.g. one created by discovery),
       // so we neither collide on the unique key nor ingest onto a duplicate.
       let targetId: string = row.id;
-      let tmId = row.ticketmaster_id as string | null;
+      let tmId = row.ticketmaster_id;
       if (!tmId) {
         tmId = await tmResolveAttractionId(env, row.name);
         if (tmId) {
-          const existing = await env.DB.prepare(`SELECT id FROM artists WHERE ticketmaster_id = ?1`)
-            .bind(tmId)
-            .first<any>();
+          const existing = await db
+            .select({ id: artists.id })
+            .from(artists)
+            .where(eq(artists.ticketmasterId, tmId))
+            .get();
           if (existing && existing.id !== row.id) targetId = existing.id;
-          else await env.DB.prepare(`UPDATE artists SET ticketmaster_id = ?1 WHERE id = ?2`).bind(tmId, row.id).run();
+          else await db.update(artists).set({ ticketmasterId: tmId }).where(eq(artists.id, row.id));
         }
       }
 
       const inputs: EventInput[] = [];
       if (tmId) {
-        const events = await tmEventsForAttraction(env, tmId);
-        inputs.push(...events.flatMap((e) => tmToEventInput(e, targetId) ?? []));
+        const tmEvents = await tmEventsForAttraction(env, tmId);
+        inputs.push(...tmEvents.flatMap((e) => tmToEventInput(e, targetId) ?? []));
       }
-      inputs.push(...(await bitEventsForArtist(env, { id: targetId, name: row.name, bandsintown_name: row.bandsintown_name })));
-      newIds.push(...(await persist(env.DB, inputs)));
+      inputs.push(
+        ...(await bitEventsForArtist(env, { id: targetId, name: row.name, bandsintown_name: row.bandsintown_name })),
+      );
+      newIds.push(...(await persist(db, inputs)));
     } catch (err) {
       console.error(`refresh failed for ${a.name}: ${err}`);
     }
@@ -558,20 +658,24 @@ export async function searchArtists(env: Env, query: string) {
 /** Spotify profile: high-res image + profile link. Resolves the id (stored or
  *  by name) and backfills id/image into D1. Dev-mode apps only expose
  *  id/name/images/external_urls (no followers/genres/top-tracks). */
-async function spotifyProfile(env: Env, row: any): Promise<{ image: string | null; url: string | null } | null> {
+async function spotifyProfile(
+  env: Env,
+  db: DB,
+  row: { id: string; name: string; spotify_id: string | null; image_url: string | null },
+): Promise<{ image: string | null; url: string | null } | null> {
   let sid: string | null = row.spotify_id;
   if (!sid) {
     const found = await spotifyGet(env, `/search?type=artist&limit=1&q=${encodeURIComponent(row.name)}`);
     sid = found.artists?.items?.[0]?.id ?? null;
     if (sid) {
-      await env.DB.prepare(`UPDATE artists SET spotify_id = ?1 WHERE id = ?2`).bind(sid, row.id).run().catch(() => {});
+      await db.update(artists).set({ spotifyId: sid }).where(eq(artists.id, row.id)).catch(() => {});
     }
   }
   if (!sid) return null;
   const artist = await spotifyGet(env, `/artists/${sid}`);
   const image = artist.images?.[0]?.url ?? null;
   if (!row.image_url && image) {
-    await env.DB.prepare(`UPDATE artists SET image_url = ?1 WHERE id = ?2`).bind(image, row.id).run().catch(() => {});
+    await db.update(artists).set({ imageUrl: image }).where(eq(artists.id, row.id)).catch(() => {});
   }
   return { image, url: artist.external_urls?.spotify ?? null };
 }
@@ -624,13 +728,16 @@ async function wikipediaBio(name: string): Promise<{ text: string; url: string |
  *  top tracks + fan count, and a Wikipedia bio. Each source is best-effort so a
  *  failure in one still returns the others. */
 export async function artistInfo(env: Env, artistId: string) {
-  const row = await env.DB.prepare(`SELECT id, name, spotify_id, image_url FROM artists WHERE id = ?1`)
-    .bind(artistId)
-    .first<any>();
+  const db = getDb(env.DB);
+  const row = await db
+    .select({ id: artists.id, name: artists.name, spotify_id: artists.spotifyId, image_url: artists.imageUrl })
+    .from(artists)
+    .where(eq(artists.id, artistId))
+    .get();
   if (!row) return null;
 
   const [spotify, deezer, bio] = await Promise.all([
-    (env.SPOTIFY_CLIENT_ID ? spotifyProfile(env, row) : Promise.resolve(null)).catch(() => null),
+    (env.SPOTIFY_CLIENT_ID ? spotifyProfile(env, db, row) : Promise.resolve(null)).catch(() => null),
     deezerTopTracks(row.name).catch(() => ({ tracks: [], fans: null })),
     wikipediaBio(row.name).catch(() => null),
   ]);

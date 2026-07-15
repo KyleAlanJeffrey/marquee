@@ -9,6 +9,20 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
 
 ---
 
+## Done — Drizzle ORM + validated Hono API (this pass)
+
+- [x] **Drizzle ORM** for D1: table defs in `worker/src/schema.ts` (+ `getDb()`
+  client in `worker/src/db.ts`). All raw `db.prepare` SQL in `lib.ts` replaced
+  with the Drizzle query builder — selects/joins, `onConflictDo*` upserts, and
+  `db.batch` for the ingest path. `worker/schema.sql` stays the applied DDL +
+  seed (keep the two mirrored).
+- [x] **Validated Hono API**: `@hono/zod-validator` + zod schemas on every
+  request (query params + JSON bodies), replacing the manual parse/guard code.
+  Invalid input now returns a 400 automatically.
+- [x] Verified end-to-end: all reads, upserts (ensure), and the batch ingest
+  (`discover` → 113 events) work through Drizzle; validation returns 400 on
+  bad input; the app renders unchanged (identical JSON contracts).
+
 ## Done — infinite scroll, Spotify, headers, tickets (this pass)
 
 - [x] **TanStack infinite scroll** on Browse + Venue (`useInfiniteNearby`,
