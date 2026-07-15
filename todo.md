@@ -28,6 +28,9 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
   into D1, then opens their page (which pulls the TM schedule on open).
 - [x] **StubHub** resale option in the event "Get Tickets" section (search deep
   link); buy bar is always actionable ("Buy Tickets" or "Find on StubHub").
+- [x] **Real map** for "Nearby Venues" via Mapbox Static Images API (dark style,
+  pins baked in — a plain `<Image>`, so web + native share one path). Gated on
+  `EXPO_PUBLIC_MAPBOX_TOKEN`; stylized grid is the fallback when unset.
 
 ## Done — unified single-Worker deploy (this pass)
 
@@ -87,6 +90,9 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
   `SPOTIFY_CLIENT_SECRET`.
 - [ ] **Rotate the Ticketmaster key** (shared in chat); update the root
   `.dev.vars` and the prod Worker secret.
+- [ ] **Set `EXPO_PUBLIC_MAPBOX_TOKEN`** to enable the real map: a public `pk.*`
+  token in `.env` for local dev, and as a **build-time** env var in Cloudflare
+  Workers Builds for prod (Expo inlines `EXPO_PUBLIC_*` at build time).
 - [ ] **Scheduled discovery** (optional): a Cloudflare Cron Trigger that sweeps a
   fixed launch-city list into D1 so feeds are warm before the first visitor.
 

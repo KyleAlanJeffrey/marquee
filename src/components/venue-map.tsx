@@ -1,4 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View } from 'react-native';
 
@@ -18,12 +19,74 @@ type Props = {
 
 const GRID = 5;
 
+// A Mapbox public token (pk.*) is publishable client-side; when set we render a
+// real dark map, otherwise we fall back to the stylized grid below.
+const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
+
+/** Real dark map (Mapbox Static Images API) with venue pins baked in — a plain
+ *  image, so it works identically on web and native. `auto` frames all pins;
+ *  extra bottom padding keeps them clear of the info overlay. */
+function staticMapUrl(pins: MapPin[]): string | null {
+  if (!MAPBOX_TOKEN || pins.length === 0) return null;
+  const markers = pins
+    .slice(0, 15)
+    .map((p) => `pin-s+${p.following ? 'bd00ff' : '00dbe9'}(${p.lng.toFixed(5)},${p.lat.toFixed(5)})`)
+    .join(',');
+  return (
+    `https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/${markers}/auto/700x224@2x` +
+    `?access_token=${MAPBOX_TOKEN}&padding=30,30,80,30&attribution=false&logo=false`
+  );
+}
+
 /**
- * A stylized, data-driven "map" — venue coordinates normalized onto a dark grid
- * with neon pins. Dependency-free (no native maps module) so it renders
- * identically on web and device.
+ * "Nearby Venues" map. Renders a real Mapbox map when a token is configured,
+ * else a dependency-free stylized grid of the same pins. Both share the same
+ * card chrome and bottom info overlay.
  */
 export function VenueMap({ pins, locationLabel, withinMiles, onExplore }: Props) {
+  const theme = useTheme();
+  const mapUrl = staticMapUrl(pins);
+
+  return (
+    <View style={[styles.card, { borderColor: theme.border }, Glow.cyan, { shadowOpacity: 0.15 }]}>
+      {mapUrl ? (
+        <Image source={{ uri: mapUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={250} />
+      ) : (
+        <StylizedGrid pins={pins} />
+      )}
+
+      {/* Bottom overlay: location + distance + explore */}
+      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={styles.overlay}>
+        <View style={styles.overlayRow}>
+          <View style={[styles.nearIcon, { backgroundColor: 'rgba(0,219,233,0.15)', borderColor: 'rgba(0,219,233,0.3)' }]}>
+            <Ionicons name="navigate" size={18} color={theme.cyan} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <ThemedText type="smallBold" style={{ color: '#fff' }} numberOfLines={1}>
+              {locationLabel ?? 'Your area'}
+            </ThemedText>
+            <ThemedText type="labelSm" style={{ color: theme.textSecondary }}>
+              {withinMiles != null
+                ? `You're within ${withinMiles} ${withinMiles === 1 ? 'mile' : 'miles'}`
+                : 'Live shows near you'}
+            </ThemedText>
+          </View>
+          <PressableScale
+            haptic={false}
+            onPress={onExplore}
+            style={[styles.exploreBtn, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: theme.border }]}>
+            <ThemedText type="label" style={{ color: '#fff', fontSize: 12 }}>
+              Explore Area
+            </ThemedText>
+          </PressableScale>
+        </View>
+      </LinearGradient>
+    </View>
+  );
+}
+
+/** Venue coordinates normalized onto a dark neon grid — the no-token fallback. */
+function StylizedGrid({ pins }: { pins: MapPin[] }) {
   const theme = useTheme();
 
   const lats = pins.map((p) => p.lat);
@@ -42,7 +105,7 @@ export function VenueMap({ pins, locationLabel, withinMiles, onExplore }: Props)
   }
 
   return (
-    <View style={[styles.card, { borderColor: theme.border }, Glow.cyan, { shadowOpacity: 0.15 }]}>
+    <>
       <LinearGradient
         colors={['#161422', '#0e0e0e']}
         style={StyleSheet.absoluteFill}
@@ -69,36 +132,7 @@ export function VenueMap({ pins, locationLabel, withinMiles, onExplore }: Props)
           </View>
         );
       })}
-
-      {/* Bottom overlay: location + distance + explore */}
-      <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.8)']}
-        style={styles.overlay}>
-        <View style={styles.overlayRow}>
-          <View style={[styles.nearIcon, { backgroundColor: 'rgba(0,219,233,0.15)', borderColor: 'rgba(0,219,233,0.3)' }]}>
-            <Ionicons name="navigate" size={18} color={theme.cyan} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <ThemedText type="smallBold" style={{ color: '#fff' }} numberOfLines={1}>
-              {locationLabel ?? 'Your area'}
-            </ThemedText>
-            <ThemedText type="labelSm" style={{ color: theme.textSecondary }}>
-              {withinMiles != null
-                ? `You're within ${withinMiles} ${withinMiles === 1 ? 'mile' : 'miles'}`
-                : 'Live shows near you'}
-            </ThemedText>
-          </View>
-          <PressableScale
-            haptic={false}
-            onPress={onExplore}
-            style={[styles.exploreBtn, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: theme.border }]}>
-            <ThemedText type="label" style={{ color: '#fff', fontSize: 12 }}>
-              Explore Area
-            </ThemedText>
-          </PressableScale>
-        </View>
-      </LinearGradient>
-    </View>
+    </>
   );
 }
 
