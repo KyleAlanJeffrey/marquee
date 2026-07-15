@@ -7,6 +7,7 @@ import type {
   ArtistInfo,
   ArtistSearchResult,
   Coords,
+  EventBuzz,
   EventDetail,
   NearbyEvent,
   Page,
@@ -69,6 +70,15 @@ export function useEvent(eventId: string) {
   return useQuery({
     queryKey: ['event', eventId],
     queryFn: (): Promise<EventDetail> => apiGet(`/events/${eventId}`),
+  });
+}
+
+/** Real discussion posts about a show (Bluesky). */
+export function useEventBuzz(eventId: string) {
+  return useQuery({
+    queryKey: ['event-buzz', eventId],
+    staleTime: 5 * 60 * 1000,
+    queryFn: (): Promise<EventBuzz> => apiGet(`/events/${eventId}/buzz`),
   });
 }
 

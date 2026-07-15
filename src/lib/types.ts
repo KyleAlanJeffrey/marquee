@@ -87,6 +87,22 @@ export type Artist = {
   genres: string[];
 };
 
+/** A real post about a show (from Bluesky's open search). */
+export type BuzzPost = {
+  id: string;
+  author: string;
+  handle: string;
+  avatar: string | null;
+  text: string;
+  likes: number;
+  replies: number;
+  reposts: number;
+  created_at: string | null;
+  url: string;
+};
+
+export type EventBuzz = { posts: BuzzPost[] };
+
 export type ArtistTrack = {
   id: string;
   name: string;

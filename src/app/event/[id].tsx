@@ -16,7 +16,7 @@ import { TopBar } from '@/components/top-bar';
 import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
-import { useEvent } from '@/lib/hooks';
+import { useEvent, useEventBuzz } from '@/lib/hooks';
 import { formatEventDate, formatTime, formatVenue } from '@/lib/format';
 import { socialLinks } from '@/lib/social';
 import { ticketSources } from '@/lib/tickets';
@@ -56,6 +56,7 @@ export default function EventScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const event = useEvent(id);
+  const buzzPosts = useEventBuzz(id);
   const { isFollowing, toggle } = useFollows();
 
   if (event.isLoading) {
@@ -303,6 +304,49 @@ export default function EventScreen() {
               </PressableScale>
             ))}
           </View>
+
+          {/* Real posts (Bluesky) */}
+          {(buzzPosts.data?.posts.length ?? 0) > 0 && (
+            <View style={styles.postList}>
+              {buzzPosts.data!.posts.map((p) => (
+                <PressableScale
+                  key={p.id}
+                  haptic={false}
+                  onPress={() => Linking.openURL(p.url)}
+                  style={[styles.postCard, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
+                  <View style={styles.postHead}>
+                    <Image
+                      source={p.avatar ? { uri: p.avatar } : undefined}
+                      style={[styles.postAvatar, { backgroundColor: theme.backgroundHigh }]}
+                      contentFit="cover"
+                    />
+                    <ThemedText type="smallBold" numberOfLines={1} style={{ flexShrink: 1 }}>
+                      {p.author}
+                    </ThemedText>
+                    <ThemedText type="labelSm" numberOfLines={1} style={{ color: theme.textTertiary, flexShrink: 1 }}>
+                      @{p.handle}
+                    </ThemedText>
+                  </View>
+                  <ThemedText type="small" numberOfLines={4}>
+                    {p.text}
+                  </ThemedText>
+                  <View style={styles.postStats}>
+                    <Ionicons name="heart-outline" size={14} color={theme.textTertiary} />
+                    <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                      {p.likes}
+                    </ThemedText>
+                    <Ionicons name="chatbubble-outline" size={14} color={theme.textTertiary} style={{ marginLeft: Spacing.two }} />
+                    <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                      {p.replies}
+                    </ThemedText>
+                  </View>
+                </PressableScale>
+              ))}
+              <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                via Bluesky
+              </ThemedText>
+            </View>
+          )}
         </View>
 
         {/* Fan Gallery */}
@@ -433,6 +477,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1,
   },
+  postList: { gap: Spacing.two + 2, marginTop: Spacing.three },
+  postCard: { padding: Spacing.three, borderRadius: Radius.md, borderWidth: 1, gap: Spacing.two },
+  postHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  postAvatar: { width: 26, height: 26, borderRadius: Radius.pill },
+  postStats: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   headliner: {
     flexDirection: 'row',
     alignItems: 'center',

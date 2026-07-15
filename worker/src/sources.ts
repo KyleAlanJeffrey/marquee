@@ -11,7 +11,7 @@ import {
 } from './data';
 import { getDb, type DB } from './db';
 import type { Env } from './env';
-import { artists, discoveryLog, venues } from './schema';
+import { artists, discoveryLog, events, venues } from './schema';
 
 // --- Ticketmaster -----------------------------------------------------------
 
@@ -345,6 +345,56 @@ async function wikipediaBio(name: string): Promise<{ text: string; url: string |
     if (hit) bio = await summary(hit);
   }
   return bio;
+}
+
+// --- Buzz (Bluesky) ---------------------------------------------------------
+
+/** Real posts about a show from Bluesky's open search API (no key). Tries the
+ *  artist + venue first (show-specific), then falls back to the artist alone. */
+async function blueskyPosts(artist: string, venue: string | null): Promise<any[]> {
+  const search = async (q: string) => {
+    const r = await fetch(
+      `https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(q)}&limit=12&sort=top`,
+      { headers: { accept: 'application/json' } },
+    );
+    if (!r.ok) return [];
+    const j = await r.json<any>();
+    return Array.isArray(j.posts) ? j.posts : [];
+  };
+
+  let raw = venue ? await search(`"${artist}" ${venue}`) : [];
+  if (raw.length < 3) raw = await search(`"${artist}"`);
+
+  return raw
+    .filter((p: any) => p?.record?.text && p.author?.handle)
+    .slice(0, 6)
+    .map((p: any) => ({
+      id: p.uri as string,
+      author: (p.author.displayName || p.author.handle) as string,
+      handle: p.author.handle as string,
+      avatar: p.author.avatar ?? null,
+      text: p.record.text as string,
+      likes: p.likeCount ?? 0,
+      replies: p.replyCount ?? 0,
+      reposts: p.repostCount ?? 0,
+      created_at: p.record.createdAt ?? null,
+      url: `https://bsky.app/profile/${p.author.handle}/post/${String(p.uri).split('/').pop()}`,
+    }));
+}
+
+/** Discussion about a specific show: real Bluesky posts (best-effort). */
+export async function eventBuzz(env: Env, eventId: string) {
+  const db = getDb(env.DB);
+  const ev = await db
+    .select({ artist: artists.name, venue: venues.name })
+    .from(events)
+    .innerJoin(artists, eq(artists.id, events.artistId))
+    .leftJoin(venues, eq(venues.id, events.venueId))
+    .where(eq(events.id, eventId))
+    .get();
+  if (!ev) return { posts: [] };
+  const posts = await blueskyPosts(ev.artist, ev.venue).catch(() => []);
+  return { posts };
 }
 
 // --- Aggregate --------------------------------------------------------------
