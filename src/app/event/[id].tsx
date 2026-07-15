@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorState } from '@/components/error-state';
 import { GalleryStrip } from '@/components/gallery-strip';
-import { GenreChip } from '@/components/genre-chip';
 import { GlassCard } from '@/components/glass-card';
 import { GradientButton } from '@/components/gradient-button';
 import { PressableScale } from '@/components/pressable-scale';
@@ -86,13 +85,16 @@ export default function EventScreen() {
   const hasTickets = !!e.ticket_url;
   const sources = ticketSources(e);
   const primaryUrl = e.ticket_url ?? sources[sources.length - 1].url;
+  const genre = e.artist.genres?.[0];
+  // Only show the artist line when it adds info (event name is often the artist).
+  const showArtist = !!e.artist.name && e.artist.name.toLowerCase() !== e.name.toLowerCase();
 
   return (
     <View style={{ flex: 1 }}>
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}>
-        {/* Hero */}
+        {/* Hero — framed as a specific show (date + venue), not an artist page */}
         <View style={styles.hero}>
           <Image
             source={e.artist.image_url ? { uri: e.artist.image_url } : undefined}
@@ -101,22 +103,36 @@ export default function EventScreen() {
             transition={250}
           />
           <LinearGradient
-            colors={['rgba(0,0,0,0.35)', 'transparent', theme.background]}
-            locations={[0, 0.4, 1]}
+            colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.15)', theme.background]}
+            locations={[0, 0.45, 1]}
             style={StyleSheet.absoluteFill}
           />
           <View style={styles.heroBody}>
-            <View style={styles.chips}>
-              {(e.artist.genres ?? []).slice(0, 2).map((g, i) => (
-                <GenreChip key={g} label={g} tone={i === 0 ? 'purple' : 'cyan'} />
-              ))}
+            <View style={[styles.liveTag, { borderColor: theme.cyan }]}>
+              <View style={[styles.liveDot, { backgroundColor: theme.cyan }]} />
+              <ThemedText type="labelSm" style={{ color: theme.cyan, letterSpacing: 1.5 }}>
+                LIVE EVENT
+              </ThemedText>
             </View>
+            <ThemedText type="labelSm" style={{ color: theme.textSecondary, letterSpacing: 1 }}>
+              {[genre?.toUpperCase(), formatEventDate(e.starts_at), formatTime(e.starts_at)]
+                .filter(Boolean)
+                .join(' • ')}
+            </ThemedText>
             <ThemedText type="display" numberOfLines={3} style={styles.heroTitle}>
               {e.name}
             </ThemedText>
-            <ThemedText type="bodyLg" style={{ color: theme.textSecondary }}>
-              {e.artist.name}
-            </ThemedText>
+            {showArtist && (
+              <ThemedText type="bodyLg" style={{ color: theme.textSecondary }}>
+                {e.artist.name}
+              </ThemedText>
+            )}
+            <View style={styles.heroVenue}>
+              <Ionicons name="location" size={15} color={theme.cyan} />
+              <ThemedText type="small" style={{ color: theme.textSecondary }} numberOfLines={1}>
+                {formatVenue(e.venue?.name ?? null, e.venue?.city ?? null, e.venue?.region ?? null)}
+              </ThemedText>
+            </View>
           </View>
         </View>
 
@@ -334,9 +350,21 @@ const HERO_H = 440;
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   hero: { height: HERO_H, justifyContent: 'flex-end' },
-  heroBody: { padding: Spacing.three, gap: Spacing.two },
-  chips: { flexDirection: 'row', gap: Spacing.two },
+  heroBody: { padding: Spacing.three, gap: Spacing.one + 2 },
+  liveTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one + 2,
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    marginBottom: Spacing.one,
+  },
+  liveDot: { width: 7, height: 7, borderRadius: 4 },
   heroTitle: { color: '#fff' },
+  heroVenue: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: Spacing.one },
   section: { paddingHorizontal: Spacing.three, gap: Spacing.two + 2 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, padding: Spacing.three },
   infoIcon: {

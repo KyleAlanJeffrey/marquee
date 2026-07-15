@@ -19,9 +19,14 @@ type Props = {
 
 const GRID = 5;
 
-// A Mapbox public token (pk.*) is publishable client-side; when set we render a
-// real dark map, otherwise we fall back to the stylized grid below.
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
+// Only a Mapbox *public* token (pk.*) may ship in the client bundle. A secret
+// (sk.*) token would leak full account access to anyone viewing the page, so we
+// ignore it and fall back to the stylized grid.
+const RAW_MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
+const MAPBOX_TOKEN = RAW_MAPBOX_TOKEN?.startsWith('pk.') ? RAW_MAPBOX_TOKEN : undefined;
+if (RAW_MAPBOX_TOKEN && !MAPBOX_TOKEN) {
+  console.warn('EXPO_PUBLIC_MAPBOX_TOKEN must be a public "pk." token; ignoring it (using the fallback map).');
+}
 
 /** Real dark map (Mapbox Static Images API) with venue pins baked in — a plain
  *  image, so it works identically on web and native. `auto` frames all pins;
