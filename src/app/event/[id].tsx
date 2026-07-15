@@ -10,6 +10,7 @@ import { GalleryStrip } from '@/components/gallery-strip';
 import { GlassCard } from '@/components/glass-card';
 import { GradientButton } from '@/components/gradient-button';
 import { PressableScale } from '@/components/pressable-scale';
+import { StaticMap } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Glow, Radius, Spacing } from '@/constants/theme';
@@ -236,16 +237,10 @@ export default function EventScreen() {
         <View style={styles.section}>
           <GlassCard style={styles.venueCard}>
             <View style={styles.venueMap}>
-              <LinearGradient colors={['#161422', '#0e0e0e']} style={StyleSheet.absoluteFill} />
-              {Array.from({ length: 4 }).map((_, i) => (
-                <View key={`h${i}`} style={[styles.vGrid, { top: `${((i + 1) / 5) * 100}%`, left: 0, right: 0, height: 1 }]} />
-              ))}
-              {Array.from({ length: 4 }).map((_, i) => (
-                <View key={`v${i}`} style={[styles.vGrid, { left: `${((i + 1) / 5) * 100}%`, top: 0, bottom: 0, width: 1 }]} />
-              ))}
-              <View style={styles.venuePinWrap}>
-                <Ionicons name="location" size={26} color={theme.cyan} />
-              </View>
+              <StaticMap
+                points={e.venue?.lat != null && e.venue?.lng != null ? [{ lat: e.venue.lat, lng: e.venue.lng }] : []}
+                zoom={14}
+              />
             </View>
             <View style={styles.venueInfo}>
               <ThemedText type="title" numberOfLines={1}>
@@ -420,16 +415,6 @@ const styles = StyleSheet.create({
   },
   venueCard: { overflow: 'hidden' },
   venueMap: { height: 130 },
-  vGrid: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.05)' },
-  venuePinWrap: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   venueInfo: { padding: Spacing.three, gap: Spacing.one + 2 },
   venueBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.two },
   mapsBtn: {

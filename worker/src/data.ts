@@ -187,6 +187,8 @@ export async function eventById(db: DB, id: string) {
       v_name: venues.name,
       v_city: venues.city,
       v_region: venues.region,
+      v_lat: venues.lat,
+      v_lng: venues.lng,
     })
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))
@@ -208,7 +210,9 @@ export async function eventById(db: DB, id: string) {
       image_url: r.a_image,
       genres: parseGenres(r.a_genres),
     },
-    venue: r.v_name ? { id: r.v_id, name: r.v_name, city: r.v_city, region: r.v_region } : null,
+    venue: r.v_name
+      ? { id: r.v_id, name: r.v_name, city: r.v_city, region: r.v_region, lat: r.v_lat, lng: r.v_lng }
+      : null,
   };
 }
 

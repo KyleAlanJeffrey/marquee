@@ -49,6 +49,8 @@ export type EventDetail = {
     name: string | null;
     city: string | null;
     region: string | null;
+    lat: number | null;
+    lng: number | null;
   } | null;
 };
 

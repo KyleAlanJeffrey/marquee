@@ -1,7 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { ActivityIndicator, FlatList, Linking, StyleSheet, View } from 'react-native';
@@ -11,6 +10,7 @@ import { DateBlock } from '@/components/date-block';
 import { ErrorState } from '@/components/error-state';
 import { MeshBackground } from '@/components/mesh-background';
 import { PressableScale } from '@/components/pressable-scale';
+import { StaticMap } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
@@ -83,18 +83,9 @@ export default function VenueScreen() {
         }
         ListHeaderComponent={
           <Animated.View entering={FadeInDown.duration(400)}>
-            {/* Stylized map */}
+            {/* Map centered on the venue */}
             <View style={[styles.map, { borderColor: theme.border }]}>
-              <LinearGradient colors={['#161422', '#0e0e0e']} style={StyleSheet.absoluteFill} />
-              {Array.from({ length: 4 }).map((_, i) => (
-                <View key={`h${i}`} style={[styles.grid, { top: `${((i + 1) / 5) * 100}%`, left: 0, right: 0, height: 1 }]} />
-              ))}
-              {Array.from({ length: 4 }).map((_, i) => (
-                <View key={`v${i}`} style={[styles.grid, { left: `${((i + 1) / 5) * 100}%`, top: 0, bottom: 0, width: 1 }]} />
-              ))}
-              <View style={styles.pinWrap}>
-                <Ionicons name="location" size={30} color={theme.cyan} />
-              </View>
+              <StaticMap points={v.lat != null && v.lng != null ? [{ lat: v.lat, lng: v.lng }] : []} zoom={14} />
             </View>
 
             <View style={styles.header}>
@@ -186,8 +177,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
-  grid: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.05)' },
-  pinWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   header: { padding: Spacing.three, gap: Spacing.one + 2 },
   name: { color: '#fff' },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
