@@ -20,7 +20,7 @@ import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
-import { useArtist, useArtistEvents, useArtistSpotify } from '@/lib/hooks';
+import { useArtist, useArtistEvents, useArtistInfo } from '@/lib/hooks';
 import { formatCount, formatTime, formatVenue } from '@/lib/format';
 import type { ArtistEvent } from '@/lib/types';
 
@@ -37,7 +37,7 @@ export default function ArtistScreen() {
   const theme = useTheme();
   const artist = useArtist(id);
   const events = useArtistEvents(id);
-  const spotify = useArtistSpotify(id);
+  const info = useArtistInfo(id);
   const { isFollowing, toggle } = useFollows();
   const queryClient = useQueryClient();
 
@@ -81,16 +81,18 @@ export default function ArtistScreen() {
     );
   }
 
-  const followers = spotify.data?.followers ?? null;
+  const fans = info.data?.followers ?? null;
   const heroStats: { value: string | number; label: string }[] = [
     { value: events.data?.length ?? '—', label: 'UPCOMING SHOWS' },
-    ...(followers != null ? [{ value: formatCount(followers), label: 'FOLLOWERS' }] : []),
+    ...(fans != null ? [{ value: formatCount(fans), label: 'FANS' }] : []),
     { value: a.genres.length || '—', label: 'GENRES' },
   ];
-  const tracks = spotify.data?.top_tracks ?? [];
-  const spotifyUrl = spotify.data?.external_url ?? null;
+  const tracks = info.data?.top_tracks ?? [];
+  const spotifyUrl = info.data?.spotify_url ?? null;
+  const bio = info.data?.bio ?? null;
+  const bioUrl = info.data?.bio_url ?? null;
   // Prefer Spotify's artist photo (usually higher-res) when we have one.
-  const heroImage = spotify.data?.image_url ?? a.image_url;
+  const heroImage = info.data?.image_url ?? a.image_url;
 
   return (
     <View style={{ flex: 1 }}>
@@ -220,51 +222,49 @@ export default function ArtistScreen() {
         )}
         ListFooterComponent={
           <View>
-            {/* Top Tracks — populated when Spotify grants catalog access. */}
-            {tracks.length > 0 && (
+            {/* Top Tracks (from Deezer) */}
+            {(tracks.length > 0 || info.isLoading) && (
               <>
                 <View style={styles.sectionTitleRow}>
                   <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
                   <ThemedText type="title">Top Tracks</ThemedText>
-                  <View style={styles.spotifyTag}>
-                    <Ionicons name="musical-notes" size={12} color="#1DB954" />
-                    <ThemedText type="labelSm" style={{ color: '#1DB954' }}>
-                      SPOTIFY
-                    </ThemedText>
-                  </View>
                 </View>
                 <GlassCard style={styles.tracksCard}>
-                  {tracks.map((t, i) => (
-                    <PressableScale
-                      key={t.id}
-                      haptic={false}
-                      disabled={!t.spotify_url}
-                      onPress={() => t.spotify_url && Linking.openURL(t.spotify_url)}
-                      style={[
-                        styles.trackRow,
-                        i < tracks.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
-                      ]}>
-                      <ThemedText type="label" style={{ width: 18, color: theme.textTertiary }}>
-                        {i + 1}
-                      </ThemedText>
-                      <Image
-                        source={t.image_url ? { uri: t.image_url } : undefined}
-                        style={[styles.trackArt, { backgroundColor: theme.backgroundHigh }]}
-                        contentFit="cover"
-                      />
-                      <View style={{ flex: 1 }}>
-                        <ThemedText type="smallBold" numberOfLines={1}>
-                          {t.name}
+                  {info.isLoading && tracks.length === 0 ? (
+                    <ActivityIndicator color={theme.primary} style={{ padding: Spacing.four }} />
+                  ) : (
+                    tracks.map((t, i) => (
+                      <PressableScale
+                        key={t.id}
+                        haptic={false}
+                        disabled={!t.url}
+                        onPress={() => t.url && Linking.openURL(t.url)}
+                        style={[
+                          styles.trackRow,
+                          i < tracks.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+                        ]}>
+                        <ThemedText type="label" style={{ width: 18, color: theme.textTertiary }}>
+                          {i + 1}
                         </ThemedText>
-                        {t.album && (
-                          <ThemedText type="labelSm" numberOfLines={1} style={{ color: theme.textTertiary }}>
-                            {t.album}
+                        <Image
+                          source={t.image_url ? { uri: t.image_url } : undefined}
+                          style={[styles.trackArt, { backgroundColor: theme.backgroundHigh }]}
+                          contentFit="cover"
+                        />
+                        <View style={{ flex: 1 }}>
+                          <ThemedText type="smallBold" numberOfLines={1}>
+                            {t.name}
                           </ThemedText>
-                        )}
-                      </View>
-                      {t.spotify_url && <Ionicons name="play-circle" size={24} color="#1DB954" />}
-                    </PressableScale>
-                  ))}
+                          {t.album && (
+                            <ThemedText type="labelSm" numberOfLines={1} style={{ color: theme.textTertiary }}>
+                              {t.album}
+                            </ThemedText>
+                          )}
+                        </View>
+                        {t.url && <Ionicons name="play-circle" size={24} color={theme.cyan} />}
+                      </PressableScale>
+                    ))
+                  )}
                 </GlassCard>
               </>
             )}
@@ -277,8 +277,15 @@ export default function ArtistScreen() {
             <View style={styles.section}>
               <GlassCard style={styles.aboutCard}>
                 <ThemedText type="body" themeColor="textSecondary" style={{ lineHeight: 24 }}>
-                  {aboutText(a.name, a.genres)}
+                  {bio ?? aboutText(a.name, a.genres)}
                 </ThemedText>
+                {bio && bioUrl && (
+                  <PressableScale haptic={false} onPress={() => Linking.openURL(bioUrl)}>
+                    <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                      via Wikipedia ›
+                    </ThemedText>
+                  </PressableScale>
+                )}
                 {a.genres.length > 0 && (
                   <View style={styles.aboutChips}>
                     {a.genres.slice(0, 4).map((g) => (
@@ -336,7 +343,6 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.three,
   },
   accentBar: { width: 4, height: 22, borderRadius: 2 },
-  spotifyTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
   empty: { textAlign: 'center', padding: Spacing.four },
   tourRow: {
     flexDirection: 'row',

@@ -555,77 +555,92 @@ export async function searchArtists(env: Env, query: string) {
   }));
 }
 
-/** Enrich an artist with live Spotify data: followers, popularity, genres and
- *  top tracks. Resolves the Spotify id from the stored id or by name, and
- *  backfills the id/image/genres into D1 so future feed cards benefit too. */
-export async function artistSpotify(env: Env, artistId: string) {
-  const row = await env.DB.prepare(`SELECT id, name, spotify_id, image_url, genres FROM artists WHERE id = ?1`)
-    .bind(artistId)
-    .first<any>();
-  if (!row) return null;
-
-  const empty = {
-    spotify_id: null as string | null,
-    followers: null as number | null,
-    popularity: null as number | null,
-    genres: parseGenres(row.genres),
-    image_url: row.image_url as string | null,
-    external_url: null as string | null,
-    top_tracks: [] as any[],
-  };
-
+/** Spotify profile: high-res image + profile link. Resolves the id (stored or
+ *  by name) and backfills id/image into D1. Dev-mode apps only expose
+ *  id/name/images/external_urls (no followers/genres/top-tracks). */
+async function spotifyProfile(env: Env, row: any): Promise<{ image: string | null; url: string | null } | null> {
   let sid: string | null = row.spotify_id;
   if (!sid) {
     const found = await spotifyGet(env, `/search?type=artist&limit=1&q=${encodeURIComponent(row.name)}`);
     sid = found.artists?.items?.[0]?.id ?? null;
-    // Backfill the resolved id (ignore a unique collision with another row).
     if (sid) {
-      await env.DB.prepare(`UPDATE artists SET spotify_id = ?1 WHERE id = ?2`)
-        .bind(sid, artistId)
-        .run()
-        .catch(() => {});
+      await env.DB.prepare(`UPDATE artists SET spotify_id = ?1 WHERE id = ?2`).bind(sid, row.id).run().catch(() => {});
     }
   }
-  if (!sid) return empty;
-
+  if (!sid) return null;
   const artist = await spotifyGet(env, `/artists/${sid}`);
-
-  // Top tracks are restricted for apps in development mode (403); treat them as
-  // best-effort so the rest of the enrichment still lands.
-  const top = await spotifyGet(env, `/artists/${sid}/top-tracks?market=US`).catch(() => null);
-
   const image = artist.images?.[0]?.url ?? null;
-  const genres: string[] = artist.genres ?? [];
-
-  // Opportunistically fill in a missing image / genres from Spotify.
-  if ((!row.image_url && image) || (parseGenres(row.genres).length === 0 && genres.length > 0)) {
-    await env.DB.prepare(
-      `UPDATE artists
-         SET image_url = COALESCE(image_url, ?1),
-             genres = CASE WHEN genres IS NULL OR genres = '[]' THEN ?2 ELSE genres END
-       WHERE id = ?3`,
-    )
-      .bind(image, JSON.stringify(genres), artistId)
-      .run()
-      .catch(() => {});
+  if (!row.image_url && image) {
+    await env.DB.prepare(`UPDATE artists SET image_url = ?1 WHERE id = ?2`).bind(image, row.id).run().catch(() => {});
   }
+  return { image, url: artist.external_urls?.spotify ?? null };
+}
 
-  const top_tracks = (top?.tracks ?? []).slice(0, 5).map((t: any) => ({
-    id: t.id,
-    name: t.name,
-    album: t.album?.name ?? null,
-    image_url: t.album?.images?.[1]?.url ?? t.album?.images?.[0]?.url ?? null,
-    preview_url: t.preview_url ?? null,
-    spotify_url: t.external_urls?.spotify ?? null,
+/** Top tracks + fan count from Deezer's open API (no key required). Each track
+ *  carries a 30s preview mp3 and a link to the full track. */
+async function deezerTopTracks(name: string): Promise<{ tracks: any[]; fans: number | null }> {
+  const search = await fetch(`https://api.deezer.com/search/artist?limit=1&q=${encodeURIComponent(name)}`).then((r) =>
+    r.json<any>(),
+  );
+  const artist = search.data?.[0];
+  if (!artist?.id) return { tracks: [], fans: null };
+  const top = await fetch(`https://api.deezer.com/artist/${artist.id}/top?limit=5`).then((r) => r.json<any>());
+  const tracks = (top.data ?? []).map((t: any) => ({
+    id: String(t.id),
+    name: t.title,
+    album: t.album?.title ?? null,
+    image_url: t.album?.cover_medium ?? t.album?.cover ?? null,
+    preview_url: t.preview || null,
+    url: t.link ?? null,
   }));
+  return { tracks, fans: typeof artist.nb_fan === 'number' ? artist.nb_fan : null };
+}
+
+/** A short artist bio from Wikipedia (CC BY-SA — shown with attribution). */
+async function wikipediaBio(name: string): Promise<{ text: string; url: string | null } | null> {
+  const headers = { 'User-Agent': 'Marquee/1.0 (concert discovery app)', accept: 'application/json' };
+  const summary = async (title: string) => {
+    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, { headers });
+    if (!r.ok) return null;
+    const j = await r.json<any>();
+    if (!j.extract || j.type === 'disambiguation') return null;
+    return { text: j.extract as string, url: j.content_urls?.desktop?.page ?? null };
+  };
+  let bio = await summary(name);
+  if (!bio) {
+    const s = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srlimit=1&format=json&srsearch=${encodeURIComponent(
+        `${name} band OR musician`,
+      )}`,
+      { headers },
+    ).then((r) => r.json<any>());
+    const hit = s.query?.search?.[0]?.title;
+    if (hit) bio = await summary(hit);
+  }
+  return bio;
+}
+
+/** Aggregate public info for an artist: Spotify image + profile link, Deezer
+ *  top tracks + fan count, and a Wikipedia bio. Each source is best-effort so a
+ *  failure in one still returns the others. */
+export async function artistInfo(env: Env, artistId: string) {
+  const row = await env.DB.prepare(`SELECT id, name, spotify_id, image_url FROM artists WHERE id = ?1`)
+    .bind(artistId)
+    .first<any>();
+  if (!row) return null;
+
+  const [spotify, deezer, bio] = await Promise.all([
+    (env.SPOTIFY_CLIENT_ID ? spotifyProfile(env, row) : Promise.resolve(null)).catch(() => null),
+    deezerTopTracks(row.name).catch(() => ({ tracks: [], fans: null })),
+    wikipediaBio(row.name).catch(() => null),
+  ]);
 
   return {
-    spotify_id: sid,
-    followers: artist.followers?.total ?? null,
-    popularity: artist.popularity ?? null,
-    genres: genres.length ? genres : empty.genres,
-    image_url: image ?? row.image_url ?? null,
-    external_url: artist.external_urls?.spotify ?? null,
-    top_tracks,
+    spotify_url: spotify?.url ?? null,
+    image_url: spotify?.image ?? row.image_url ?? null,
+    followers: deezer.fans,
+    bio: bio?.text ?? null,
+    bio_url: bio?.url ?? null,
+    top_tracks: deezer.tracks,
   };
 }

@@ -85,24 +85,26 @@ export type Artist = {
   genres: string[];
 };
 
-export type SpotifyTrack = {
+export type ArtistTrack = {
   id: string;
   name: string;
   album: string | null;
   image_url: string | null;
+  /** 30s preview mp3 (Deezer), when available. */
   preview_url: string | null;
-  spotify_url: string | null;
+  /** Link to the full track. */
+  url: string | null;
 };
 
-/** Live Spotify enrichment for an artist (followers, popularity, top tracks). */
-export type ArtistSpotify = {
-  spotify_id: string | null;
-  followers: number | null;
-  popularity: number | null;
-  genres: string[];
+/** Aggregated public info for an artist (Spotify link/image, Deezer top tracks
+ *  + fan count, Wikipedia bio). Any field may be null when a source misses. */
+export type ArtistInfo = {
+  spotify_url: string | null;
   image_url: string | null;
-  external_url: string | null;
-  top_tracks: SpotifyTrack[];
+  followers: number | null;
+  bio: string | null;
+  bio_url: string | null;
+  top_tracks: ArtistTrack[];
 };
 
 export type ArtistSearchResult = {
