@@ -340,7 +340,9 @@ export async function pageSeo(env: Env, path: string, origin: string): Promise<P
   if (staticPage) return staticPage;
 
   const detail = /^\/(event|artist|venue)\/([^/]+)$/.exec(clean);
-  if (!detail) return null;
+  // Unknown paths still get the SPA shell with a 200, so without this they'd
+  // look like real pages to a crawler (a soft 404).
+  if (!detail) return { title: DEFAULT_TITLE, description: DEFAULT_DESCRIPTION, noindex: true };
   const [, kind, id] = detail;
 
   const resolved =
