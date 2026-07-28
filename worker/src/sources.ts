@@ -14,9 +14,33 @@ import { getDb, type DB } from './db';
 import type { Env } from './env';
 import { artists, discoveryLog, events, venues } from './schema';
 
+// --- outbound HTTP ----------------------------------------------------------
+
+const FETCH_TIMEOUT_MS = 8000;
+
+/**
+ * Every upstream here is a third party we don't control, and a hung connection
+ * would hold the whole Worker request open, so all outbound calls get a
+ * deadline.
+ */
+export async function fetchWithTimeout(
+  url: string,
+  init?: RequestInit,
+  timeoutMs = FETCH_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // --- Ticketmaster -----------------------------------------------------------
 
 const TM_BASE = 'https://app.ticketmaster.com/discovery/v2';
+const TM_MAX_RETRIES = 3;
 
 function wkt(lng: any, lat: any): { lat: number | null; lng: number | null } {
   const la = parseFloat(lat);
@@ -58,13 +82,19 @@ function tmToEventInput(e: any, artistId: string): EventInput | null {
 
 async function tmFetch(env: Env, path: string, params: Record<string, string>): Promise<any> {
   const qs = new URLSearchParams({ ...params, apikey: env.TICKETMASTER_API_KEY! });
-  const res = await fetch(`${TM_BASE}/${path}?${qs}`);
-  if (res.status === 429) {
-    await new Promise((r) => setTimeout(r, 1500));
-    return tmFetch(env, path, params);
+
+  // Ticketmaster 429s both for short bursts and for a spent daily quota, so the
+  // retry has to be bounded — an unbounded one would spin until the Worker's
+  // limits killed the request.
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetchWithTimeout(`${TM_BASE}/${path}?${qs}`);
+    if (res.status === 429 && attempt < TM_MAX_RETRIES) {
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      continue;
+    }
+    if (!res.ok) throw new Error(`Ticketmaster ${path}: ${res.status}`);
+    return res.json();
   }
-  if (!res.ok) throw new Error(`Ticketmaster ${path}: ${res.status}`);
-  return res.json();
 }
 
 async function tmEventsNear(env: Env, lat: number, lng: number, radiusMiles: number): Promise<any[]> {
@@ -126,7 +156,7 @@ async function bitEventsForArtist(
 ): Promise<EventInput[]> {
   if (!env.BANDSINTOWN_APP_ID) return [];
   const name = artist.bandsintown_name ?? artist.name;
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://rest.bandsintown.com/artists/${encodeURIComponent(name)}/events?app_id=${env.BANDSINTOWN_APP_ID}&date=upcoming`,
   );
   if (!res.ok) return [];
@@ -134,13 +164,16 @@ async function bitEventsForArtist(
   if (!Array.isArray(bitEvents)) return [];
   return bitEvents.flatMap((e: any) => {
     if (!e.datetime || !e.id) return [];
+    // One unparseable datetime would otherwise throw and lose the whole artist.
+    const startsAt = new Date(e.datetime);
+    if (Number.isNaN(startsAt.getTime())) return [];
     const { lat, lng } = wkt(e.venue?.longitude, e.venue?.latitude);
     return [
       {
         source: 'bandsintown',
         source_event_id: String(e.id),
         name: e.title || `${artist.name} @ ${e.venue?.name ?? 'TBA'}`,
-        starts_at: new Date(e.datetime).toISOString().slice(0, 19) + 'Z',
+        starts_at: startsAt.toISOString().slice(0, 19) + 'Z',
         ticket_url: e.offers?.[0]?.url ?? e.url ?? null,
         price_from: null,
         artist_id: artist.id,
@@ -243,7 +276,7 @@ async function spotifyAccessToken(env: Env): Promise<string> {
   const id = env.SPOTIFY_CLIENT_ID;
   const secret = env.SPOTIFY_CLIENT_SECRET;
   if (!id || !secret) throw new Error('Spotify credentials not configured');
-  const res = await fetch('https://accounts.spotify.com/api/token', {
+  const res = await fetchWithTimeout('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${btoa(`${id}:${secret}`)}` },
     body: 'grant_type=client_credentials',
@@ -256,7 +289,7 @@ async function spotifyAccessToken(env: Env): Promise<string> {
 
 async function spotifyGet(env: Env, path: string): Promise<any> {
   const token = await spotifyAccessToken(env);
-  const res = await fetch(`https://api.spotify.com/v1${path}`, {
+  const res = await fetchWithTimeout(`https://api.spotify.com/v1${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Spotify ${path.split('?')[0]}: ${res.status}`);
@@ -305,12 +338,12 @@ async function spotifyProfile(
 /** Top tracks + fan count from Deezer's open API. Each track carries a 30s
  *  preview mp3 and a link to the full track. */
 async function deezerTopTracks(name: string): Promise<{ tracks: any[]; fans: number | null }> {
-  const search = await fetch(`https://api.deezer.com/search/artist?limit=1&q=${encodeURIComponent(name)}`).then((r) =>
+  const search = await fetchWithTimeout(`https://api.deezer.com/search/artist?limit=1&q=${encodeURIComponent(name)}`).then((r) =>
     r.json<any>(),
   );
   const artist = search.data?.[0];
   if (!artist?.id) return { tracks: [], fans: null };
-  const top = await fetch(`https://api.deezer.com/artist/${artist.id}/top?limit=5`).then((r) => r.json<any>());
+  const top = await fetchWithTimeout(`https://api.deezer.com/artist/${artist.id}/top?limit=5`).then((r) => r.json<any>());
   const tracks = (top.data ?? []).map((t: any) => ({
     id: String(t.id),
     name: t.title,
@@ -328,7 +361,9 @@ async function deezerTopTracks(name: string): Promise<{ tracks: any[]; fans: num
 async function wikipediaBio(name: string): Promise<{ text: string; url: string | null } | null> {
   const headers = { 'User-Agent': 'Marquee/1.0 (concert discovery app)', accept: 'application/json' };
   const summary = async (title: string) => {
-    const r = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, { headers });
+    const r = await fetchWithTimeout(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, {
+      headers,
+    });
     if (!r.ok) return null;
     const j = await r.json<any>();
     if (!j.extract || j.type === 'disambiguation') return null;
@@ -336,7 +371,7 @@ async function wikipediaBio(name: string): Promise<{ text: string; url: string |
   };
   let bio = await summary(name);
   if (!bio) {
-    const s = await fetch(
+    const s = await fetchWithTimeout(
       `https://en.wikipedia.org/w/api.php?action=query&list=search&srlimit=1&format=json&srsearch=${encodeURIComponent(
         `${name} band OR musician`,
       )}`,
@@ -384,7 +419,7 @@ export async function eventLineup(env: Env, eventId: string) {
  *  artist + venue first (show-specific), then falls back to the artist alone. */
 async function blueskyPosts(artist: string, venue: string | null): Promise<any[]> {
   const search = async (q: string) => {
-    const r = await fetch(
+    const r = await fetchWithTimeout(
       `https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(q)}&limit=12&sort=top`,
       { headers: { accept: 'application/json' } },
     );

@@ -30,7 +30,8 @@ export function formatRelativeDay(iso: string): string {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const days = Math.round((startOfDate.getTime() - startOfToday.getTime()) / 86_400_000);
-  if (days <= 0) return 'Tonight';
+  if (days < 0) return formatEventDate(iso);
+  if (days === 0) return 'Tonight';
   if (days === 1) return 'Tomorrow';
   if (days < 7) return `In ${days} days`;
   return formatEventDate(iso);

@@ -54,12 +54,21 @@ export function FollowsProvider({ children }: { children: ReactNode }) {
   const [follows, setFollows] = useState<FollowedArtist[]>([]);
   const [ready, setReady] = useState(false);
 
-  // Hydrate once from disk.
+  // Hydrate once from disk. Anything the user followed while the read was in
+  // flight is merged in rather than overwritten — pre-hydration the list is
+  // empty, so the only action possible in that window is a follow.
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) setFollows(JSON.parse(raw));
+        const stored = raw ? JSON.parse(raw) : null;
+        if (Array.isArray(stored)) {
+          setFollows((current) =>
+            current.length === 0
+              ? stored
+              : [...current, ...stored.filter((s: FollowedArtist) => !current.some((c) => sameArtist(c, s)))],
+          );
+        }
       } catch (err) {
         console.warn('failed to load follows:', err);
       } finally {

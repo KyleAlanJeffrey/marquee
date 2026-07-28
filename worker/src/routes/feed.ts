@@ -18,23 +18,24 @@ feed.get('/nearby', zValidator('query', nearbyQuery), async (c) => {
 // Client-driven ingestion: pull fresh shows for an area (server-throttled).
 feed.post('/discover-events', zValidator('json', discoverBody), async (c) => {
   const { lat, lng, radius } = c.req.valid('json');
-  if (!c.env.TICKETMASTER_API_KEY) return c.json({ error: 'Ticketmaster not configured', ingested: 0 });
+  if (!c.env.TICKETMASTER_API_KEY) return c.json({ error: 'Ticketmaster not configured', ingested: 0 }, 503);
   try {
     return c.json(await discover(c.env, lat, lng, radius));
   } catch (err) {
-    console.error(err);
-    return c.json({ error: String(err) }, 500);
+    // Log the detail; don't hand upstream internals to an unauthenticated caller.
+    console.error('discover-events failed:', err);
+    return c.json({ error: 'discovery failed', ingested: 0 }, 500);
   }
 });
 
 // Client-driven ingestion: pull upcoming shows for a set of followed artists.
 feed.post('/refresh-artist-events', zValidator('json', refreshArtistsBody), async (c) => {
   const { artists } = c.req.valid('json');
-  if (!c.env.TICKETMASTER_API_KEY) return c.json({ error: 'Ticketmaster not configured', ingested: 0 });
+  if (!c.env.TICKETMASTER_API_KEY) return c.json({ error: 'Ticketmaster not configured', ingested: 0 }, 503);
   try {
     return c.json(await refreshArtists(c.env, artists));
   } catch (err) {
-    console.error(err);
-    return c.json({ error: String(err) }, 500);
+    console.error('refresh-artist-events failed:', err);
+    return c.json({ error: 'refresh failed', ingested: 0 }, 500);
   }
 });

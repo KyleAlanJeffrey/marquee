@@ -13,12 +13,15 @@ Notifications.setNotificationHandler({
 });
 
 /**
- * Route a tapped concert reminder to the relevant artist. Reminders carry
- * `artistId` (and `eventId`); the artist page lists the show.
+ * Route a tapped concert reminder. Every reminder carries `eventId` (the show
+ * page is what "Tap for tickets" promises); followed-artist reminders also
+ * carry `artistId`, which we fall back to.
  */
 function handleNotificationResponse(response: Notifications.NotificationResponse) {
-  const artistId = response.notification.request.content.data?.artistId;
-  if (typeof artistId === 'string' && artistId.length > 0) {
+  const { eventId, artistId } = response.notification.request.content.data ?? {};
+  if (typeof eventId === 'string' && eventId.length > 0) {
+    router.push(`/event/${eventId}`);
+  } else if (typeof artistId === 'string' && artistId.length > 0) {
     router.push(`/artist/${artistId}`);
   }
 }

@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { DateBlock } from '@/components/date-block';
@@ -21,6 +21,7 @@ import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
+import { openUrl } from '@/lib/open-url';
 import { useArtist, useArtistEvents, useArtistInfo } from '@/lib/hooks';
 import { formatCount, formatTime, formatVenue } from '@/lib/format';
 import type { ArtistEvent } from '@/lib/types';
@@ -178,6 +179,8 @@ export default function ArtistScreen() {
         ListEmptyComponent={
           events.isLoading ? (
             <ActivityIndicator color={theme.primary} style={{ marginTop: Spacing.four }} />
+          ) : events.isError ? (
+            <ErrorState onRetry={() => events.refetch()} />
           ) : (
             <ThemedText themeColor="textSecondary" style={styles.empty}>
               No upcoming shows on record. New dates are pulled in nightly.
@@ -211,7 +214,7 @@ export default function ArtistScreen() {
               </PressableScale>
               {item.ticket_url ? (
                 <PressableScale
-                  onPress={() => Linking.openURL(item.ticket_url!)}
+                  onPress={() => openUrl(item.ticket_url!)}
                   style={[styles.ticketBtn, { backgroundColor: theme.primary }, Glow.purple, { shadowOpacity: 0.25 }]}>
                   <ThemedText type="label" style={{ color: theme.onPrimary, fontSize: 12 }}>
                     Tickets
@@ -245,7 +248,7 @@ export default function ArtistScreen() {
                         key={t.id}
                         haptic={false}
                         disabled={!t.url}
-                        onPress={() => t.url && Linking.openURL(t.url)}
+                        onPress={() => t.url && openUrl(t.url)}
                         style={[
                           styles.trackRow,
                           i < tracks.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
@@ -287,7 +290,7 @@ export default function ArtistScreen() {
                   {bio ?? aboutText(a.name, a.genres)}
                 </ThemedText>
                 {bio && bioUrl && (
-                  <PressableScale haptic={false} onPress={() => Linking.openURL(bioUrl)}>
+                  <PressableScale haptic={false} onPress={() => openUrl(bioUrl)}>
                     <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
                       via Wikipedia ›
                     </ThemedText>
@@ -302,7 +305,7 @@ export default function ArtistScreen() {
                 )}
                 {spotifyUrl && (
                   <PressableScale
-                    onPress={() => Linking.openURL(spotifyUrl)}
+                    onPress={() => openUrl(spotifyUrl)}
                     style={[styles.spotifyBtn, { borderColor: '#1DB954' }]}>
                     <Ionicons name="musical-notes" size={16} color="#1DB954" />
                     <ThemedText type="label" style={{ color: '#1DB954', fontSize: 13 }}>

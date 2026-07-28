@@ -33,7 +33,11 @@ function loadMapbox(): Promise<any> {
     s.src = 'https://api.mapbox.com/mapbox-gl-js/v3.9.1/mapbox-gl.js';
     s.async = true;
     s.onload = () => resolve(w.mapboxgl);
-    s.onerror = reject;
+    s.onerror = (err) => {
+      // Don't cache the failure — a later visit should be able to retry.
+      loader = null;
+      reject(err);
+    };
     document.head.appendChild(s);
   });
   return loader;
@@ -50,9 +54,18 @@ export default function MapScreen() {
   const events = useNearbyEvents(coords, radiusMiles);
   const { isFollowing } = useFollows();
   const { width, height } = useWindowDimensions();
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  // A callback ref (not useRef) so the init effect re-runs once the DOM node is
+  // actually attached — a plain ref can still be null on the first effect pass.
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
-  const [selected, setSelected] = useState<VenueGroup | null>(null);
+  const glRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
+  const fittedRef = useRef(false);
+  const [ready, setReady] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  // The selection is stored by key and resolved from the current groups, so a
+  // venue that drops out of the feed closes the sheet on its own.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   const all = useMemo(() => events.data ?? [], [events.data]);
   const ref = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_spotify_id });
@@ -72,58 +85,93 @@ export default function MapScreen() {
     return [...m.values()];
   }, [all, isFollowing]);
 
+  const selected = groups.find((g) => g.key === selectedKey) ?? null;
+
+  // Create the map once per location. Markers are a separate effect — rebuilding
+  // the map whenever the event list or follow state changed would throw away the
+  // user's pan/zoom.
   useEffect(() => {
-    if (!MAPBOX_TOKEN || !coords || !containerRef.current || groups.length === 0) return;
+    if (!MAPBOX_TOKEN || !coords || !container) return;
     let map: any;
     let cancelled = false;
     loadMapbox()
       .then((mapboxgl) => {
-        if (cancelled || !containerRef.current) return;
+        if (cancelled) return;
+        glRef.current = mapboxgl;
         mapboxgl.accessToken = MAPBOX_TOKEN;
         map = new mapboxgl.Map({
-          container: containerRef.current,
+          container,
           style: 'mapbox://styles/mapbox/dark-v11',
           center: [coords.lng, coords.lat],
           zoom: 11,
           attributionControl: false,
         });
         mapRef.current = map;
-        map.on('load', () => {
+        // Pins are DOM overlays, so they only need the style — waiting for the
+        // full 'load' (which needs a completed first paint) can leave a map with
+        // no pins on a slow or software-rendered client.
+        const styleReady = () => {
+          if (cancelled) return;
           map.resize();
-          const bounds = new mapboxgl.LngLatBounds();
-          for (const g of groups) {
-            const color = g.following ? '#bd00ff' : '#00dbe9';
-            const el = document.createElement('div');
-            el.style.cssText = `width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #0e0e0e;box-shadow:0 0 10px ${color};cursor:pointer;`;
-            el.addEventListener('click', (ev) => {
-              ev.stopPropagation();
-              setSelected(g);
-              map.flyTo({ center: [g.lng, g.lat], zoom: Math.max(map.getZoom(), 13), duration: 500 });
-            });
-            new mapboxgl.Marker({ element: el }).setLngLat([g.lng, g.lat]).addTo(map);
-            bounds.extend([g.lng, g.lat]);
-          }
-          if (groups.length > 1) map.fitBounds(bounds, { padding: 80, maxZoom: 13, duration: 0 });
-        });
-        map.on('click', () => setSelected(null));
+          setReady(true);
+        };
+        if (map.isStyleLoaded()) styleReady();
+        else map.once('style.load', styleReady);
+        map.on('click', () => setSelectedKey(null));
       })
-      .catch(() => {});
+      .catch(() => {
+        // GL couldn't load (offline, blocked CDN) — fall back to the list.
+        if (!cancelled) setLoadFailed(true);
+      });
     return () => {
       cancelled = true;
+      setReady(false);
+      markersRef.current = [];
+      fittedRef.current = false;
       mapRef.current = null;
       if (map) map.remove();
     };
     // coords is rebuilt each render from params; depend on its stable primitives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, coords?.lat, coords?.lng]);
+  }, [container, coords?.lat, coords?.lng]);
+
+  // Pins: redraw on data/follow changes, leaving the camera where the user put it.
+  useEffect(() => {
+    const map = mapRef.current;
+    const mapboxgl = glRef.current;
+    if (!ready || !map || !mapboxgl) return;
+
+    for (const marker of markersRef.current) marker.remove();
+    markersRef.current = [];
+
+    const bounds = new mapboxgl.LngLatBounds();
+    for (const g of groups) {
+      const color = g.following ? '#bd00ff' : '#00dbe9';
+      const el = document.createElement('div');
+      el.style.cssText = `width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #0e0e0e;box-shadow:0 0 10px ${color};cursor:pointer;`;
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        setSelectedKey(g.key);
+        map.flyTo({ center: [g.lng, g.lat], zoom: Math.max(map.getZoom(), 13), duration: 500 });
+      });
+      markersRef.current.push(new mapboxgl.Marker({ element: el }).setLngLat([g.lng, g.lat]).addTo(map));
+      bounds.extend([g.lng, g.lat]);
+    }
+
+    // Frame the pins on the first load only.
+    if (groups.length > 1 && !fittedRef.current) {
+      map.fitBounds(bounds, { padding: 80, maxZoom: 13, duration: 0 });
+      fittedRef.current = true;
+    }
+  }, [groups, ready]);
 
   // Keep the GL canvas sized to the window.
   useEffect(() => {
     mapRef.current?.resize();
   }, [width, height]);
 
-  // No token → the shared static-map + list fallback.
-  if (!MAPBOX_TOKEN) {
+  // No token, or GL failed to load → the shared static-map + list fallback.
+  if (!MAPBOX_TOKEN || loadFailed) {
     return (
       <View style={{ flex: 1 }}>
         <PageMeta title="Concert map" description="Every upcoming concert near you, plotted on a map by venue." />
@@ -141,7 +189,7 @@ export default function MapScreen() {
       <PageMeta title="Concert map" description="Every upcoming concert near you, plotted on a map by venue." />
       {/* Mapbox GL renders into this DOM node (explicit px size so its 100%
           children resolve to a real height) */}
-      <View ref={containerRef as never} style={{ width, height }} />
+      <View ref={setContainer as never} style={{ width, height }} />
 
       <View style={styles.topBar}>
         <TopBar transparent back title="Map" />
@@ -154,7 +202,7 @@ export default function MapScreen() {
             <ThemedText type="title" numberOfLines={1} style={{ flex: 1, fontSize: 18 }}>
               {selected.name}
             </ThemedText>
-            <PressableScale haptic={false} onPress={() => setSelected(null)}>
+            <PressableScale haptic={false} onPress={() => setSelectedKey(null)}>
               <Ionicons name="close" size={20} color={theme.textTertiary} />
             </PressableScale>
           </View>

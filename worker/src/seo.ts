@@ -110,18 +110,26 @@ export async function sitemapXml(env: Env, origin: string): Promise<string> {
   const upcoming = gte(events.startsAt, nowIso());
   const today = new Date().toISOString().slice(0, 10);
 
+  // lastmod is when we last wrote the row, not "now" — a sitemap that claims
+  // every URL changed today gets its lastmod ignored.
   const [eventRows, artistRows, venueRows] = await Promise.all([
     db
-      .select({ id: events.id, startsAt: events.startsAt })
+      .select({ id: events.id, updated: events.createdAt })
       .from(events)
       .where(upcoming)
       .orderBy(events.startsAt)
       .limit(5000),
-    db.selectDistinct({ id: events.artistId }).from(events).where(upcoming).limit(5000),
     db
-      .selectDistinct({ id: events.venueId })
+      .select({ id: events.artistId, updated: sql<string>`max(${events.createdAt})` })
+      .from(events)
+      .where(upcoming)
+      .groupBy(events.artistId)
+      .limit(5000),
+    db
+      .select({ id: events.venueId, updated: sql<string>`max(${events.createdAt})` })
       .from(events)
       .where(and(upcoming, isNotNull(events.venueId)))
+      .groupBy(events.venueId)
       .limit(5000),
   ]);
 
@@ -137,10 +145,12 @@ export async function sitemapXml(env: Env, origin: string): Promise<string> {
   add('/map', today, 'daily', '0.8');
   add('/search', today, 'weekly', '0.6');
 
+  const day = (iso: string | null) => (iso ?? '').slice(0, 10) || today;
+
   // Events go stale the moment they happen, so they get the highest churn.
-  for (const e of eventRows) add(`/event/${e.id}`, today, 'daily', '0.8');
-  for (const a of artistRows) add(`/artist/${a.id}`, today, 'weekly', '0.7');
-  for (const v of venueRows) if (v.id) add(`/venue/${v.id}`, today, 'weekly', '0.6');
+  for (const e of eventRows) add(`/event/${e.id}`, day(e.updated), 'daily', '0.8');
+  for (const a of artistRows) add(`/artist/${a.id}`, day(a.updated), 'weekly', '0.7');
+  for (const v of venueRows) if (v.id) add(`/venue/${v.id}`, day(v.updated), 'weekly', '0.6');
 
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join(
     '\n',
@@ -359,6 +369,7 @@ export function injectSeo(res: Response, url: URL, seo: PageSeo): Response {
   // some by src/app/+html.tsx, so rather than assume a tag is in the shell we
   // overwrite the ones we find and append whatever was missing before </head>.
   const tags = [
+    { attr: 'name', key: 'robots', content: seo.noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large' },
     { attr: 'name', key: 'description', content: seo.description },
     { attr: 'property', key: 'og:title', content: seo.title },
     { attr: 'property', key: 'og:description', content: seo.description },
@@ -389,11 +400,6 @@ export function injectSeo(res: Response, url: URL, seo: PageSeo): Response {
     .on('meta[property="og:image:width"], meta[property="og:image:height"]', {
       element(el) {
         if (custom) el.remove();
-      },
-    })
-    .on('meta[name="robots"]', {
-      element(el) {
-        if (seo.noindex) el.setAttribute('content', 'noindex, follow');
       },
     })
     .on('head', {

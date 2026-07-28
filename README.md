@@ -25,7 +25,8 @@ worker/
   src/routes/     per-resource Hono routers (artists, venues, events, feed, search)
   src/data.ts     D1 repository (reads/writes) via Drizzle · src/sources.ts external APIs
   src/seo.ts      robots.txt, sitemap.xml, per-page <head> + JSON-LD injection
-  schema.sql      D1 schema + dev seed (one file; apply with `d1 execute`)
+  schema.sql      D1 schema (DDL only — this is what production gets)
+  seed.sql        local-only dev seed (fictional shows) · unseed.sql removes it
 public/           copied to the web export root (og-image, icons, manifest.json)
 scripts/dev.sh    one-command local dev (Worker + local D1 + Expo)
 ```
@@ -87,8 +88,8 @@ auto-created by name on first deploy (no id pinned in `wrangler.jsonc`).
 After the first deploy, one time:
 
 ```sh
-# load the schema + seed into the remote D1 (or paste worker/schema.sql in the
-# D1 Console: Storage & Databases → D1 → marquee → Console)
+# load the schema into the remote D1 (DDL only — the dev seed in worker/seed.sql
+# is deliberately local, so production never serves made-up shows)
 npm run db:apply
 # set the Worker's secrets (Worker → Settings → Variables and Secrets, or CLI)
 npx wrangler secret put TICKETMASTER_API_KEY

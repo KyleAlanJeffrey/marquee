@@ -47,6 +47,10 @@ export default function ProfileScreen() {
         return;
       }
       setRemindersEnabled(true);
+    } catch (err) {
+      // The permission APIs can throw; leave reminders off and say so.
+      console.warn('notification permission check failed:', err);
+      Alert.alert('Reminders unavailable', "We couldn't check your notification permission. Reminders stay off.");
     } finally {
       setToggling(false);
     }
@@ -106,7 +110,12 @@ export default function ProfileScreen() {
 
         <View style={styles.followingHead}>
           <Label>{`FOLLOWING · ${follows.length}`}</Label>
-          <Pressable onPress={() => router.push('/search')} hitSlop={8} style={styles.addBtn}>
+          <Pressable
+            onPress={() => router.push('/search')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Find artists to follow"
+            style={styles.addBtn}>
             <Ionicons name="add" size={18} color={theme.cyan} />
             <ThemedText type="label" style={{ color: theme.cyan, fontSize: 12 }}>
               ADD
@@ -148,6 +157,8 @@ export default function ProfileScreen() {
                   scaleTo={0.9}
                   onPress={() => unfollow({ artistId: f.artistId, spotifyId: f.spotifyId })}
                   hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Unfollow ${f.name}`}
                   style={[styles.removeBtn, { backgroundColor: theme.backgroundHigh }]}>
                   <Ionicons name="close" size={16} color={theme.textSecondary} />
                 </PressableScale>

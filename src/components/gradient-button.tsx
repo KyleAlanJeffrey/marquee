@@ -42,6 +42,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  block: { paddingVertical: Spacing.three },
+  block: { alignSelf: 'stretch', paddingVertical: Spacing.three },
   label: { color: '#ffffff', fontFamily: Fonts.labelBold, fontSize: 15, letterSpacing: 0.5 },
 });

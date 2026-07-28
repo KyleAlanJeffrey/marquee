@@ -29,6 +29,7 @@ info() { printf '\033[1;34m▶\033[0m %s\n' "$1"; }
 # 2. Local D1 schema + seed
 info "Loading the D1 schema + seed into the local database…"
 npx wrangler d1 execute marquee --local --file=worker/schema.sql
+npx wrangler d1 execute marquee --local --file=worker/seed.sql
 
 # 3. App env → local Worker
 info "Writing .env (EXPO_PUBLIC_API_URL=http://localhost:8787)…"

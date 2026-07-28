@@ -19,15 +19,32 @@ import { useInfiniteNearby } from '@/lib/hooks';
 import type { Coords, NearbyEvent } from '@/lib/types';
 
 const ALL = 'All';
+const DEFAULT_RADIUS = 50;
 const ref = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_spotify_id });
+
+const scalar = (v: string | string[] | undefined): string | undefined => (Array.isArray(v) ? v[0] : v);
+
+function parseCoords(lat?: string | string[], lng?: string | string[]): Coords | null {
+  const la = Number(scalar(lat));
+  const ln = Number(scalar(lng));
+  return Number.isFinite(la) && Number.isFinite(ln) ? { lat: la, lng: ln } : null;
+}
+
+function parseRadius(radius?: string | string[]): number {
+  const r = Number(scalar(radius));
+  return Number.isFinite(r) && r > 0 ? r : DEFAULT_RADIUS;
+}
 
 export default function BrowseScreen() {
   const theme = useTheme();
-  const { lat, lng, radius } = useLocalSearchParams<{ lat: string; lng: string; radius: string }>();
+  const params = useLocalSearchParams<{ lat: string; lng: string; radius: string }>();
   const { isFollowing, toggle } = useFollows();
 
-  const coords: Coords | null = lat && lng ? { lat: Number(lat), lng: Number(lng) } : null;
-  const q = useInfiniteNearby(coords, Number(radius) || 50);
+  // Route params arrive as string | string[] | undefined, and a bad value must
+  // not become NaN in a query key.
+  const coords = parseCoords(params.lat, params.lng);
+  const radiusMiles = parseRadius(params.radius);
+  const q = useInfiniteNearby(coords, radiusMiles);
 
   const [genre, setGenre] = useState(ALL);
   const [mode, setMode] = useState<'grid' | 'list'>('grid');
@@ -180,10 +197,11 @@ export default function BrowseScreen() {
 
       {/* Floating Map View */}
       <PressableScale
-        onPress={() =>
-          coords && router.push(`/map?lat=${coords.lat}&lng=${coords.lng}&radius=${Number(radius) || 50}`)
-        }
-        style={[styles.mapBtn, { backgroundColor: theme.cyan }, Glow.cyan]}>
+        disabled={!coords}
+        onPress={() => coords && router.push(`/map?lat=${coords.lat}&lng=${coords.lng}&radius=${radiusMiles}`)}
+        accessibilityRole="button"
+        accessibilityLabel="Open the map view"
+        style={[styles.mapBtn, { backgroundColor: theme.cyan }, Glow.cyan, !coords && styles.mapBtnDisabled]}>
         <Ionicons name="map" size={20} color="#00363a" />
         <ThemedText type="label" style={{ color: '#00363a', fontSize: 13 }}>
           Map View
@@ -211,6 +229,7 @@ const styles = StyleSheet.create({
   feature: { marginBottom: Spacing.three },
   col: { gap: Spacing.two + 2, paddingHorizontal: Spacing.three, marginBottom: Spacing.two + 2 },
   empty: { textAlign: 'center', padding: Spacing.five },
+  mapBtnDisabled: { opacity: 0.4 },
   mapBtn: {
     position: 'absolute',
     right: Spacing.three,

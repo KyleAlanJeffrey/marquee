@@ -35,11 +35,21 @@ export default function FollowingScreen() {
   const events = useNearbyEvents(coords, radiusMiles);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      const c = await getCurrentCoords();
-      if (c) setCoords(c);
-      else setDenied(true);
+      try {
+        const c = await getCurrentCoords();
+        if (cancelled) return;
+        if (c) setCoords(c);
+        else setDenied(true);
+      } catch (err) {
+        console.warn('location lookup failed:', err);
+        if (!cancelled) setDenied(true);
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const followingEvents = useMemo(
@@ -75,6 +85,12 @@ export default function FollowingScreen() {
           message="Follow artists and their shows near you will collect here."
           actionLabel="Find artists"
           onAction={() => router.push('/search')}
+        />
+      ) : denied ? (
+        <EmptyState
+          icon="location-outline"
+          title="Location needed"
+          message="Allow location access in system settings so we can find your followed artists' shows near you."
         />
       ) : loading ? (
         <View style={styles.center}>

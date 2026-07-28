@@ -45,15 +45,28 @@ export default function ExploreScreen() {
   const refreshedFollows = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      const c = await getCurrentCoords();
-      if (!c) {
-        setDenied(true);
-        return;
+      try {
+        const c = await getCurrentCoords();
+        if (cancelled) return;
+        if (!c) {
+          setDenied(true);
+          return;
+        }
+        setCoords(c);
+        const label = await reverseGeocodeLabel(c);
+        if (!cancelled) setLabel(label);
+      } catch (err) {
+        // Location services can throw (disabled, timeout) — treat it like a
+        // refusal so the spinner doesn't hang forever.
+        console.warn('location lookup failed:', err);
+        if (!cancelled) setDenied(true);
       }
-      setCoords(c);
-      setLabel(await reverseGeocodeLabel(c));
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Pull fresh nearby shows for this area (server throttles per cell).
@@ -278,8 +291,8 @@ export default function ExploreScreen() {
                 </>
               )}
 
-              {/* This Weekend */}
-              <SectionTitle title="This Weekend" badge="Hot" accent />
+              {/* Upcoming shows in range — not weekend-filtered, so don't claim to be */}
+              <SectionTitle title="Up Next Near You" badge="Hot" accent />
               {featured && (
                 <Animated.View entering={FadeInDown.duration(420)} style={{ marginBottom: Spacing.three }}>
                   <FeaturedCard

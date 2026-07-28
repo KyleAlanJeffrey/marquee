@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorState } from '@/components/error-state';
@@ -17,6 +17,7 @@ import { TopBar } from '@/components/top-bar';
 import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
+import { openUrl } from '@/lib/open-url';
 import { useEvent, useEventBuzz, useEventLineup } from '@/lib/hooks';
 import { formatEventDate, formatTime, formatVenue } from '@/lib/format';
 import { socialLinks } from '@/lib/social';
@@ -179,7 +180,7 @@ export default function EventScreen() {
             return (
               <PressableScale
                 key={s.id}
-                onPress={() => Linking.openURL(s.url)}
+                onPress={() => openUrl(s.url)}
                 style={[styles.ticketSource, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
                 <View style={[styles.ticketIcon, { backgroundColor: theme.backgroundHigh }]}>
                   <Ionicons name={resale ? 'swap-horizontal' : 'ticket'} size={20} color={accent} />
@@ -280,7 +281,7 @@ export default function EventScreen() {
                 )}
                 <PressableScale
                   onPress={() =>
-                    Linking.openURL(
+                    openUrl(
                       `https://maps.google.com/?q=${encodeURIComponent(
                         [e.venue?.name, e.venue?.city, e.venue?.region].filter(Boolean).join(' '),
                       )}`,
@@ -310,7 +311,7 @@ export default function EventScreen() {
               <PressableScale
                 key={s.id}
                 haptic={false}
-                onPress={() => Linking.openURL(s.url)}
+                onPress={() => openUrl(s.url)}
                 style={[styles.buzzChip, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
                 <Ionicons name={s.icon} size={20} color={s.color} />
                 <ThemedText type="smallBold" numberOfLines={1} style={{ flex: 1 }}>
@@ -328,7 +329,7 @@ export default function EventScreen() {
                 <PressableScale
                   key={p.id}
                   haptic={false}
-                  onPress={() => Linking.openURL(p.url)}
+                  onPress={() => openUrl(p.url)}
                   style={[styles.postCard, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
                   <View style={styles.postHead}>
                     <Image
@@ -403,6 +404,8 @@ export default function EventScreen() {
           </View>
           <PressableScale
             haptic
+            accessibilityRole="button"
+            accessibilityLabel={following ? `Unfollow ${e.artist.name}` : `Follow ${e.artist.name}`}
             onPress={() =>
               toggle({
                 artistId: e.artist.id,
@@ -427,7 +430,7 @@ export default function EventScreen() {
           </PressableScale>
           <GradientButton
             label={hasTickets ? 'Buy Tickets' : 'Find on StubHub'}
-            onPress={() => Linking.openURL(primaryUrl)}
+            onPress={() => openUrl(primaryUrl)}
           />
         </View>
       </View>

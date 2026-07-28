@@ -55,13 +55,15 @@ function MapGrid({ points }: { points: MapPoint[] }) {
   const maxLat = Math.max(...lats);
   const minLng = Math.min(...lngs);
   const maxLng = Math.max(...lngs);
-  const spanLat = maxLat - minLat || 1;
-  const spanLng = maxLng - minLng || 1;
+  const spanLat = maxLat - minLat;
+  const spanLng = maxLng - minLng;
 
   function pos(p: MapPoint) {
     if (points.length <= 1) return { left: '50%' as const, top: '45%' as const };
-    const x = 0.12 + (0.76 * (p.lng - minLng)) / spanLng;
-    const y = 0.12 + 0.76 * (1 - (p.lat - minLat) / spanLat);
+    // Venues sharing a latitude (or longitude) collapse that axis — centre it
+    // instead of pinning everything to an edge.
+    const x = spanLng ? 0.12 + (0.76 * (p.lng - minLng)) / spanLng : 0.5;
+    const y = spanLat ? 0.12 + 0.76 * (1 - (p.lat - minLat) / spanLat) : 0.5;
     return { left: `${x * 100}%` as const, top: `${y * 100}%` as const };
   }
 

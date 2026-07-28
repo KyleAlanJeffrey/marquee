@@ -9,6 +9,61 @@ Follows/prefs on-device (no account). Web → Pages; native → EAS.
 
 ---
 
+## Done — CodeRabbit audit pass (this pass)
+
+Ran the CodeRabbit CLI over the whole repo (in per-directory slices; the free CLI
+allowance times out on the full 15k-line diff). Fixed:
+
+- [x] **Unbounded Ticketmaster 429 retry** (`sources.ts`) — recursed forever on a
+  spent quota; now 3 tries with increasing backoff.
+- [x] **No timeouts on outbound calls** — added `fetchWithTimeout` (8s,
+  AbortController) and routed TM/Bandsintown/Spotify/Deezer/Wikipedia/Bluesky
+  through it, so a hung upstream can't hold a Worker request open.
+- [x] **One bad Bandsintown datetime** threw and dropped an artist's whole
+  schedule; that record is now skipped.
+- [x] **Dev seed shipped to production**: `worker/schema.sql` is DDL only,
+  `worker/seed.sql` is local-only (`db:apply:local`), `worker/unseed.sql` +
+  `npm run db:unseed` clean a database that already has it. Made-up shows must
+  never reach the sitemap or social cards.
+- [x] **API errors**: `String(err)` no longer returned to callers (logged
+  instead), and missing-config paths return 503 rather than a 200 with
+  `ingested: 0`.
+- [x] **`noindex` could be dropped** if the shell had no robots meta — it's now
+  part of the guaranteed tag set in `seo.ts`.
+- [x] **Sitemap `lastmod`** was always "today" (which crawlers discount); it now
+  reflects each row's ingest time.
+- [x] **Reminders**: tapping one did nothing (the payload carries `eventId`, the
+  handler only read `artistId`) — now opens the event page. A show <24h out no
+  longer schedules a reminder for "one minute from now", and past/invalid start
+  times schedule nothing.
+- [x] **Store hydration races**: a follow or pref change made while AsyncStorage
+  was still loading got overwritten; hydration now merges instead of replacing.
+- [x] **Location failures** on the home + following tabs left a permanent
+  spinner (no `catch`); they now fall back to the "Location needed" state, and
+  Following shows it instead of a misleading empty list.
+- [x] **Map lifecycle** (`map.web.tsx`): the whole Mapbox instance was destroyed
+  and recreated on every data/follow change, throwing away the user's pan/zoom.
+  Init and marker updates are now separate effects; a failed GL load is no
+  longer cached forever and falls back to the list; pins are attached on
+  `style.load` (they're DOM overlays and don't need a completed first paint).
+- [x] Smaller ones: `formatRelativeDay` called past dates "Tonight"; unhandled
+  `Linking.openURL` rejections (now a shared `openUrl()` that reports failure);
+  artist page treated a failed events query as "no shows"; browse route params
+  weren't normalised (`string[]`/NaN) and its Map View button was a no-op
+  without coords; the grid-map fallback pinned same-latitude venues to an edge;
+  `GradientButton block` didn't stretch; "This Weekend" wasn't weekend-filtered
+  (retitled "Up Next Near You"); accessibility labels on icon-only controls.
+
+Deliberately skipped (verified as non-issues): unhandled rejections in
+`discoverEvents`/`refreshArtistEvents`/`ensureArtist` (they already catch
+internally and resolve), `SecondaryEventCard` "missing" `onToggleFollow` (the
+prop doesn't exist — list mode has no follow control by design), and widening
+`PressableScale`'s `style`/`children` types to support callback form (no caller
+uses it).
+
+Not yet covered: the `src/lib` slice hit the free-tier rate limit
+(`isProUser: false`) — its findings come from the timed-out full-repo pass only.
+
 ## Done — web SEO + byline (this pass)
 
 - [x] **Static head defaults**: `src/app/+html.tsx` — keywords, robots

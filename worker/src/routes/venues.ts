@@ -20,11 +20,11 @@ venues.get('/:id/events', zValidator('query', pageQuery), async (c) => {
 });
 
 venues.post('/:id/refresh', async (c) => {
-  if (!c.env.TICKETMASTER_API_KEY) return c.json({ ingested: 0 });
+  if (!c.env.TICKETMASTER_API_KEY) return c.json({ error: 'Ticketmaster not configured', ingested: 0 }, 503);
   try {
     return c.json(await refreshVenue(c.env, c.req.param('id')));
   } catch (err) {
-    console.error(err);
-    return c.json({ error: String(err), ingested: 0 }, 500);
+    console.error('venue refresh failed:', err);
+    return c.json({ error: 'refresh failed', ingested: 0 }, 500);
   }
 });

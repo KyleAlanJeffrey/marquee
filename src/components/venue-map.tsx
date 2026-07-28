@@ -14,7 +14,7 @@ type Props = {
   pins: MapPin[];
   locationLabel: string | null;
   withinMiles: number | null;
-  onExplore?: () => void;
+  onExplore: () => void;
 };
 
 /**

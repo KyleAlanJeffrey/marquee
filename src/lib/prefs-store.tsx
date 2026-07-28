@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -33,12 +34,23 @@ const PrefsContext = createContext<PrefsContextValue | null>(null);
 export function PrefsProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<Prefs>(DEFAULTS);
   const [ready, setReady] = useState(false);
+  // Keys the user changed before the stored prefs came back, so hydration
+  // doesn't undo them.
+  const touched = useRef(new Set<keyof Prefs>());
 
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) setPrefs({ ...DEFAULTS, ...JSON.parse(raw) });
+        if (raw) {
+          const stored = JSON.parse(raw) as Partial<Prefs>;
+          setPrefs((current) => {
+            const next: Prefs = { ...DEFAULTS, ...stored };
+            if (touched.current.has('radiusMiles')) next.radiusMiles = current.radiusMiles;
+            if (touched.current.has('remindersEnabled')) next.remindersEnabled = current.remindersEnabled;
+            return next;
+          });
+        }
       } catch (err) {
         console.warn('failed to load prefs:', err);
       } finally {
@@ -58,9 +70,14 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     () => ({
       ...prefs,
       ready,
-      setRadiusMiles: (radiusMiles) => setPrefs((p) => ({ ...p, radiusMiles })),
-      setRemindersEnabled: (remindersEnabled) =>
-        setPrefs((p) => ({ ...p, remindersEnabled })),
+      setRadiusMiles: (radiusMiles) => {
+        touched.current.add('radiusMiles');
+        setPrefs((p) => ({ ...p, radiusMiles }));
+      },
+      setRemindersEnabled: (remindersEnabled) => {
+        touched.current.add('remindersEnabled');
+        setPrefs((p) => ({ ...p, remindersEnabled }));
+      },
     }),
     [prefs, ready],
   );

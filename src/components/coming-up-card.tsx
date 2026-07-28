@@ -61,6 +61,8 @@ export function ComingUpCard({ event, onPress }: { event: NearbyEvent; onPress: 
           <Pressable
             onPress={remind}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={reminded ? 'Reminder set for this show' : 'Remind me about this show'}
             style={[
               styles.bell,
               reminded
