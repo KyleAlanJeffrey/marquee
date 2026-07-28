@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorState } from '@/components/error-state';
 import { MeshBackground } from '@/components/mesh-background';
+import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
 import { ThemedText } from '@/components/themed-text';
@@ -60,6 +61,10 @@ export default function FollowingScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      <PageMeta
+        title="Artists you follow"
+        description="The artists you follow on Marquee, with their next show near you and a reminder before doors."
+      />
       <MeshBackground />
       <TopBar onSearchPress={() => router.push('/search')} />
 

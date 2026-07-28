@@ -13,6 +13,7 @@ import { FollowButton } from '@/components/follow-button';
 import { GalleryStrip } from '@/components/gallery-strip';
 import { GenreChip } from '@/components/genre-chip';
 import { GlassCard } from '@/components/glass-card';
+import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
@@ -96,6 +97,12 @@ export default function ArtistScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      <PageMeta
+        title={`${a.name} tour dates & tickets`}
+        description={`${a.name}${
+          a.genres.length ? ` (${a.genres.slice(0, 3).join(', ')})` : ''
+        } upcoming concerts, tour dates, top tracks and tickets — updated from Ticketmaster.`}
+      />
       <Animated.FlatList
         data={events.data ?? []}
         keyExtractor={(e: ArtistEvent) => e.event_id}

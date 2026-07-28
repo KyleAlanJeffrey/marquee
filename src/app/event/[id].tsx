@@ -9,6 +9,7 @@ import { ErrorState } from '@/components/error-state';
 import { GalleryStrip } from '@/components/gallery-strip';
 import { GlassCard } from '@/components/glass-card';
 import { GradientButton } from '@/components/gradient-button';
+import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { StaticMap } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
@@ -97,6 +98,14 @@ export default function EventScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      <PageMeta
+        title={`${e.name}${e.venue ? ` at ${e.venue.name}` : ''} — ${formatEventDate(e.starts_at)}`}
+        description={`${e.name} plays ${
+          e.venue ? formatVenue(e.venue.name, e.venue.city, e.venue.region) : 'live'
+        } on ${formatEventDate(e.starts_at)} at ${formatTime(
+          e.starts_at,
+        )}. Tickets, lineup and what people are saying about the show.`}
+      />
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}>

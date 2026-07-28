@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { EventMapList } from '@/components/event-map-list';
 import { MeshBackground } from '@/components/mesh-background';
+import { PageMeta } from '@/components/page-meta';
 import { TopBar } from '@/components/top-bar';
 import type { Coords } from '@/lib/types';
 
@@ -12,6 +13,7 @@ export default function MapScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      <PageMeta title="Concert map" description="Every upcoming concert near you, plotted on a map by venue." />
       <MeshBackground />
       {coords && <EventMapList coords={coords} radius={Number(radius) || 50} />}
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }}>

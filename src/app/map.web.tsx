@@ -5,6 +5,7 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { EventMapList } from '@/components/event-map-list';
 import { MeshBackground } from '@/components/mesh-background';
+import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { MAPBOX_TOKEN } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
@@ -125,6 +126,7 @@ export default function MapScreen() {
   if (!MAPBOX_TOKEN) {
     return (
       <View style={{ flex: 1 }}>
+        <PageMeta title="Concert map" description="Every upcoming concert near you, plotted on a map by venue." />
         <MeshBackground />
         {coords && <EventMapList coords={coords} radius={radiusMiles} />}
         <View style={styles.topBar}>
@@ -136,6 +138,7 @@ export default function MapScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <PageMeta title="Concert map" description="Every upcoming concert near you, plotted on a map by venue." />
       {/* Mapbox GL renders into this DOM node (explicit px size so its 100%
           children resolve to a real height) */}
       <View ref={containerRef as never} style={{ width, height }} />

@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { FollowButton } from '@/components/follow-button';
 import { GenreChip } from '@/components/genre-chip';
+import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
@@ -48,6 +49,10 @@ export default function SearchScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
+      <PageMeta
+        title="Find artists"
+        description="Search millions of artists and follow the ones you love to track their upcoming tour dates near you."
+      />
       <View
         style={[
           styles.searchBar,

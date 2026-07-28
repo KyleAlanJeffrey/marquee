@@ -15,6 +15,8 @@ import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { KyleBadge } from '@/components/kyle-badge';
+import { PageMeta } from '@/components/page-meta';
 import { Colors, Fonts } from '@/constants/theme';
 import { FollowsProvider } from '@/lib/follows-store';
 import { useNotificationObserver } from '@/lib/notifications';
@@ -58,6 +60,8 @@ export default function RootLayout() {
           <PrefsProvider>
             <ThemeProvider value={navTheme}>
               <StatusBar style="light" />
+              {/* Default document metadata; screens override it with their own. */}
+              <PageMeta />
               {fontsLoaded && (
                 <Stack
                   screenOptions={{
@@ -85,6 +89,7 @@ export default function RootLayout() {
                 </Stack>
               )}
               {!fontsLoaded && <View style={{ flex: 1, backgroundColor: theme.background }} />}
+              <KyleBadge />
             </ThemeProvider>
           </PrefsProvider>
         </FollowsProvider>

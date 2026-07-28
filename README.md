@@ -21,10 +21,12 @@ src/
   components/     UI building blocks (design system, cards, map, etc.)
   lib/            api client (Worker), TanStack Query hooks, local follows/prefs stores, reminders
 worker/
-  src/index.ts    Hono routes (reads + ingestion endpoints)
-  src/lib.ts      Ticketmaster/Spotify/Bandsintown + D1 persistence + geo
+  src/index.ts    thin entry: mounts the API routers, robots/sitemap, asset SEO
+  src/routes/     per-resource Hono routers (artists, venues, events, feed, search)
+  src/data.ts     D1 repository (reads/writes) via Drizzle · src/sources.ts external APIs
+  src/seo.ts      robots.txt, sitemap.xml, per-page <head> + JSON-LD injection
   schema.sql      D1 schema + dev seed (one file; apply with `d1 execute`)
-  wrangler.toml   Worker + D1 binding
+public/           copied to the web export root (og-image, icons, manifest.json)
 scripts/dev.sh    one-command local dev (Worker + local D1 + Expo)
 ```
 
@@ -72,6 +74,7 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/search-artists` | Spotify artist search |
 | `POST /api/discover-events` | pull nearby shows from Ticketmaster (throttled per area) |
 | `POST /api/refresh-artist-events` | pull shows for the on-device follow list |
+| `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (sitemap built live from D1) |
 
 ## Deploying
 
@@ -107,6 +110,25 @@ Push/reminders need a dev or store build on a physical device.
 | Ticketmaster Discovery key | developer.ticketmaster.com | discover-events, refresh-artist-events |
 | Spotify client id/secret | developer.spotify.com | search-artists |
 | Bandsintown app id (optional) | artists.bandsintown.com | refresh-artist-events |
+
+## SEO
+
+The web build is a client-rendered SPA, so a crawler that doesn't run JS would
+otherwise see an empty shell. Three layers fix that:
+
+1. `src/app/+html.tsx` — head defaults baked into every prerendered route
+   (canonical, Open Graph/Twitter card, keywords, `WebSite` JSON-LD, manifest).
+2. `<PageMeta>` (`src/components/page-meta.web.tsx`, no-op on native) — per-route
+   title + description via `expo-router/head`; detail screens title themselves
+   from the record they loaded.
+3. `worker/src/seo.ts` — the Worker runs in front of the assets, so for
+   `/event/:id`, `/artist/:id` and `/venue/:id` it reads the row from D1 and
+   rewrites the shell's `<head>` on the way out (title, description, canonical,
+   social card, `noindex` for unknown ids) plus `MusicEvent` / `MusicGroup` /
+   `MusicVenue` JSON-LD. It also serves `/robots.txt` and a live `/sitemap.xml`.
+
+Regenerate the social card and PWA icons in `public/` with
+`node scripts/gen-web-assets.mjs`.
 
 ## How it works
 

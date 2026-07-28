@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/empty-state';
 import { ErrorState } from '@/components/error-state';
 import { FeaturedCard } from '@/components/featured-card';
 import { MeshBackground } from '@/components/mesh-background';
+import { PageMeta } from '@/components/page-meta';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
 import { SectionTitle } from '@/components/section-title';
 import { ThemedText } from '@/components/themed-text';
@@ -149,6 +150,10 @@ export default function ExploreScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      <PageMeta
+        title="Concerts near you"
+        description="See which artists are playing near you over the next few months, filter by genre and radius, and follow the ones you don't want to miss."
+      />
       <MeshBackground />
       <TopBar onSearchPress={() => router.push('/search')} />
 

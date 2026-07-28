@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { EventGridCard } from '@/components/event-grid-card';
 import { FeaturedCard } from '@/components/featured-card';
 import { MeshBackground } from '@/components/mesh-background';
+import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
 import { ThemedText } from '@/components/themed-text';
@@ -66,6 +67,10 @@ export default function BrowseScreen() {
 
   return (
     <View style={{ flex: 1 }}>
+      <PageMeta
+        title="Browse concerts near you"
+        description="Every upcoming show inside your radius, filterable by genre — grid, list or map."
+      />
       <MeshBackground />
       <TopBar back title="Browse" onSearchPress={() => router.push('/search')} />
 
