@@ -52,7 +52,7 @@ against a local SQLite D1 database seeded with fictional artists at real venues
 ### Real concert data (optional)
 
 Set a **Ticketmaster Discovery** key (and optionally Spotify for search) in
-`worker/.dev.vars`:
+`.dev.vars` in the repo root (gitignored — `wrangler dev` loads it automatically):
 
 ```
 TICKETMASTER_API_KEY=your-key

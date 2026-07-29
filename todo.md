@@ -261,10 +261,10 @@ new `fetch`. Probed 2026-07-28:
   volume today would double-list every overlapping show.
 
 ### Phase 1 — turn Bandsintown on and see it (small)
-- [ ] **Set `BANDSINTOWN_APP_ID`** in `.dev.vars` + as a Worker secret — the one
-  remaining step, and it needs a key issued to this project (see README; the open
-  endpoints answer for a few `app_id` values that belong to other people, which
-  is not something to build on).
+- [x] **`BANDSINTOWN_APP_ID` set locally**, ingestion confirmed working. Still
+  needed for production: a key issued to this project — only a couple of
+  `app_id` values answer, and they aren't ours, so prod shouldn't lean on one
+  (README has both request paths).
 - [x] `GET /api/admin/health` — which sources are configured, events per source,
   and `silent_sources` for anything configured that has produced nothing. A
   missing key no-ops silently; that's how this hid.
@@ -281,11 +281,22 @@ new `fetch`. Probed 2026-07-28:
   `ingested` counts stay honest. Verified live against Ticketmaster.
 - [x] **Tests exist now** (`npm test`, vitest): the Bandsintown mapping is pinned
   to a recorded payload in `worker/test/fixtures/`.
-- [ ] `POST /api/admin/backfill-bandsintown?limit&offset` (built, `ADMIN_TOKEN`
-  guarded) — run it once the key lands and record new-events-per-artist as the
-  baseline number to beat.
+- [x] `POST /api/admin/backfill-bandsintown?limit&offset` (`ADMIN_TOKEN` guarded).
+  **Baseline measured** — 10 artists, 2.4s, **203 new events** on top of 1,060
+  from Ticketmaster: Chris Botti +88, Diamond Rio +28, White Denim +28, Joji +22,
+  Streetlight Manifesto +20, Willie Nelson +10. Every row arrived with a lineup
+  and a sold-out flag, 88 with an end time, and 9 artists learned their
+  `bandsintown_id` + `mbid` on the way through. That is ~20 events per artist
+  from one source we weren't calling, against 763 artists in the table.
 
 ### Phase 2 — canonical shows + venues (the blocker)
+
+Measured on the backfill above: **17 shows already listed twice**, from 10
+artists. The venue names differ exactly as feared — `LONDON MUSIC HALL` vs
+`Forest City London Music Hall of Fame`, `Moody Center ATX` vs `Moody Center`,
+`The Danforth Music Hall` vs `Danforth Music Hall` — while the coordinates agree
+to 0.0001–0.0022 degrees (11–240m). So geo proximity is the reliable signal and
+the name is the weak one, which sets the matcher's priorities.
 - [ ] Venue identity: cluster source rows into a canonical venue (geo <150m +
   normalized-name match), keep source rows for provenance, point `events` at the
   canonical id. Migration + a re-runnable `dedupe-venues` task.
