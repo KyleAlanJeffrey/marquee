@@ -49,7 +49,39 @@ const STOPWORDS = new Set([
   'lounge', 'stage', 'house', 'presented', 'by',
 ]);
 
+/**
+ * Bandsintown's `venue.name` sometimes carries the *tour* instead of the room, so
+ * the table holds rows called "Brunette World Tour" and "BILMURI presents: The
+ * KINDA HARD Tour" — 653 of them, one per city the tour visits.
+ *
+ * The coordinates on those rows are still the real ones: the junk-named row usually
+ * sits exactly on top of the proper venue ("This Might Be Useful" Tour on Paper
+ * Tiger, JOJI: SOLARIS TOUR on 3Arena). So the row is worth keeping for its
+ * location and only its name is worthless — which is why this makes the name carry
+ * no identity rather than dropping the venue. A row with no name to vouch for it
+ * still merges into the real venue at the same coordinates, which is where its
+ * shows belong; discarding it instead would strand the show with no location at
+ * all and drop it out of "near me" entirely.
+ *
+ * Festival names ("Aftershock 2026", "Austin City Limits Music Festival 2026") are
+ * deliberately *not* included. A festival genuinely is where the show is, so its
+ * name identifies a place in a way a tour name never does.
+ */
+const TOUR_NAME_PATTERNS = [
+  /\btour\b/i,
+  /^supporting\b/i,
+  /\sw\/\s/i,
+  /\bpresents\b/i,
+];
+
+export function looksLikeTourName(name: string): boolean {
+  return TOUR_NAME_PATTERNS.some((re) => re.test(name));
+}
+
 export function venueNameTokens(name: string): Set<string> {
+  // A tour title vouches for nothing, so it gets no tokens: it cannot agree with a
+  // name, and it cannot conflict with one either.
+  if (looksLikeTourName(name)) return new Set();
   const tokens = name
     .toLowerCase()
     .normalize('NFKD')
@@ -74,6 +106,32 @@ export function venueNamesAgree(a: string, b: string): boolean {
   if (ta.size === 0 || tb.size === 0) return false;
   for (const t of ta) if (tb.has(t)) return true;
   return false;
+}
+
+/**
+ * Do these two names actively disagree — each carries a distinguishing word and
+ * they have none in common?
+ *
+ * This is what stops a placeholder coordinate from swallowing a city. Ticketmaster
+ * returns a city centroid for venues it has no address for, and returns the *same*
+ * centroid for all of them: five San Francisco rooms — Warfield, Golden Gate Park,
+ * Davies Symphony Hall, Golden Gate Theater, Rickshaw Stop — arrived on
+ * 37.779499,-122.419502, zero metres apart, and merged into one venue that then
+ * showed Interpol at the symphony hall.
+ *
+ * Two all-generic names ("The Theatre", "Music Hall") don't conflict, because
+ * neither claims anything to disagree about — the same-spot rule still joins those.
+ * The cost is a genuinely shared building whose names have nothing in common (Cafe
+ * Du Nord and Swedish American Hall are one address), which now stays two rows.
+ * That is the cheaper error on purpose: a duplicate row repeats a show, a bad merge
+ * moves every show in the cluster to the wrong room.
+ */
+export function venueNamesConflict(a: string, b: string): boolean {
+  const ta = venueNameTokens(a);
+  const tb = venueNameTokens(b);
+  if (ta.size === 0 || tb.size === 0) return false;
+  for (const t of ta) if (tb.has(t)) return false;
+  return true;
 }
 
 /**
@@ -103,15 +161,22 @@ const sameTown = (a: VenuePoint, b: VenuePoint): boolean =>
   Boolean(a.city && b.city) && a.city!.trim().toLowerCase() === b.city!.trim().toLowerCase();
 
 /**
- * Is this the same physical venue? Same spot wins outright; near-but-not-exact
- * needs the names to agree, because city blocks hold several rooms; and further
- * out it takes a nested name in the same town, to survive coordinates that point
- * at the city rather than the building.
+ * Is this the same physical venue? Same spot wins unless the names contradict
+ * each other, because a shared coordinate is as likely to be a source's city
+ * centroid as a real address; near-but-not-exact needs the names to agree,
+ * because city blocks hold several rooms; and further out it takes a nested name
+ * in the same town, to survive coordinates that point at the city rather than the
+ * building.
+ *
+ * Refusing the same-spot merge is what lets the right match win: Ticketmaster's
+ * "Warfield" sitting on the San Francisco centroid no longer absorbs Golden Gate
+ * Park, so it falls through to the nested-name rule and joins the real "The
+ * Warfield" 900m away, which is where its shows belong.
  */
 export function sameVenue(a: VenuePoint, b: VenuePoint): boolean {
   if (a.lat == null || a.lng == null || b.lat == null || b.lng == null) return false;
   const meters = metersBetween({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng });
-  if (meters <= VENUE_SAME_SPOT_METERS) return true;
+  if (meters <= VENUE_SAME_SPOT_METERS && !venueNamesConflict(a.name, b.name)) return true;
   if (meters <= VENUE_MATCH_METERS && venueNamesAgree(a.name, b.name)) return true;
   return meters <= VENUE_SAME_NAME_METERS && sameTown(a, b) && venueNamesMatchStrongly(a.name, b.name);
 }

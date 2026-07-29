@@ -4,13 +4,16 @@ import { representative } from '../src/data';
 import {
   bestVenueMatch,
   guessUtcOffsetHours,
+  looksLikeTourName,
   mergeField,
   metersBetween,
   parseSources,
   prefersSource,
   sameShow,
   sameVenue,
+  venueNameTokens,
   venueNamesAgree,
+  venueNamesConflict,
   venueNamesMatchStrongly,
   type VenuePoint,
 } from '../src/dedupe';
@@ -75,6 +78,49 @@ describe('venue identity', () => {
     expect(best?.id).toBe('near');
   });
 
+  it('treats a tour title as no name at all, so it still finds its real room', () => {
+    // Bandsintown files some shows under the tour rather than the venue, but with
+    // the venue's real coordinates — so the junk-named row must still be absorbed
+    // by the room it is sitting on, exactly as it was before names could conflict.
+    for (const junk of [
+      'Brunette World Tour',
+      'AUTUMNAL RITES TOUR',
+      'BILMURI presents: The KINDA HARD Tour',
+      'Supporting Tame Impala',
+      'Atlanta w/ Bleachers',
+    ]) {
+      expect(looksLikeTourName(junk), junk).toBe(true);
+      expect(venueNameTokens(junk).size, junk).toBe(0);
+      expect(venueNamesConflict(junk, 'Paper Tiger'), junk).toBe(false);
+      expect(sameVenue(at(junk, 37.7756, -122.4376), at('Paper Tiger', 37.7756, -122.4376)), junk).toBe(true);
+    }
+  });
+
+  it('leaves real venue names alone, festivals included', () => {
+    // A festival is where the show actually is, unlike a tour, so its name has to
+    // keep identifying a place.
+    for (const real of [
+      'Aftershock 2026',
+      'Austin City Limits Music Festival 2026',
+      'The Warfield',
+      'Paper Tiger',
+      'Golden Gate Park',
+      'Detour Bar',
+    ]) {
+      expect(looksLikeTourName(real), real).toBe(false);
+      expect(venueNameTokens(real).size, real).toBeGreaterThan(0);
+    }
+  });
+
+  it('reads a name conflict only when both names claim something', () => {
+    expect(venueNamesConflict('Warfield', 'Golden Gate Park')).toBe(true);
+    // A shared distinguishing word is agreement, not conflict.
+    expect(venueNamesConflict('Fox Theater', 'Fox Theater - Oakland')).toBe(false);
+    // Neither name claims anything, so there is nothing to disagree about.
+    expect(venueNamesConflict('The Theatre', 'Music Hall')).toBe(false);
+    expect(venueNamesConflict('', 'Warfield')).toBe(false);
+  });
+
   it('ignores generic words when comparing names', () => {
     // Both names are nothing but generic words, so neither can vouch for a match
     // — and at 50-300m apart that's several different rooms, not one.
@@ -82,6 +128,40 @@ describe('venue identity', () => {
     expect(venueNamesMatchStrongly('The Music Hall', 'Music Hall Theatre')).toBe(false);
     expect(venueNamesAgree('Roadrunner', 'Roadrunner-Boston')).toBe(true);
     expect(venueNamesMatchStrongly('Roadrunner', 'Roadrunner-Boston')).toBe(true);
+  });
+
+  // The production failure. Ticketmaster returns a city centroid for venues it has
+  // no address for, and the *same* centroid for all of them, so five unrelated San
+  // Francisco rooms arrived zero metres apart and merged into one venue — after
+  // which the feed showed Interpol and Dimmu Borgir at Davies Symphony Hall.
+  const CENTROID: [number, number] = [37.779499, -122.419502];
+  const onCentroid = (name: string, id = name) => at(name, CENTROID[0], CENTROID[1], 'San Francisco', id);
+
+  it('will not merge unrelated rooms a source stacked on one coordinate', () => {
+    const names = ['Warfield', 'Golden Gate Park', 'Davies Symphony Hall', 'Rickshaw Stop'];
+    for (const a of names) {
+      for (const b of names) {
+        if (a === b) continue;
+        expect(sameVenue(onCentroid(a), onCentroid(b)), `${a} vs ${b}`).toBe(false);
+      }
+    }
+  });
+
+  it('sends a centroid-stamped venue to its real row instead of its neighbours', () => {
+    // Warfield-on-the-centroid must lose to the actual Warfield 900m away, or its
+    // shows are filed under whichever room shares the placeholder point.
+    const best = bestVenueMatch(onCentroid('Warfield', 'tm-warfield'), [
+      onCentroid('Golden Gate Park', 'tm-ggp'),
+      onCentroid('Davies Symphony Hall', 'tm-davies'),
+      at('The Warfield', 37.7827, -122.41, 'San Francisco', 'sg-warfield'),
+    ]);
+    expect(best?.id).toBe('sg-warfield');
+  });
+
+  it('still joins two spellings of one room stacked on that coordinate', () => {
+    // The rule keys on disagreement, not on distance alone, so a real duplicate
+    // that happens to share the placeholder still collapses.
+    expect(sameVenue(onCentroid('Fox Theater', 'a'), onCentroid('Fox Theater - Oakland', 'b'))).toBe(true);
   });
 
   it('still joins a same-spot pair whose names are all generic', () => {
@@ -197,6 +277,25 @@ describe('cluster representative', () => {
   it('ignores the empty slots a fresh row has', () => {
     expect(representative(['zeta', null, undefined, 'alpha'])).toBe('alpha');
     expect(representative(['solo'])).toBe('solo');
+  });
+
+  it('will not let a tour title name a real room', () => {
+    // Bandsintown files some shows under the tour, on the venue's own coordinates,
+    // so the junk row joins the cluster. Every event is repointed at the head, so if
+    // the head is "Final Frontier Tour" that is what the arena's page is called —
+    // and ids are uuids, so the smallest one is a coin toss.
+    const junk = '0a000000-final-frontier-tour';
+    const real = 'ff000000-cfg-bank-arena';
+    const nameOf = (id: string) => (id === junk ? 'Final Frontier Tour' : 'CFG Bank Arena');
+    expect(representative([junk, real])).toBe(junk); // no names: unchanged behaviour
+    expect(representative([junk, real], nameOf)).toBe(real);
+    // Still order-independent, which is what stops a two-cycle forming.
+    expect(representative([real, junk], nameOf)).toBe(real);
+  });
+
+  it('falls back to id order when every name is a tour title', () => {
+    const nameOf = () => 'Some World Tour';
+    expect(representative(['b', 'a', 'c'], nameOf)).toBe('a');
   });
 
   it('is stable once a cluster has settled', () => {

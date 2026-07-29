@@ -183,7 +183,10 @@ admin.post('/backfill-bandsintown', async (c) => {
 admin.post('/repair-duplicates', async (c) => {
   if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
   try {
-    return c.json(await repairDuplicates(getDb(c.env.DB)));
+    // `?after=<artist id>` resumes a scan that hit its ceiling; the response's
+    // `next_artist_id` is what to pass back.
+    const after = new URL(c.req.url).searchParams.get('after')?.trim() || undefined;
+    return c.json(await repairDuplicates(getDb(c.env.DB), { afterArtistId: after }));
   } catch (err) {
     console.error('repair-duplicates failed:', err);
     return c.json({ error: 'repair failed' }, 500);

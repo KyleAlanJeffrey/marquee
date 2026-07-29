@@ -5,6 +5,7 @@ import { zoneFor } from './timezone';
 import {
   bestVenueMatch,
   hoursApart,
+  looksLikeTourName,
   sameVenue,
   mergeField,
   parseSources,
@@ -629,7 +630,15 @@ async function findExistingShows(
       const window = SHOW_MATCH_HOURS * 3_600_000;
       clauses.push(
         and(
-          eq(events.venueId, k.venueId),
+          // Anywhere in the venue's cluster, not just the row this listing
+          // resolved to. `k.venueId` is already canonical, but a show stored
+          // earlier can still point at a row that *was* the representative before
+          // a later venue joined the cluster and took the name — lexicographic
+          // order picks the representative, so it moves when the cluster grows.
+          // Comparing ids directly missed those and left the show stored twice.
+          sql`${events.venueId} in (
+                select id from ${venues} where coalesce(canonical_venue_id, id) = ${k.venueId}
+              )`,
           eq(events.artistId, k.artistId),
           between(events.startsAt, isoAt(t - window), isoAt(t + window)),
         ),
@@ -648,20 +657,33 @@ async function findExistingShows(
   return res.map((rows) => rows[0] ?? null);
 }
 
-/** How many upcoming events one repair pass will scan; re-run to continue. */
+/**
+ * How many upcoming events one repair pass will scan. Pass the returned
+ * `next_artist_id` back in to continue past it.
+ */
 const REPAIR_EVENT_LIMIT = 5_000;
 
 /**
  * Cluster the whole venue table, repoint events at canonical venues, and merge
  * shows that were stored twice before ingestion knew how to match them. Safe to
  * re-run; returns what it changed.
+ *
+ * `afterArtistId` resumes the event scan. Without it the scan always started from
+ * the beginning, so with more upcoming events than the ceiling the tail was never
+ * reached however many times it ran — production had 6,832 upcoming events against
+ * a 5,000 ceiling, and a duplicated pair ranked 1,370 and 5,542, so the two rows
+ * were never in scope together.
  */
-export async function repairDuplicates(db: DB): Promise<{
+export async function repairDuplicates(
+  db: DB,
+  opts: { afterArtistId?: string } = {},
+): Promise<{
   venues_clustered: number;
   events_repointed: number;
   shows_merged: number;
   provenance_filled: number;
   truncated: boolean;
+  next_artist_id: string | null;
 }> {
   // Invariant: every row records its own upstream id in `sources`. Rows written
   // before the column existed don't, which would make a later merge lose track of
@@ -734,6 +756,24 @@ export async function repairDuplicates(db: DB): Promise<{
     }
   }
 
+  // The loop above hands each cluster to whichever member it reached first, which
+  // is the smallest id and takes no account of what the row is called. Re-pick the
+  // head so a row named after a tour never gets to name a real room — every event
+  // in the cluster is repointed at the head, so its name is the one the feed and the
+  // venue page show.
+  const clusterMembers = new Map<string, string[]>();
+  for (const [id, canonical] of canonicalOf) {
+    const group = clusterMembers.get(canonical) ?? [];
+    group.push(id);
+    clusterMembers.set(canonical, group);
+  }
+  const nameById = new Map(all.map((v) => [v.id, v.name]));
+  for (const [head, ids] of clusterMembers) {
+    if (ids.length < 2) continue;
+    const better = representative(ids, (id) => nameById.get(id));
+    if (better !== head) for (const id of ids) canonicalOf.set(id, better);
+  }
+
   const clustered = [...canonicalOf.entries()].filter(([id, canonical]) => id !== canonical);
   // Migration 0002 pointed every venue at itself, so only a row whose canonical
   // actually moves is worth a write.
@@ -758,7 +798,7 @@ export async function repairDuplicates(db: DB): Promise<{
   );
 
   // Now that same-place shows share a venue id, collapse the duplicates.
-  const rows = await db
+  const scanned = await db
     .select({
       id: events.id,
       artistId: events.artistId,
@@ -777,12 +817,29 @@ export async function repairDuplicates(db: DB): Promise<{
       createdAt: events.createdAt,
     })
     .from(events)
-    .where(gte(events.startsAt, nowIso()))
+    .where(
+      opts.afterArtistId
+        ? and(gte(events.startsAt, nowIso()), gte(events.artistId, opts.afterArtistId))
+        : gte(events.startsAt, nowIso()),
+    )
     .orderBy(events.artistId, events.venueId, events.startsAt)
     // Bounded so one repair can't try to hold the entire future in a single D1
     // response. Duplicates are found within an (artist, venue) run, and the pass
     // is idempotent, so a truncated run is a partial repair, not a wrong one.
     .limit(REPAIR_EVENT_LIMIT);
+
+  // A full page probably cut an artist in half, and half a run can pair a row with
+  // the wrong neighbour or miss its twin entirely. Drop the trailing artist and
+  // hand it back as the cursor so the next pass sees all of its rows at once.
+  const truncated = scanned.length === REPAIR_EVENT_LIMIT;
+  const lastArtistId = truncated ? scanned[scanned.length - 1].artistId : null;
+  const trimmed = lastArtistId ? scanned.filter((r) => r.artistId !== lastArtistId) : scanned;
+  // One artist filling an entire page would otherwise trim to nothing and ask the
+  // next pass to start where this one did, forever. `MAX_EVENTS_PER_ARTIST` makes
+  // that unreachable, but a repair that silently spins is worse than one that
+  // admits it stopped.
+  const rows = trimmed.length ? trimmed : scanned;
+  const nextArtistId = trimmed.length ? lastArtistId : null;
 
   const merges: { keep: (typeof rows)[number]; drop: (typeof rows)[number] }[] = [];
   const dropped = new Set<string>();
@@ -847,8 +904,11 @@ export async function repairDuplicates(db: DB): Promise<{
     events_repointed: repointed,
     shows_merged: merges.length,
     provenance_filled: filled.meta?.changes ?? 0,
-    // True when the event scan hit its ceiling: run it again to continue.
-    truncated: rows.length === REPAIR_EVENT_LIMIT,
+    // True when the event scan hit its ceiling; pass `next_artist_id` back to
+    // continue from there. Null with `truncated` set means the scan could not
+    // advance, which needs a look rather than another run.
+    truncated,
+    next_artist_id: nextArtistId,
   };
 }
 
@@ -887,10 +947,28 @@ async function inBatches(db: DB, stmts: any[], size = 50): Promise<void> {
  *
  * A minimum can't do that. Whatever order the batch is processed in, and whatever
  * each row currently points at, every member picks the same representative.
+ *
+ * The representative also *names* the cluster, because every event is repointed at
+ * it — so a row carrying a tour title instead of a room ("Final Frontier Tour",
+ * sitting on CFG Bank Arena's coordinates) must lose to a row with a real name, or
+ * the arena's venue page ends up titled after somebody's tour. Ranking by
+ * (has a real name, then id) keeps the property that matters: it is a total order
+ * over the cluster, so every member still picks the same winner regardless of the
+ * order they are processed in. `nameOf` is optional and an unknown name counts as
+ * real, which leaves callers that don't have names behaving exactly as before.
  */
-export function representative(ids: (string | null | undefined)[]): string {
-  const real = ids.filter((v): v is string => typeof v === 'string' && v !== '');
-  return real.reduce((min, id) => (id < min ? id : min), real[0]);
+export function representative(
+  ids: (string | null | undefined)[],
+  nameOf?: (id: string) => string | null | undefined,
+): string {
+  const real = [...new Set(ids.filter((v): v is string => typeof v === 'string' && v !== ''))];
+  const rank = (id: string) => (looksLikeTourName(nameOf?.(id) ?? '') ? 1 : 0);
+  return real.reduce((best, id) => {
+    const rankedBest = rank(best);
+    const rankedId = rank(id);
+    if (rankedId !== rankedBest) return rankedId < rankedBest ? id : best;
+    return id < best ? id : best;
+  }, real[0]);
 }
 
 /**
@@ -949,6 +1027,17 @@ async function canonicalizeVenues(
   type Candidate = VenuePoint & { canonicalVenueId: string | null };
   const res = await batchChunked<Candidate[]>(db, stmts);
 
+  // Names for the head-of-cluster choice. Every row this batch can see is in here;
+  // a row referenced only as some candidate's `canonical_venue_id` may not be, and
+  // an unknown name counts as a real one. That is the safe direction — it can leave
+  // a tour title heading a cluster for one pass, which the next pass corrects once
+  // the real head shows up as a candidate id, rather than moving a whole cluster on
+  // incomplete information.
+  const nameById = new Map<string, string>();
+  for (const t of targets) nameById.set(t.id, t.row.name);
+  for (const list of res) for (const c of list ?? []) nameById.set(c.id, c.name);
+  const nameOf = (id: string) => nameById.get(id);
+
   const writes = new Map<string, string>();
   locatable.forEach((t, idx) => {
     const target = { id: t.id, name: t.row.name, lat: t.row.lat, lng: t.row.lng, city: t.row.city };
@@ -960,11 +1049,10 @@ async function canonicalizeVenues(
     // Everything here that is the same physical room, plus wherever those rows
     // already point.
     const cluster = candidates.filter((c) => c.id !== t.id && sameVenue(target, c));
-    const resolved = representative([
-      t.id,
-      ...cluster.map((c) => c.id),
-      ...cluster.map((c) => c.canonicalVenueId),
-    ]);
+    const resolved = representative(
+      [t.id, ...cluster.map((c) => c.id), ...cluster.map((c) => c.canonicalVenueId)],
+      nameOf,
+    );
     canonical.set(t.key, resolved);
 
     // Every member points at the representative, including the representative
