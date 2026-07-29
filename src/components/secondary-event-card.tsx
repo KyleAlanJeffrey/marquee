@@ -39,7 +39,11 @@ export function SecondaryEventCard({
       <View style={styles.body}>
         <View style={styles.topRow}>
           <ThemedText type="labelSm" style={{ color: theme.primary, flex: 1 }} numberOfLines={1}>
-            {[genre?.toUpperCase(), `${formatRelativeDay(event.starts_at)}, ${formatTime(event.starts_at)}`]
+            {[
+              genre?.toUpperCase(),
+              `${formatRelativeDay(event.starts_at, event.venue_timezone)}, ` +
+                `${formatTime(event.starts_at, event.venue_timezone)}`,
+            ]
               .filter(Boolean)
               .join(' • ')}
           </ThemedText>

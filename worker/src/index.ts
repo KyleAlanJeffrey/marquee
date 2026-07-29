@@ -67,9 +67,11 @@ const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env) => {
   try {
     console.log('crawl:', JSON.stringify(await crawlBandsintown(env)));
   } catch (err) {
-    // A thrown scheduled handler is recorded as a failed invocation; this keeps
-    // the failure in the logs where the next run can be compared against it.
+    // Logged for the detail, then re-thrown: a scheduled handler that returns
+    // normally is recorded as a successful invocation, and a crawl that never
+    // works would look like a crawl that runs.
     console.error('crawl failed:', err);
+    throw err;
   }
 };
 

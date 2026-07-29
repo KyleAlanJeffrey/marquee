@@ -1,6 +1,7 @@
 import { and, between, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
 
 import { getDb, type DB } from './db';
+import { zoneFor } from './timezone';
 import {
   bestVenueMatch,
   hoursApart,
@@ -8,6 +9,7 @@ import {
   parseSources,
   sameShow,
   SHOW_MATCH_HOURS,
+  VENUE_SAME_NAME_METERS,
   type VenuePoint,
 } from './dedupe';
 import type { Env } from './env';
@@ -119,6 +121,7 @@ export async function nearbyEvents(
       venue_name: venues.name,
       venue_city: venues.city,
       venue_region: venues.region,
+      venue_country: venues.country,
       venue_lat: venues.lat,
       venue_lng: venues.lng,
     })
@@ -141,6 +144,9 @@ export async function nearbyEvents(
     .map((r) => ({
       ...r,
       artist_genres: parseGenres(r.artist_genres),
+      // The zone the show actually happens in: a 23:00 gig in London is not a
+      // 3pm gig, whatever the reader's own clock says.
+      venue_timezone: zoneFor(r.venue_region, r.venue_country),
       distance_miles:
         r.venue_lat != null && r.venue_lng != null
           ? haversineMiles(lat, lng, r.venue_lat, r.venue_lng)
@@ -171,7 +177,7 @@ export async function artistById(db: DB, id: string) {
 }
 
 export async function artistEvents(db: DB, id: string) {
-  return db
+  const rows = await db
     .select({
       event_id: events.id,
       event_name: events.name,
@@ -182,11 +188,13 @@ export async function artistEvents(db: DB, id: string) {
       venue_name: venues.name,
       venue_city: venues.city,
       venue_region: venues.region,
+      venue_country: venues.country,
     })
     .from(events)
     .leftJoin(venues, eq(venues.id, events.venueId))
     .where(and(eq(events.artistId, id), gte(events.startsAt, nowIso())))
     .orderBy(events.startsAt);
+  return rows.map((r) => ({ ...r, venue_timezone: zoneFor(r.venue_region, r.venue_country) }));
 }
 
 export async function eventById(db: DB, id: string) {
@@ -207,6 +215,7 @@ export async function eventById(db: DB, id: string) {
       v_name: venues.name,
       v_city: venues.city,
       v_region: venues.region,
+      v_country: venues.country,
       v_lat: venues.lat,
       v_lng: venues.lng,
     })
@@ -231,7 +240,15 @@ export async function eventById(db: DB, id: string) {
       genres: parseGenres(r.a_genres),
     },
     venue: r.v_name
-      ? { id: r.v_id, name: r.v_name, city: r.v_city, region: r.v_region, lat: r.v_lat, lng: r.v_lng }
+      ? {
+          id: r.v_id,
+          name: r.v_name,
+          city: r.v_city,
+          region: r.v_region,
+          lat: r.v_lat,
+          lng: r.v_lng,
+          timezone: zoneFor(r.v_region, r.v_country),
+        }
       : null,
   };
 }
@@ -300,13 +317,14 @@ export async function venueById(db: DB, id: string) {
       name: venues.name,
       city: venues.city,
       region: venues.region,
+      country: venues.country,
       lat: venues.lat,
       lng: venues.lng,
     })
     .from(venues)
     .where(eq(venues.id, id))
     .get();
-  return r ?? null;
+  return r ? { ...r, timezone: zoneFor(r.region, r.country) } : null;
 }
 
 /** A page of a venue's upcoming shows. */
@@ -648,12 +666,25 @@ export async function repairDuplicates(db: DB): Promise<{
   const buckets = new Map<string, VenuePoint[]>();
   const cellKey = (lat: number, lng: number) =>
     `${Math.floor(lat / CELL_DEG)}:${Math.floor(lng / CELL_DEG)}`;
+  /**
+   * How many cells sideways cover the match ceiling at this latitude. A degree of
+   * longitude narrows with `cos(lat)` — 0.2° is 22km at the equator but 11km in
+   * Reykjavík and 1km in Svalbard — so the sideways reach has to widen as the
+   * cells do not. Latitude needs no such correction.
+   */
+  const xReach = (lat: number) => {
+    const kmPerDeg = 111 * Math.max(Math.cos((lat * Math.PI) / 180), 0.02);
+    return Math.min(60, Math.max(1, Math.ceil(VENUE_SAME_NAME_METERS / 1000 / (kmPerDeg * CELL_DEG))));
+  };
   const neighbours = (lat: number, lng: number): VenuePoint[] => {
     const out: VenuePoint[] = [];
     const y = Math.floor(lat / CELL_DEG);
     const x = Math.floor(lng / CELL_DEG);
     for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
+      // Reach is taken from the widest of the three latitude bands in play, since
+      // a neighbour one band poleward has narrower cells than this one.
+      const reach = Math.max(xReach(lat), xReach((y + dy) * CELL_DEG), xReach((y + dy + 1) * CELL_DEG));
+      for (let dx = -reach; dx <= reach; dx++) {
         const cell = buckets.get(`${y + dy}:${x + dx}`);
         if (cell) out.push(...cell);
       }
@@ -977,6 +1008,10 @@ export async function ensureArtistByName(
   db: DB,
   name: string,
 ): Promise<{ id: string; created: boolean } | null> {
+  // Indexed by `artists_name_folded_idx` (migration 0005). That index is
+  // deliberately *not* unique: two different bands can share a name, and the
+  // table already holds such rows — so this is a best-effort match, and two
+  // concurrent callers can still create a duplicate rather than one failing.
   const clean = name.trim();
   if (!clean) return null;
   const existing = await db
@@ -1071,6 +1106,30 @@ export async function enqueueArtistSources(
         .onConflictDoNothing(),
     ),
   );
+}
+
+/**
+ * Push back the next check for artists we have just fetched by hand, but only
+ * where that's later than what's already scheduled — a deferral must never pull a
+ * due artist forward or delay one we deliberately want soon.
+ */
+export async function deferArtistSources(
+  db: DB,
+  artistIds: string[],
+  source: string,
+  nextCheckAt: string,
+): Promise<void> {
+  if (artistIds.length === 0) return;
+  await db
+    .update(artistSources)
+    .set({ nextCheckAt })
+    .where(
+      and(
+        inArray(artistSources.artistId, artistIds),
+        eq(artistSources.source, source),
+        lte(artistSources.nextCheckAt, nextCheckAt),
+      ),
+    );
 }
 
 /** Which of these artists have a show coming up (drives the crawl interval)? */

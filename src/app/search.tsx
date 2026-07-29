@@ -20,7 +20,9 @@ import type { ArtistSearchResult, Town } from '@/lib/types';
 /** Wide enough to cover a metro area from the centroid of its venues. */
 const TOWN_RADIUS_MILES = 25;
 
-const townLabel = (t: Town) => [t.city, t.region].filter(Boolean).join(', ');
+/** "Austin, TX" · "London, ON" · "London, United Kingdom" — a bare "London"
+ *  twice in one list tells nobody which one they want. */
+const townLabel = (t: Town) => [t.city, t.region || t.country].filter(Boolean).join(', ');
 
 export default function SearchScreen() {
   const theme = useTheme();

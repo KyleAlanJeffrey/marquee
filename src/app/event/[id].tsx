@@ -19,7 +19,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { openUrl } from '@/lib/open-url';
 import { useEvent, useEventBuzz, useEventLineup } from '@/lib/hooks';
-import { formatEventDate, formatTime, formatVenue } from '@/lib/format';
+import { formatEventDate, formatTime, formatVenue, formatZoneLabel } from '@/lib/format';
 import { socialLinks } from '@/lib/social';
 import { ticketSources } from '@/lib/tickets';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -94,16 +94,21 @@ export default function EventScreen() {
   const genre = e.artist.genres?.[0];
   // Only show the artist line when it adds info (event name is often the artist).
   const showArtist = !!e.artist.name && e.artist.name.toLowerCase() !== e.name.toLowerCase();
+  // Everything on this page is in the venue's local time, with the zone spelled
+  // out when that isn't the reader's — "Doors 8:00 PM" is otherwise a guess.
+  const tz = e.venue?.timezone ?? null;
+  const zoneLabel = formatZoneLabel(e.starts_at, tz);
+  const time = (iso: string) => [formatTime(iso, tz), zoneLabel].filter(Boolean).join(' ');
   const buzz = socialLinks(e.artist.name, e.venue?.name);
   const support = lineup.data?.support ?? [];
 
   return (
     <View style={{ flex: 1 }}>
       <PageMeta
-        title={`${e.name}${e.venue ? ` at ${e.venue.name}` : ''} — ${formatEventDate(e.starts_at)}`}
+        title={`${e.name}${e.venue ? ` at ${e.venue.name}` : ''} — ${formatEventDate(e.starts_at, tz)}`}
         description={`${e.name} plays ${
           e.venue ? formatVenue(e.venue.name, e.venue.city, e.venue.region) : 'live'
-        } on ${formatEventDate(e.starts_at)} at ${formatTime(
+        } on ${formatEventDate(e.starts_at, tz)} at ${time(
           e.starts_at,
         )}. Tickets, lineup and what people are saying about the show.`}
       />
@@ -131,7 +136,7 @@ export default function EventScreen() {
               </ThemedText>
             </View>
             <ThemedText type="labelSm" style={{ color: theme.textSecondary, letterSpacing: 1 }}>
-              {[genre?.toUpperCase(), formatEventDate(e.starts_at), formatTime(e.starts_at)]
+              {[genre?.toUpperCase(), formatEventDate(e.starts_at, tz), time(e.starts_at)]
                 .filter(Boolean)
                 .join(' • ')}
             </ThemedText>
@@ -154,7 +159,11 @@ export default function EventScreen() {
 
         {/* Info rows */}
         <Animated.View entering={FadeInDown.duration(400)} style={styles.section}>
-          <InfoRow icon="calendar" label="Date & Gate" value={`${formatEventDate(e.starts_at)} · Doors ${formatTime(e.starts_at)}`} />
+          <InfoRow
+            icon="calendar"
+            label="Date & Gate"
+            value={`${formatEventDate(e.starts_at, tz)} · Doors ${time(e.starts_at)}`}
+          />
           <InfoRow
             icon="location"
             label="Venue"

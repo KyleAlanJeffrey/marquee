@@ -338,9 +338,9 @@ the name is the weak one, which sets the matcher's priorities.
   state `discovered`, queued behind everything already known. Names are matched
   case-insensitively against existing artists first — inserting blind would
   multiply duplicate artists instead of adding coverage.
-- [x] Resolution: `lookupKeys` tries the stored key, `id_{bandsintown_id}`, their
-  spelling, ours, then each without a leading "The"; whichever answers is stored
-  as `source_key`. The negative cache is `state='not_found'` with a long sleep
+- [x] Resolution: `lookupKeys` tries `id_{bandsintown_id}` first (the only
+  unambiguous key), then the stored `source_key`, their spelling, ours, then each
+  without a leading "The"; whichever answers is stored as `source_key`. The negative cache is `state='not_found'` with a long sleep
   rather than a separate table — Bandsintown can't distinguish "unknown artist"
   from "no dates yet", so a verdict has to expire. **No `artist_aliases` table
   yet**; add one if a real alias case shows up that these variants miss.

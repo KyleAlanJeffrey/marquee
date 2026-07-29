@@ -6,9 +6,18 @@ import { useTheme } from '@/hooks/use-theme';
 import { formatEventDateParts } from '@/lib/format';
 
 /** The "ticket stub" date block: month over day, Space Grotesk. */
-export function DateBlock({ startsAt, size = 'md' }: { startsAt: string; size?: 'md' | 'lg' }) {
+export function DateBlock({
+  startsAt,
+  size = 'md',
+  timeZone,
+}: {
+  startsAt: string;
+  size?: 'md' | 'lg';
+  /** The venue's zone, so a late show shows the venue's date, not the reader's. */
+  timeZone?: string | null;
+}) {
   const theme = useTheme();
-  const { day, month } = formatEventDateParts(startsAt);
+  const { day, month } = formatEventDateParts(startsAt, timeZone);
   const lg = size === 'lg';
   return (
     <View

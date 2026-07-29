@@ -142,7 +142,7 @@ export default function VenueScreen() {
             <PressableScale
               onPress={() => router.push(`/event/${item.event_id}`)}
               style={[styles.row, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
-              <DateBlock startsAt={item.starts_at} />
+              <DateBlock startsAt={item.starts_at} timeZone={v?.timezone} />
               <Image
                 source={item.artist_image_url ? { uri: item.artist_image_url } : undefined}
                 style={[styles.avatar, { backgroundColor: theme.backgroundHigh }]}
@@ -153,7 +153,7 @@ export default function VenueScreen() {
                   {item.artist_name}
                 </ThemedText>
                 <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                  {[item.artist_genres?.[0]?.toUpperCase(), formatTime(item.starts_at).toUpperCase()]
+                  {[item.artist_genres?.[0]?.toUpperCase(), formatTime(item.starts_at, v?.timezone).toUpperCase()]
                     .filter(Boolean)
                     .join(' • ')}
                 </ThemedText>

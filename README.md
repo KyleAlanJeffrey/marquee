@@ -99,8 +99,8 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `GET /api/towns?q=` | towns with upcoming shows (busiest first when `q` is empty) |
 | `GET /api/admin/health` | configured sources, event counts per source, sources yielding nothing, crawl queue depth |
 | `POST /api/admin/crawl?limit=` | run one pass of the scheduled artist crawl by hand (needs `ADMIN_TOKEN`) |
-| `POST /api/admin/crawl-queue` | enqueue every artist not on the crawl queue yet |
-| `POST /api/admin/repair-duplicates` | cluster venues and collapse shows stored twice (idempotent) |
+| `POST /api/admin/crawl-queue` | enqueue every artist not on the crawl queue yet (needs `ADMIN_TOKEN`) |
+| `POST /api/admin/repair-duplicates` | cluster venues, collapse shows stored twice; idempotent (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/backfill-bandsintown?limit&offset` | one-off Bandsintown sweep over known artists (needs `ADMIN_TOKEN`) |
 | `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (sitemap built live from D1) |
 

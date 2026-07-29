@@ -194,7 +194,7 @@ export default function ArtistScreen() {
                 styles.tourRow,
                 { backgroundColor: theme.backgroundElevated, borderColor: theme.border },
               ]}>
-              <DateBlock startsAt={item.starts_at} />
+              <DateBlock startsAt={item.starts_at} timeZone={item.venue_timezone} />
               <PressableScale
                 haptic={false}
                 disabled={!item.venue_id}
@@ -209,7 +209,7 @@ export default function ArtistScreen() {
                   )}
                 </View>
                 <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                  {formatTime(item.starts_at).toUpperCase()}
+                  {formatTime(item.starts_at, item.venue_timezone).toUpperCase()}
                 </ThemedText>
               </PressableScale>
               {item.ticket_url ? (

@@ -15,7 +15,7 @@ import type { NearbyEvent } from '@/lib/types';
 export function ComingUpCard({ event, onPress }: { event: NearbyEvent; onPress: () => void }) {
   const theme = useTheme();
   const [reminded, setReminded] = useState(false);
-  const { day, month } = formatEventDateParts(event.starts_at);
+  const { day, month } = formatEventDateParts(event.starts_at, event.venue_timezone);
 
   async function remind() {
     const ok = await scheduleOneOffReminder(event);

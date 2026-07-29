@@ -48,16 +48,63 @@ const REGION_ZONES: Record<string, string> = {
 /** Countries where a two-letter region above is a state/province code. */
 const REGION_COUNTRIES = new Set(['US', 'USA', 'UNITED STATES', 'CA', 'CAN', 'CANADA']);
 
-/** The IANA zone for a venue, or null when we have to fall back to longitude. */
+/**
+ * Countries that sit in a single zone, so the country alone is enough. Deliberately
+ * excludes the multi-zone ones (Mexico, Brazil, Indonesia, Australia, Russia,
+ * Kazakhstan) where a country-level guess would be confidently wrong.
+ */
+const COUNTRY_ZONES: Record<string, string> = {
+  GB: 'Europe/London', IE: 'Europe/Dublin', PT: 'Europe/Lisbon', IS: 'Atlantic/Reykjavik',
+  ES: 'Europe/Madrid', FR: 'Europe/Paris', BE: 'Europe/Brussels', NL: 'Europe/Amsterdam',
+  LU: 'Europe/Luxembourg', DE: 'Europe/Berlin', CH: 'Europe/Zurich', AT: 'Europe/Vienna',
+  IT: 'Europe/Rome', DK: 'Europe/Copenhagen', NO: 'Europe/Oslo', SE: 'Europe/Stockholm',
+  PL: 'Europe/Warsaw', CZ: 'Europe/Prague', SK: 'Europe/Bratislava', HU: 'Europe/Budapest',
+  SI: 'Europe/Ljubljana', HR: 'Europe/Zagreb', RS: 'Europe/Belgrade', RO: 'Europe/Bucharest',
+  BG: 'Europe/Sofia', GR: 'Europe/Athens', FI: 'Europe/Helsinki', EE: 'Europe/Tallinn',
+  LV: 'Europe/Riga', LT: 'Europe/Vilnius', TR: 'Europe/Istanbul', IL: 'Asia/Jerusalem',
+  AE: 'Asia/Dubai', IN: 'Asia/Kolkata', JP: 'Asia/Tokyo', KR: 'Asia/Seoul',
+  SG: 'Asia/Singapore', HK: 'Asia/Hong_Kong', TW: 'Asia/Taipei', TH: 'Asia/Bangkok',
+  VN: 'Asia/Ho_Chi_Minh', PH: 'Asia/Manila', MY: 'Asia/Kuala_Lumpur', NZ: 'Pacific/Auckland',
+  ZA: 'Africa/Johannesburg', EG: 'Africa/Cairo', MA: 'Africa/Casablanca', NG: 'Africa/Lagos',
+  AR: 'America/Argentina/Buenos_Aires', CL: 'America/Santiago', CO: 'America/Bogota',
+  PE: 'America/Lima', UY: 'America/Montevideo', CR: 'America/Costa_Rica', PA: 'America/Panama',
+};
+
+/** Bandsintown sends country names where Ticketmaster sends codes. */
+const COUNTRY_ALIASES: Record<string, string> = {
+  'UNITED KINGDOM': 'GB', 'GREAT BRITAIN': 'GB', ENGLAND: 'GB', SCOTLAND: 'GB', WALES: 'GB',
+  'NORTHERN IRELAND': 'GB', UK: 'GB', IRELAND: 'IE', PORTUGAL: 'PT', ICELAND: 'IS',
+  SPAIN: 'ES', FRANCE: 'FR', BELGIUM: 'BE', NETHERLANDS: 'NL', 'THE NETHERLANDS': 'NL',
+  LUXEMBOURG: 'LU', GERMANY: 'DE', SWITZERLAND: 'CH', AUSTRIA: 'AT', ITALY: 'IT',
+  DENMARK: 'DK', NORWAY: 'NO', SWEDEN: 'SE', POLAND: 'PL', 'CZECH REPUBLIC': 'CZ',
+  CZECHIA: 'CZ', SLOVAKIA: 'SK', HUNGARY: 'HU', SLOVENIA: 'SI', CROATIA: 'HR',
+  SERBIA: 'RS', ROMANIA: 'RO', BULGARIA: 'BG', GREECE: 'GR', FINLAND: 'FI',
+  ESTONIA: 'EE', LATVIA: 'LV', LITHUANIA: 'LT', TURKEY: 'TR', ISRAEL: 'IL',
+  'UNITED ARAB EMIRATES': 'AE', INDIA: 'IN', JAPAN: 'JP', 'SOUTH KOREA': 'KR',
+  SINGAPORE: 'SG', 'HONG KONG': 'HK', TAIWAN: 'TW', THAILAND: 'TH', VIETNAM: 'VN',
+  PHILIPPINES: 'PH', MALAYSIA: 'MY', 'NEW ZEALAND': 'NZ', 'SOUTH AFRICA': 'ZA',
+  EGYPT: 'EG', MOROCCO: 'MA', NIGERIA: 'NG', ARGENTINA: 'AR', CHILE: 'CL',
+  COLOMBIA: 'CO', PERU: 'PE', URUGUAY: 'UY', 'COSTA RICA': 'CR', PANAMA: 'PA',
+};
+
+/**
+ * The IANA zone for a venue, or null when we have to fall back to longitude.
+ * North American venues resolve through their state or province; elsewhere the
+ * country answers, as long as the country has only one zone.
+ */
 export function zoneFor(region: string | null | undefined, country: string | null | undefined): string | null {
-  const c = country?.trim().toUpperCase();
-  // Bandsintown sends "Canada" as the country and "" as the region; Ticketmaster
-  // sends "CA"/"US" with a state code. Only trust the table where the region
-  // really is a state or province code.
-  if (c && !REGION_COUNTRIES.has(c)) return null;
+  const raw = country?.trim().toUpperCase() ?? '';
+  const c = COUNTRY_ALIASES[raw] ?? raw;
   const r = region?.trim().toUpperCase();
-  if (!r) return null;
-  return REGION_ZONES[r] ?? null;
+  // Bandsintown sends "Canada" as the country and "" as the region; Ticketmaster
+  // sends "CA"/"US" with a state code. Only read the region as a state or province
+  // where the country says it is one — "CA" is also California.
+  //
+  // A missing country still reads the region: the only rows without one are the
+  // local dev seed's US venues, and both real sources always send a country, so
+  // this can't quietly relabel a foreign venue as American.
+  if (!raw || REGION_COUNTRIES.has(raw)) return r ? REGION_ZONES[r] ?? null : null;
+  return COUNTRY_ZONES[c] ?? null;
 }
 
 /**

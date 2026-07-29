@@ -12,11 +12,31 @@ describe('zoneFor', () => {
     expect(zoneFor('AZ', 'US')).toBe('America/Phoenix');
   });
 
-  it('declines anywhere the code is not a state', () => {
-    // Bandsintown sends region: "" outside North America, and a two-letter
-    // European region would collide with a state code.
-    expect(zoneFor('', 'Italy')).toBeNull();
-    expect(zoneFor('CA', 'Italy')).toBeNull();
+  it('reads a single-zone country from the country alone', () => {
+    // Bandsintown sends region: "" outside North America, so the country has to
+    // carry it — under both spellings the two sources use.
+    expect(zoneFor('', 'United Kingdom')).toBe('Europe/London');
+    expect(zoneFor('', 'GB')).toBe('Europe/London');
+    expect(zoneFor('', 'Italy')).toBe('Europe/Rome');
+    expect(zoneFor('Tokyo', 'Japan')).toBe('Asia/Tokyo');
+  });
+
+  it('does not read a foreign region as a US state', () => {
+    // "CA" is California *and* an Ontario venue's country — the country decides
+    // which table applies.
+    expect(zoneFor('CA', 'Italy')).toBe('Europe/Rome');
+    expect(zoneFor('ON', 'CA')).toBe('America/Toronto');
+  });
+
+  it('reads a region with no country as a state (only the dev seed has those)', () => {
+    expect(zoneFor('CA', null)).toBe('America/Los_Angeles');
+    expect(zoneFor('CA', '')).toBe('America/Los_Angeles');
+  });
+
+  it('declines a country that spans several zones, rather than guessing', () => {
+    // A country-level guess for Brazil or Australia would be confidently wrong.
+    expect(zoneFor('', 'Brazil')).toBeNull();
+    expect(zoneFor('NSW', 'Australia')).toBeNull();
     expect(zoneFor(null, 'US')).toBeNull();
     expect(zoneFor('ZZ', 'US')).toBeNull();
   });
@@ -62,10 +82,18 @@ describe('bitUtc with a venue', () => {
     );
   });
 
-  it('falls back to longitude where no zone can be named', () => {
-    // Castelbuono, Italy — a real venue from the recorded payload.
+  it('uses the country zone when there is no region', () => {
+    // Castelbuono, Italy — a real venue from the recorded payload. Longitude
+    // alone gives +1 (standard time); August in Italy is +2.
     expect(bitUtc('2026-08-06T16:30:00', { lng: 14.0886407, region: '', country: 'Italy' })).toBe(
-      '2026-08-06T15:30:00Z',
+      '2026-08-06T14:30:00Z',
+    );
+  });
+
+  it('falls back to longitude where no zone can be named', () => {
+    // Australia spans zones, so the country table declines and longitude decides.
+    expect(bitUtc('2026-08-06T20:00:00', { lng: 151.2, region: 'NSW', country: 'Australia' })).toBe(
+      '2026-08-06T10:00:00Z',
     );
   });
 

@@ -23,7 +23,7 @@ export function EventGridCard({
 }) {
   const theme = useTheme();
   const genre = event.artist_genres?.[0];
-  const { day, month } = formatEventDateParts(event.starts_at);
+  const { day, month } = formatEventDateParts(event.starts_at, event.venue_timezone);
 
   return (
     <PressableScale

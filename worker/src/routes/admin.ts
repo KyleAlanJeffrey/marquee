@@ -51,6 +51,7 @@ admin.get('/health', async (c) => {
     queue = await crawlQueueStats(db, 'bandsintown');
   } catch (err) {
     console.error('health: queue stats failed:', err);
+    ok = false;
   }
   return c.json(
     { ok, configured, events_by_source: counts, silent_sources: silent, crawl_queue: queue },

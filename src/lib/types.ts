@@ -13,6 +13,9 @@ export type NearbyEvent = {
   venue_name: string | null;
   venue_city: string | null;
   venue_region: string | null;
+  /** IANA zone of the venue, when we can name one — show times belong to the
+   *  place, not to whoever is reading. Null falls back to the device clock. */
+  venue_timezone: string | null;
   venue_lat: number | null;
   venue_lng: number | null;
   distance_miles: number | null;
@@ -28,6 +31,7 @@ export type ArtistEvent = {
   venue_name: string | null;
   venue_city: string | null;
   venue_region: string | null;
+  venue_timezone: string | null;
 };
 
 export type EventDetail = {
@@ -51,6 +55,7 @@ export type EventDetail = {
     region: string | null;
     lat: number | null;
     lng: number | null;
+    timezone: string | null;
   } | null;
 };
 
@@ -74,6 +79,8 @@ export type VenueDetail = {
   region: string | null;
   lat: number | null;
   lng: number | null;
+  /** Its shows are listed in this zone (see `NearbyEvent.venue_timezone`). */
+  timezone: string | null;
 };
 
 /** A page of a paginated list (cursor = next offset, or null when done). */

@@ -9,6 +9,7 @@ import {
   ensureArtistByName,
   nowIso,
   persist,
+  deferArtistSources,
   recordCrawlOutcomes,
   touchArtistsRequested,
   upsertTmArtist,
@@ -242,6 +243,9 @@ async function bitFetchEvents(env: Env, artist: BitArtist): Promise<any[]> {
  *  "this artist has nothing coming up", which the response body does not. */
 export type BitLookup = { events: any[]; key: string | null; found: boolean };
 
+/** Nothing about the current artist is wrong — the key we call with is. */
+class BitConfigError extends Error {}
+
 /**
  * Try each key in turn until Bandsintown recognises one. Their name lookup
  * answers on their spelling only ("MJ Lenderman and the Wind" → NotFound), so
@@ -258,7 +262,13 @@ async function bitFetchByKeys(env: Env, keys: string[], maxAttempts = 3): Promis
     );
     // 403 is what the open tier returns for an unusable app_id, which is a
     // configuration problem rather than a fact about this artist.
-    if (res.status === 403) throw new Error('bandsintown rejected the app_id (403)');
+    if (res.status === 403) throw new BitConfigError('bandsintown rejected the app_id (403)');
+    // A rate limit or a server error says nothing about this artist either. It
+    // has to raise, or the caller would file a `not_found` and then sit on it for
+    // NOT_FOUND_HOURS — and trying the remaining keys would only add load.
+    if (res.status === 429 || res.status >= 500) {
+      throw new Error(`bandsintown ${res.status} for ${key}`);
+    }
     if (!res.ok) continue;
     const raw = await res.json();
     if (!Array.isArray(raw)) continue;
@@ -481,6 +491,14 @@ export async function crawlBandsintown(env: Env, limit = CRAWL_BATCH): Promise<C
         nextCheckAt: nextCheckAt(hours),
       });
     } catch (err) {
+      if (err instanceof BitConfigError) {
+        // Every remaining artist would fail the same way, and backing them all
+        // off would empty the queue for hours over one bad credential. Stop, keep
+        // what already succeeded, and say why.
+        console.error('crawl aborted:', err);
+        result.skipped = err.message;
+        break;
+      }
       result.failed++;
       const failCount = row.failCount + 1;
       console.error(`crawl failed for ${row.name} (${failCount}):`, err);
@@ -628,15 +646,15 @@ export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {
   }
   await touchArtistsRequested(db, touched);
   // We just fetched their Bandsintown dates, so the crawl needn't repeat that
-  // immediately — one hot interval from now is soon enough.
+  // immediately — one hot interval from now is soon enough. `enqueue` only
+  // inserts, so already-queued artists are deferred separately or the crawl would
+  // spend its next batch re-fetching what this request just fetched.
+  const soon = nextCheckAt(TIER_HOURS.hot);
   await enqueueArtistSources(
     db,
-    touched.map((artistId) => ({
-      artistId,
-      source: 'bandsintown',
-      nextCheckAt: nextCheckAt(TIER_HOURS.hot),
-    })),
+    touched.map((artistId) => ({ artistId, source: 'bandsintown', nextCheckAt: soon })),
   );
+  await deferArtistSources(db, touched, 'bandsintown', soon);
   return { ingested: newIds.length };
 }
 
