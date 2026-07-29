@@ -79,6 +79,20 @@ Second pass — CodeRabbit reviewing the fix commit itself:
   `strftime`), so seed shows drifted into the past; the seed events are now
   deleted and rewritten on every run.
 
+Third pass — the `src/lib` slice (finally past the free-tier rate limit):
+
+- [x] **Corrupt stored follows reached the UI**: `JSON.parse` output was trusted
+  wholesale, so a partial write or a hand-edited `localStorage` entry crashed the
+  Following screen on `undefined.name`. Entries are now validated with a type
+  guard (identity + shape) on hydration.
+- [x] **Unfollows made before hydration were undone** by the disk copy; those
+  drops are recorded and filtered out of the stored list.
+- [x] **Duplicates in the stored list** survived when the in-memory list was
+  empty (the old fast path assigned it as-is); the merge now dedupes as it
+  accumulates.
+- [x] **"Remind Me" asked for notification permission before checking the
+  date**, so a past show prompted and then silently did nothing.
+
 Also skipped from that pass: swapping `openUrl()`'s web `console.warn` for a
 toast — there's no toast/banner primitive in the app, and adding one to report a
 failed `Linking.openURL` (which on web means a blocked popup) isn't worth a new
@@ -91,8 +105,10 @@ prop doesn't exist — list mode has no follow control by design), and widening
 `PressableScale`'s `style`/`children` types to support callback form (no caller
 uses it).
 
-Not yet covered: the `src/lib` slice hit the free-tier rate limit
-(`isProUser: false`) — its findings come from the timed-out full-repo pass only.
+Coverage: `worker/`, `src/app/`, `src/components/`, `src/lib/` and the two fix
+commits were each reviewed as their own slice (the free CLI allowance times out
+on the whole diff at once and rate-limits repeated runs, so this took a few
+attempts).
 
 ## Done — web SEO + byline (this pass)
 

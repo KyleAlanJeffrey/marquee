@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -32,6 +33,26 @@ export type ArtistRef = {
   spotifyId?: string | null;
 };
 
+/**
+ * The stored JSON is only as trustworthy as the device — a partial write or a
+ * hand-edited `localStorage` entry would otherwise reach the UI as `undefined.name`.
+ */
+function isFollowedArtist(v: unknown): v is FollowedArtist {
+  if (typeof v !== 'object' || v === null) return false;
+  const a = v as Record<string, unknown>;
+  const id = (k: string) => a[k] === null || typeof a[k] === 'string';
+  return (
+    typeof a.name === 'string' &&
+    id('artistId') &&
+    id('spotifyId') &&
+    (!!a.artistId || !!a.spotifyId) &&
+    id('imageUrl') &&
+    Array.isArray(a.genres) &&
+    a.genres.every((g) => typeof g === 'string') &&
+    typeof a.followedAt === 'number'
+  );
+}
+
 function sameArtist(a: FollowedArtist, ref: ArtistRef): boolean {
   return (
     (!!a.artistId && a.artistId === ref.artistId) ||
@@ -53,25 +74,36 @@ const FollowsContext = createContext<FollowsContextValue | null>(null);
 export function FollowsProvider({ children }: { children: ReactNode }) {
   const [follows, setFollows] = useState<FollowedArtist[]>([]);
   const [ready, setReady] = useState(false);
+  const hydrated = useRef(false);
+  // Artists dropped before the disk read landed. Pre-hydration the list looks
+  // empty, so a user can follow-then-unfollow inside that window; without this
+  // the stored copy would come back.
+  const dropped = useRef<ArtistRef[]>([]);
 
-  // Hydrate once from disk. Anything the user followed while the read was in
-  // flight is merged in rather than overwritten — pre-hydration the list is
-  // empty, so the only action possible in that window is a follow.
+  // Hydrate once from disk, merging (not overwriting) whatever the user did
+  // while the read was in flight.
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         const stored = raw ? JSON.parse(raw) : null;
         if (Array.isArray(stored)) {
-          setFollows((current) =>
-            current.length === 0
-              ? stored
-              : [...current, ...stored.filter((s: FollowedArtist) => !current.some((c) => sameArtist(c, s)))],
-          );
+          setFollows((current) => {
+            const merged = [...current];
+            for (const entry of stored) {
+              if (!isFollowedArtist(entry)) continue;
+              if (dropped.current.some((ref) => sameArtist(entry, ref))) continue;
+              // Guards against duplicates in the stored list itself, too.
+              if (merged.some((c) => sameArtist(c, entry))) continue;
+              merged.push(entry);
+            }
+            return merged;
+          });
         }
       } catch (err) {
         console.warn('failed to load follows:', err);
       } finally {
+        hydrated.current = true;
         setReady(true);
       }
     })();
@@ -98,6 +130,7 @@ export function FollowsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const unfollow = useCallback((ref: ArtistRef) => {
+    if (!hydrated.current) dropped.current.push(ref);
     setFollows((prev) => prev.filter((f) => !sameArtist(f, ref)));
   }, []);
 
@@ -105,6 +138,10 @@ export function FollowsProvider({ children }: { children: ReactNode }) {
     (artist: Omit<FollowedArtist, 'followedAt'>) => {
       setFollows((prev) => {
         if (prev.some((f) => sameArtist(f, artist))) {
+          // Recorded here because only `prev` says whether this is a drop; a
+          // repeat entry (StrictMode replays updaters) makes no difference,
+          // `dropped` is only ever tested with `.some`.
+          if (!hydrated.current) dropped.current.push(artist);
           return prev.filter((f) => !sameArtist(f, artist));
         }
         return [{ ...artist, followedAt: Date.now() }, ...prev];

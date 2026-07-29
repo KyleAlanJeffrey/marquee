@@ -36,12 +36,14 @@ export async function scheduleOneOffReminder(event: {
   starts_at: string;
 }): Promise<boolean> {
   if (Platform.OS === 'web') return false;
+  // Checked before the permission prompt: there's nothing to schedule for a past
+  // or unparseable start time, so don't ask for notifications to do nothing.
+  const showTime = new Date(event.starts_at);
+  if (Number.isNaN(showTime.getTime()) || showTime.getTime() <= Date.now()) return false;
   const granted = await ensureNotificationPermission();
   if (!granted) return false;
   // A show less than a day out has no "day before" slot left, so remind at show
-  // time instead. Past or unparseable start times get no reminder at all.
-  const showTime = new Date(event.starts_at);
-  if (Number.isNaN(showTime.getTime()) || showTime.getTime() <= Date.now()) return false;
+  // time instead.
   const when = reminderDate(event.starts_at) ?? showTime;
   const where = event.venue_city ?? event.venue_name ?? 'near you';
   try {
