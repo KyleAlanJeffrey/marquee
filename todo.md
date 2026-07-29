@@ -444,6 +444,26 @@ instead of coverage.
 
 ## Later — ticketing & enrichment
 
+- [x] **Venue links: decided against a ratings API, with numbers.** The venue
+  screen links out to directions, Google reviews, Yelp and the venue's own site
+  (`src/lib/venue-links.ts`) — searches, not resolved records. Real ratings were
+  costed and declined in July 2026:
+  - **Yelp Fusion/Places** has no free tier any more: a 30-day, 5,000-call trial,
+    then **$229/mo** (Base, no review excerpts), $299 (3 excerpts), $643
+    (7 excerpts + review highlights). Its display requirements cap caching at
+    **24 hours**, so 470 venues kept fresh is ~14k calls/month — a permanent
+    paid plan just to stop the stars going stale.
+  - **Google Places (New)** puts `rating`, `userRatingCount` *and* `websiteUri` on
+    one Place Details **Enterprise** call: **1,000 free events/month**, then $20
+    per 1,000, and caching allowed for **30 days**. So ~470 venues refreshed
+    monthly fits inside the free cap. This is the option to take if ratings ever
+    become worth a billing account — cheaper *and* broader than Yelp, which is
+    the opposite of how it looks at first glance.
+  - No **venue website** from any current source: Ticketmaster and SeatGeek return
+    their own venue pages, Bandsintown has no field. OpenStreetMap was the free
+    route and had no `website` tag for 2 of 4 venues checked (Great American Music
+    Hall, Oakland Arena), with Overpass returning HTML error pages under light
+    sequential use.
 - [ ] **StubHub Partner API** (Partnerize): today the event page's StubHub
   option is a **search deep link** (`stubhub.com/explore?q=artist+city`) — no
   open listings API without an affiliate account. With Partner creds, swap it
