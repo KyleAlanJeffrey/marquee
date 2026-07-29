@@ -187,6 +187,17 @@ otherwise see an empty shell. Three layers fix that:
    social card, `noindex` for unknown ids) plus `MusicEvent` / `MusicGroup` /
    `MusicVenue` JSON-LD. It also serves `/robots.txt` and a live `/sitemap.xml`.
 
+### Venue links
+
+The venue screen links out to directions, Google reviews, Yelp and the venue's
+own site (`src/lib/venue-links.ts`). These are **searches, not resolved records**,
+on purpose: none of the three upstreams publishes a venue's website — Ticketmaster
+and SeatGeek both return their own venue pages — and a real star rating means a
+billed key (Google Places or Yelp Fusion) plus their attribution and caching
+rules. OpenStreetMap was the free option for websites and had no `website` tag for
+two of four venues checked, so a button that worked half the time would be worse
+than one that always gets you there in one more tap.
+
 Regenerate the social card and PWA icons in `public/` with
 `node scripts/gen-web-assets.mjs`.
 

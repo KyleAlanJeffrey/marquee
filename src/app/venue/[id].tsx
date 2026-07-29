@@ -19,6 +19,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { refreshVenueEvents } from '@/lib/discovery';
 import { formatPrice, formatTime } from '@/lib/format';
 import { useInfiniteVenueEvents, useVenue } from '@/lib/hooks';
+import { venueLinks } from '@/lib/venue-links';
 import type { VenueEvent } from '@/lib/types';
 
 export default function VenueScreen() {
@@ -108,18 +109,21 @@ export default function VenueScreen() {
                   </ThemedText>
                 </View>
               ) : null}
-              <PressableScale
-                onPress={() =>
-                  Linking.openURL(
-                    `https://maps.google.com/?q=${encodeURIComponent([v.name, place].filter(Boolean).join(' '))}`,
-                  )
-                }
-                style={[styles.mapsBtn, { borderColor: theme.cyan }]}>
-                <Ionicons name="navigate" size={15} color={theme.cyan} />
-                <ThemedText type="label" style={{ color: theme.cyan, fontSize: 12 }}>
-                  OPEN IN MAPS
-                </ThemedText>
-              </PressableScale>
+              <View style={styles.linkRow}>
+                {venueLinks(v).map((link) => (
+                  <PressableScale
+                    key={link.key}
+                    accessibilityRole="link"
+                    accessibilityLabel={`${link.label.toLowerCase()} for ${v.name}`}
+                    onPress={() => Linking.openURL(link.url)}
+                    style={[styles.linkChip, { borderColor: theme.cyan }]}>
+                    <Ionicons name={link.icon as never} size={14} color={theme.cyan} />
+                    <ThemedText type="label" style={{ color: theme.cyan, fontSize: 11 }}>
+                      {link.label}
+                    </ThemedText>
+                  </PressableScale>
+                ))}
+              </View>
             </View>
 
             <View style={styles.sectionTitleRow}>
@@ -185,14 +189,15 @@ const styles = StyleSheet.create({
   header: { padding: Spacing.three, gap: Spacing.one + 2 },
   name: { color: '#fff' },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  mapsBtn: {
+  // Wraps, because four chips don't fit one line on a narrow phone and a
+  // horizontally scrolling row hides whichever link falls off the edge.
+  linkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.two },
+  linkChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one + 2,
-    alignSelf: 'flex-start',
-    marginTop: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two + 2,
+    paddingVertical: Spacing.two - 2,
     borderRadius: Radius.pill,
     borderWidth: 1.5,
   },
