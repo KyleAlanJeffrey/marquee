@@ -232,6 +232,90 @@ attempts).
   real data with no console errors. App tsc + lint + web bundle and worker tsc
   all clean.
 
+## Plan — event coverage (Bandsintown-led ingestion)
+
+Ticketmaster alone misses the club/DIY tier. Bandsintown lists far more bands,
+but its open API is shaped differently, so this is an architecture change, not a
+new `fetch`. Probed 2026-07-28:
+
+- **Bandsintown ingestion is dead right now.** `BANDSINTOWN_APP_ID` is empty in
+  `.dev.vars`, and `bitEventsForArtist` returns `[]` without it. Local D1: 962
+  `ticketmaster` events, **0** `bandsintown`. Any app_id string works on the open
+  tier (`app_id=abc` → 200), so this was never a quota problem.
+- **Bandsintown has no geographic search.** `/artists/{name}/events` (v3 and v4)
+  returns 200; `/events/search?location=`, `/venues/{id}/events` and `mbid_`
+  lookups return 403 / internal error without a partner key. Coverage therefore
+  scales with **how many artists we know**, not with how many places we sweep.
+- **Per artist it wins where it matters**: Wednesday 28 vs 22 TM events,
+  Militarie Gun 41 vs 23, feeble little horse 34 vs 23. Payload also carries
+  venue lat/lng, `offers`, `sold_out`, `free`, festival dates — and `lineup`
+  (support acts by name), which is a free artist-discovery feed.
+- **Name resolution is fragile both ways**: TM attraction matching is
+  exact-name-only, and BIT is name-keyed (`MJ Lenderman` → `0`, `MJ Lenderman and
+  the Wind` → NotFound). Empty and unknown are indistinguishable.
+- **Nothing runs on a schedule.** Ingestion only happens when a client posts
+  `/discover-events` or `/refresh-artist-events`, so coverage tracks traffic.
+- **Cross-source dedupe doesn't exist**, and it's the blocker: `events` is unique
+  per `(source, source_event_id)` and `nearbyEvents` collapses on `venue_id`, but
+  TM's Fillmore and BIT's Fillmore are different venue rows. Turning BIT on at
+  volume today would double-list every overlapping show.
+
+### Phase 1 — turn Bandsintown on and see it (small)
+- [ ] Set `BANDSINTOWN_APP_ID` in `.dev.vars` + as a Worker secret.
+- [ ] `/api/health` reporting which sources are configured, so a missing key
+  surfaces as a signal instead of a silent zero (this is how the above hid).
+- [ ] Store what BIT already gives us: `ends_at`, `sold_out`, `free` on `events`
+  (nullable), and keep `lineup` for phase 3.
+- [ ] One-off admin backfill: run BIT for every artist already in D1 and record
+  new-events-per-artist as the baseline number to beat.
+
+### Phase 2 — canonical shows + venues (the blocker)
+- [ ] Venue identity: cluster source rows into a canonical venue (geo <150m +
+  normalized-name match), keep source rows for provenance, point `events` at the
+  canonical id. Migration + a re-runnable `dedupe-venues` task.
+- [ ] Show identity: `show_key = canonical_venue | local_date | normalized_artist`
+  as a unique index; `persist()` upserts on it and merges by source precedence
+  (TM for price/ticket_url, BIT for lineup/sold_out) instead of inserting a
+  second row. Then the `groupBy` hack in `nearbyEvents` can go.
+- [ ] Add a test runner (there is none) and fixture tests for dedupe: real TM +
+  BIT payloads for the same show must produce one row. Rewriting ingestion
+  without this is how silent coverage regressions happen.
+
+### Phase 3 — artist frontier crawl (the coverage multiplier)
+- [ ] `artist_sources` (artist_id, source, source_key, state, last_checked_at,
+  last_ok_at, fail_count, next_check_at) as the work queue.
+- [ ] Cron Trigger (5–15 min) pops the due batch, calls BIT, persists, and
+  reschedules: ~6h for followed artists, ~24h for artists with a nearby show,
+  ~7d for cold ones, exponential backoff on failure. Batch writes — the D1 free
+  tier is 100k writes/day, and a wide crawl will find that ceiling.
+- [ ] Expand the frontier from every event's `lineup[]`: unknown names become
+  artists in state `discovered` and get crawled at low priority. This is the path
+  from hundreds of bands to tens of thousands without a location endpoint.
+- [ ] Alias/resolution layer: `artist_aliases` (variant → artist), negative cache
+  for NotFound, manual override. Try the stored key, then name, then
+  with/without a leading "The", then the Deezer/MusicBrainz canonical spelling.
+
+### Phase 4 — complement with location-capable sources
+- [ ] SeatGeek: free `client_id`, has `/2/events?lat=&lon=&range=` (403
+  unauthenticated when probed). A second *geographic* source next to TM.
+- [ ] Venue-calendar adapters for the DIY tier: most indie venues run WordPress
+  "The Events Calendar" (`/wp-json/tribe/events/v1/events`) or publish iCal. One
+  generic adapter plus a per-venue registry reaches shows neither TM nor BIT
+  lists. Respect robots/rate limits; per-venue kill switch.
+- [ ] Keep the existing per-venue TM refresh for arena/club lineups.
+
+### Phase 5 — observability and guardrails
+- [ ] `ingest_runs` (source, started_at, scanned, inserted, updated, failed) plus
+  an admin-token `/api/admin/stats`: per-source counts, per-cell freshness, top
+  failures.
+- [ ] Coverage check: events per metro per source per week, logged loudly when a
+  source's yield hits zero — exactly the failure found by hand above.
+- [ ] Sanity guards: drop events >2 years out or already past, cap events per
+  artist per run, and keep the sitemap to canonical shows only.
+
+Order matters: phase 2 before phase 3, or the crawl multiplies duplicates
+instead of coverage.
+
 ## Next up
 
 - [ ] **Ship it:** `git push` — Cloudflare Workers Builds auto-deploys
