@@ -61,13 +61,17 @@ export function venueNameTokens(name: string): Set<string> {
   return new Set(tokens);
 }
 
-/** Do these two names share a distinguishing word? */
+/**
+ * Do these two names share a distinguishing word? A name made only of generic
+ * words ("The Music Hall") can't vouch for anything, so it fails: this is only
+ * consulted between 50m and 300m, a range that holds several different rooms, and
+ * the same building at the same coordinates is already matched without a name.
+ * Missing a duplicate costs a repeated row; merging two venues loses shows.
+ */
 export function venueNamesAgree(a: string, b: string): boolean {
   const ta = venueNameTokens(a);
   const tb = venueNameTokens(b);
-  // A name made only of generic words tells us nothing either way; fall back to
-  // distance alone rather than blocking the match.
-  if (ta.size === 0 || tb.size === 0) return true;
+  if (ta.size === 0 || tb.size === 0) return false;
   for (const t of ta) if (tb.has(t)) return true;
   return false;
 }
@@ -199,11 +203,19 @@ export function mergeField<T>(
   return prefersSource(field, incomingSource, existingSource) ? incoming : existing;
 }
 
+/**
+ * The `{source: upstream_id}` provenance map. Values must be strings — this feeds
+ * a `json_extract(...) = ?` lookup, where a number or a nested object would
+ * silently never match — so anything else is dropped rather than carried.
+ */
 export function parseSources(json: string | null): Record<string, string> {
   if (!json) return {};
   try {
     const v = JSON.parse(json);
-    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+    return Object.fromEntries(
+      Object.entries(v).filter((e): e is [string, string] => typeof e[1] === 'string'),
+    );
   } catch {
     return {};
   }

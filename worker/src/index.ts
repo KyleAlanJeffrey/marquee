@@ -2,13 +2,14 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
 import { admin } from './routes/admin';
-import type { AppEnv } from './env';
+import type { AppEnv, Env } from './env';
 import { artists } from './routes/artists';
 import { events } from './routes/events';
 import { feed } from './routes/feed';
 import { search } from './routes/search';
 import { venues } from './routes/venues';
 import { injectSeo, pageSeo, robotsTxt, sitemapXml } from './seo';
+import { crawlBandsintown } from './sources';
 
 // The Worker runs first for every request (run_worker_first). It handles the
 // API under /api/* and hands everything else to the static assets (the Expo web
@@ -56,4 +57,20 @@ app.all('*', async (c) => {
   return seo ? injectSeo(res, url, seo) : res;
 });
 
-export default app;
+/**
+ * The artist crawl (see `crawlBandsintown`). Cron is the only way coverage stops
+ * tracking traffic: before this, an artist nobody opened was never re-checked.
+ * The batch is small because a scheduled Worker shares the same subrequest and
+ * CPU budget as a request, and the queue is drained a little at a time.
+ */
+const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env) => {
+  try {
+    console.log('crawl:', JSON.stringify(await crawlBandsintown(env)));
+  } catch (err) {
+    // A thrown scheduled handler is recorded as a failed invocation; this keeps
+    // the failure in the logs where the next run can be compared against it.
+    console.error('crawl failed:', err);
+  }
+};
+
+export default { fetch: app.fetch, scheduled };

@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import { sql } from 'drizzle-orm';
 
-import { repairDuplicates } from '../data';
+import { crawlQueueStats, repairDuplicates } from '../data';
 import { getDb } from '../db';
 import type { AppEnv, Env } from '../env';
 import { artists, events } from '../schema';
-import { backfillBandsintown } from '../sources';
+import { backfillBandsintown, backfillCrawlQueue, crawlBandsintown } from '../sources';
 
 export const admin = new Hono<AppEnv>();
 
@@ -44,7 +44,45 @@ admin.get('/health', async (c) => {
   const silent = Object.entries(configured)
     .filter(([name, on]) => on && name !== 'spotify' && !counts[name])
     .map(([name]) => name);
-  return c.json({ ok, configured, events_by_source: counts, silent_sources: silent }, ok ? 200 : 500);
+  // Queue depth answers the question the event counts can't: is the crawl
+  // keeping up, or is everything permanently due?
+  let queue: unknown = null;
+  try {
+    queue = await crawlQueueStats(db, 'bandsintown');
+  } catch (err) {
+    console.error('health: queue stats failed:', err);
+  }
+  return c.json(
+    { ok, configured, events_by_source: counts, silent_sources: silent, crawl_queue: queue },
+    ok ? 200 : 500,
+  );
+});
+
+/**
+ * Run one pass of the scheduled crawl by hand — the same code path the Cron
+ * Trigger takes, so a broken schedule can be diagnosed without waiting for it.
+ */
+admin.post('/crawl', async (c) => {
+  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+  const n = Number(new URL(c.req.url).searchParams.get('limit'));
+  const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 50) : 15;
+  try {
+    return c.json(await crawlBandsintown(c.env, limit));
+  } catch (err) {
+    console.error('crawl failed:', err);
+    return c.json({ error: 'crawl failed' }, 500);
+  }
+});
+
+/** Enqueue every artist that isn't on the crawl queue yet (idempotent). */
+admin.post('/crawl-queue', async (c) => {
+  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+  try {
+    return c.json(await backfillCrawlQueue(c.env));
+  } catch (err) {
+    console.error('crawl-queue failed:', err);
+    return c.json({ error: 'enqueue failed' }, 500);
+  }
 });
 
 /**

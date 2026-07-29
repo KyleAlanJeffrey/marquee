@@ -297,30 +297,60 @@ artists. The venue names differ exactly as feared — `LONDON MUSIC HALL` vs
 `The Danforth Music Hall` vs `Danforth Music Hall` — while the coordinates agree
 to 0.0001–0.0022 degrees (11–240m). So geo proximity is the reliable signal and
 the name is the weak one, which sets the matcher's priorities.
-- [ ] Venue identity: cluster source rows into a canonical venue (geo <150m +
-  normalized-name match), keep source rows for provenance, point `events` at the
-  canonical id. Migration + a re-runnable `dedupe-venues` task.
-- [ ] Show identity: `show_key = canonical_venue | local_date | normalized_artist`
-  as a unique index; `persist()` upserts on it and merges by source precedence
-  (TM for price/ticket_url, BIT for lineup/sold_out) instead of inserting a
-  second row. Then the `groupBy` hack in `nearbyEvents` can go.
-- [ ] Add a test runner (there is none) and fixture tests for dedupe: real TM +
-  BIT payloads for the same show must produce one row. Rewriting ingestion
-  without this is how silent coverage regressions happen.
+- [x] Venue identity: `venues.canonical_venue_id` clusters source rows by
+  geography with the name as tiebreaker (`worker/src/dedupe.ts`). Measured
+  against real pairs: Ticketmaster often gives a **city centroid**, not the door
+  — 821m (Franklin Music Hall), 1.4km (Royal Oak), 6.6km (The Eastern) — so
+  matching runs in tiers: ≤50m outright, ≤300m with a shared distinguishing
+  word, ≤12km with a nested name in the same town.
+- [x] Show identity: matched on (canonical venue, artist, ±6h) rather than a
+  unique key, because Bandsintown times are venue-local and Ticketmaster's are
+  UTC. `persist()` merges by field ownership (TM owns price/time/name, BIT owns
+  lineup/sold_out/ends_at) and records every upstream id in `events.sources`.
+  The `groupBy` hack in `nearbyEvents` is gone. **Result: 17 duplicate shows → 0,
+  92 venues clustered, 1,170 provenance rows filled, re-runnable.**
+- [x] Two listings arriving in the *same* batch (`refreshArtists` fetches both
+  sources at once) are matched in memory too, so they never become two rows that
+  only the repair pass can collapse.
+- [x] Test runner (`npm test`, vitest): the measured venue pairs, show-identity
+  windows, field ownership and the timezone conversion are all pinned.
+- [x] **Timezones done properly**: a state/province → IANA zone table plus `Intl`
+  gives the real offset for the night of the show (`worker/src/timezone.ts`).
+  Longitude alone was an hour out under DST — a 20:00 August show in San
+  Francisco was stored as 04:00Z instead of 03:00Z. Longitude remains the
+  fallback outside North America.
+- [x] `POST /api/admin/repair-duplicates` for data ingested before all this.
+  Venue clustering is grid-bucketed (not quadratic) and the event scan is
+  bounded, reporting `truncated` when there is more to do.
 
 ### Phase 3 — artist frontier crawl (the coverage multiplier)
-- [ ] `artist_sources` (artist_id, source, source_key, state, last_checked_at,
-  last_ok_at, fail_count, next_check_at) as the work queue.
-- [ ] Cron Trigger (5–15 min) pops the due batch, calls BIT, persists, and
-  reschedules: ~6h for followed artists, ~24h for artists with a nearby show,
-  ~7d for cold ones, exponential backoff on failure. Batch writes — the D1 free
-  tier is 100k writes/day, and a wide crawl will find that ceiling.
-- [ ] Expand the frontier from every event's `lineup[]`: unknown names become
-  artists in state `discovered` and get crawled at low priority. This is the path
-  from hundreds of bands to tens of thousands without a location endpoint.
-- [ ] Alias/resolution layer: `artist_aliases` (variant → artist), negative cache
-  for NotFound, manual override. Try the stored key, then name, then
-  with/without a leading "The", then the Deezer/MusicBrainz canonical spelling.
+- [x] `artist_sources` (artist_id, source, source_key, state, last_checked_at,
+  last_ok_at, fail_count, next_check_at) is the work queue — migration
+  `0003_artist_crawl.sql`, which also enqueues every artist already in D1.
+- [x] Cron Trigger every 15 minutes (`wrangler.jsonc` → `triggers.crons`) pops
+  the due batch, calls Bandsintown, persists and reschedules by tier:
+  **6h** for an artist a client asked about in the last week (`artists.last_requested_at`),
+  **24h** with a show upcoming, **7d** cold, **14d** for an unconfirmed lineup
+  name, exponential backoff (1h→7d) on failure, 30d negative cache on not-found.
+  Batch size is deliberately small (8/run ≈ 770 checks a day): every artist is a
+  subrequest plus D1 calls, and both are budgeted per invocation.
+- [x] Frontier expansion from `lineup[]`: unknown support acts become artists in
+  state `discovered`, queued behind everything already known. Names are matched
+  case-insensitively against existing artists first — inserting blind would
+  multiply duplicate artists instead of adding coverage.
+- [x] Resolution: `lookupKeys` tries the stored key, `id_{bandsintown_id}`, their
+  spelling, ours, then each without a leading "The"; whichever answers is stored
+  as `source_key`. The negative cache is `state='not_found'` with a long sleep
+  rather than a separate table — Bandsintown can't distinguish "unknown artist"
+  from "no dates yet", so a verdict has to expire. **No `artist_aliases` table
+  yet**; add one if a real alias case shows up that these variants miss.
+- [x] Visible: `GET /api/admin/health` reports queue depth and how much is due;
+  `POST /api/admin/crawl?limit=` runs the exact cron code path by hand.
+- [x] **Measured** — 33 artists crawled: 224 new events and 67 new frontier
+  artists, ~0.25s per artist. On 830 artists that pace is the whole roster every
+  ~26 hours, and the roster grows itself from lineups.
+- [ ] Watch the first production runs for CPU/subrequest limits (the free plan is
+  tight) and raise `CRAWL_BATCH` if there's headroom.
 
 ### Phase 4 — complement with location-capable sources
 - [ ] SeatGeek: free `client_id`, has `/2/events?lat=&lon=&range=` (403

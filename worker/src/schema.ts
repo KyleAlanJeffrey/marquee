@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, real, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, real, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
 
 // Drizzle table definitions for the Marquee D1 database. These mirror
 // `worker/schema.sql` (which is still the applied DDL + dev seed — keep the two
@@ -22,8 +22,37 @@ export const artists = sqliteTable('artists', {
   mbid: text('mbid'),
   imageUrl: text('image_url'),
   genres: text('genres').notNull().default('[]'),
+  /** When a client last asked about this artist; drives crawl priority. */
+  lastRequestedAt: text('last_requested_at'),
   createdAt: createdAt(),
 });
+
+/**
+ * The crawl queue: one row per (artist, upstream source). Coverage from
+ * Bandsintown is a function of how many artists we ask about, so this is what
+ * the Cron Trigger drains (see migration 0003).
+ */
+export const artistSources = sqliteTable(
+  'artist_sources',
+  {
+    artistId: text('artist_id')
+      .notNull()
+      .references(() => artists.id, { onDelete: 'cascade' }),
+    source: text('source').notNull(),
+    /** The key that worked upstream — `id_123` or a display name of theirs. */
+    sourceKey: text('source_key'),
+    /** active | discovered | not_found | disabled */
+    state: text('state').notNull().default('active'),
+    lastCheckedAt: text('last_checked_at'),
+    lastOkAt: text('last_ok_at'),
+    failCount: integer('fail_count').notNull().default(0),
+    nextCheckAt: text('next_check_at').notNull().default('1970-01-01T00:00:00Z'),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.artistId, t.source] }),
+    dueIdx: index('artist_sources_due_idx').on(t.source, t.state, t.nextCheckAt),
+  }),
+);
 
 export const venues = sqliteTable(
   'venues',

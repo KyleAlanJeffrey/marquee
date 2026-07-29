@@ -29,6 +29,12 @@
       "migrations_dir": "worker/migrations",
     },
   ],
+  // The artist crawl. Bandsintown's open API is artist-keyed with no geographic
+  // search, so coverage comes from asking about every artist we know on a
+  // schedule rather than from a client happening to request one.
+  "triggers": {
+    "crons": ["*/15 * * * *"],
+  },
   "observability": {
     "enabled": true,
   },

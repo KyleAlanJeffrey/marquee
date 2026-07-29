@@ -75,9 +75,18 @@ describe('venue identity', () => {
   });
 
   it('ignores generic words when comparing names', () => {
-    expect(venueNamesAgree('The Music Hall', 'Music Hall Theatre')).toBe(true); // nothing to go on
-    expect(venueNamesMatchStrongly('The Music Hall', 'Music Hall Theatre')).toBe(false); // …so not strong
+    // Both names are nothing but generic words, so neither can vouch for a match
+    // — and at 50-300m apart that's several different rooms, not one.
+    expect(venueNamesAgree('The Music Hall', 'Music Hall Theatre')).toBe(false);
+    expect(venueNamesMatchStrongly('The Music Hall', 'Music Hall Theatre')).toBe(false);
+    expect(venueNamesAgree('Roadrunner', 'Roadrunner-Boston')).toBe(true);
     expect(venueNamesMatchStrongly('Roadrunner', 'Roadrunner-Boston')).toBe(true);
+  });
+
+  it('still joins a same-spot pair whose names are all generic', () => {
+    // The ≤50m rule does not consult the name, which is what keeps the stricter
+    // `venueNamesAgree` from losing real duplicates.
+    expect(sameVenue(at('The Theatre', 37.7756, -122.4376), at('Music Hall', 37.7757, -122.4376))).toBe(true);
   });
 });
 
@@ -145,5 +154,10 @@ describe('parseSources', () => {
     expect(parseSources('not json')).toEqual({});
     expect(parseSources('[1,2]')).toEqual({});
     expect(parseSources('{"ticketmaster":"abc"}')).toEqual({ ticketmaster: 'abc' });
+    // Values feed a `json_extract(...) = ?` lookup, so a non-string would be a
+    // provenance entry that can never match anything.
+    expect(parseSources('{"ticketmaster":123,"bandsintown":{"id":"x"},"seed":null,"ok":"y"}')).toEqual({
+      ok: 'y',
+    });
   });
 });

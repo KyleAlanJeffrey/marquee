@@ -15,8 +15,9 @@ const artist: BitArtist = {
 
 describe('bitUtc', () => {
   it('reads a bare datetime as venue-local, not UTC', () => {
-    // 20:00 in San Francisco is 04:00Z the next day — storing "20:00Z" showed
-    // this gig at 1pm.
+    // Storing "20:00Z" showed this San Francisco gig at 1pm. With only a
+    // longitude to go on this lands on standard time (-8); given the venue's
+    // state it uses the real zone instead — see timezone.test.ts.
     expect(bitUtc('2026-08-06T20:00:00', -122.4194)).toBe('2026-08-07T04:00:00Z');
   });
 

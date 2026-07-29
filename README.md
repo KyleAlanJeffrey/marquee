@@ -24,6 +24,8 @@ worker/
   src/index.ts    thin entry: mounts the API routers, robots/sitemap, asset SEO
   src/routes/     per-resource Hono routers (artists, venues, events, feed, search, admin)
   src/data.ts     D1 repository (reads/writes) via Drizzle · src/sources.ts external APIs
+  src/dedupe.ts   cross-source venue/show identity · src/crawl.ts crawl scheduling
+  src/timezone.ts venue-local → UTC (state/province zone + Intl, longitude fallback)
   src/seo.ts      robots.txt, sitemap.xml, per-page <head> + JSON-LD injection
   schema.sql      D1 baseline schema (DDL only — this is what production gets)
   migrations/     numbered D1 migrations applied after the baseline
@@ -62,9 +64,20 @@ BANDSINTOWN_APP_ID=…      # widens coverage a lot; see "API keys" below
 ADMIN_TOKEN=…             # enables /api/admin/* (backfill); unset = off
 ```
 
-`GET /api/admin/health` reports which of these are actually configured and how
-many events each source has produced — a source with a missing key no-ops
-silently, so check there first when a source looks dead.
+`GET /api/admin/health` reports which of these are actually configured, how many
+events each source has produced, and how deep the crawl queue is — a source with
+a missing key no-ops silently, so check there first when a source looks dead.
+
+### The artist crawl
+
+Bandsintown's open API is keyed by artist and has no geographic search, so
+coverage is a function of how many artists we ask about and how often. A Cron
+Trigger (every 15 minutes, `wrangler.jsonc` → `triggers.crons`) drains the
+`artist_sources` queue: artists a client looked at recently are re-checked every
+6 hours, ones with an upcoming show daily, cold ones weekly, and support acts
+found in a `lineup[]` become artists in their own right at the lowest priority —
+which is how the roster grows itself. `POST /api/admin/crawl` runs one pass of
+exactly the same code path when you don't want to wait for the schedule.
 
 Then on a device with real location, open **Near Me** and pull to refresh — the
 app calls the Worker's `/discover-events`, which pulls nearby shows from
@@ -83,7 +96,11 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/search-artists` | Spotify artist search |
 | `POST /api/discover-events` | pull nearby shows from Ticketmaster (throttled per area) |
 | `POST /api/refresh-artist-events` | pull shows for the on-device follow list (Ticketmaster + Bandsintown) |
-| `GET /api/admin/health` | configured sources, event counts per source, sources yielding nothing |
+| `GET /api/towns?q=` | towns with upcoming shows (busiest first when `q` is empty) |
+| `GET /api/admin/health` | configured sources, event counts per source, sources yielding nothing, crawl queue depth |
+| `POST /api/admin/crawl?limit=` | run one pass of the scheduled artist crawl by hand (needs `ADMIN_TOKEN`) |
+| `POST /api/admin/crawl-queue` | enqueue every artist not on the crawl queue yet |
+| `POST /api/admin/repair-duplicates` | cluster venues and collapse shows stored twice (idempotent) |
 | `POST /api/admin/backfill-bandsintown?limit&offset` | one-off Bandsintown sweep over known artists (needs `ADMIN_TOKEN`) |
 | `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (sitemap built live from D1) |
 

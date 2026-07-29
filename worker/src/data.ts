@@ -1,4 +1,4 @@
-import { and, between, eq, gte, lte, or, sql } from 'drizzle-orm';
+import { and, between, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
 
 import { getDb, type DB } from './db';
 import {
@@ -6,11 +6,12 @@ import {
   hoursApart,
   mergeField,
   parseSources,
+  sameShow,
   SHOW_MATCH_HOURS,
   type VenuePoint,
 } from './dedupe';
 import type { Env } from './env';
-import { artists, events, venues } from './schema';
+import { artists, artistSources, events, venues } from './schema';
 
 // --- helpers ----------------------------------------------------------------
 
@@ -373,7 +374,7 @@ export async function persist(db: DB, inputs: EventInput[]): Promise<string[]> {
         })
         .returning({ id: venues.id });
     });
-    const res = await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+    const res = await batchChunked<{ id: string }[]>(db, stmts);
     res.forEach((rows, idx) => {
       const id = rows[0]?.id;
       if (id) venueIdByKey.set(venueKeys[idx], id);
@@ -402,27 +403,63 @@ export async function persist(db: DB, inputs: EventInput[]): Promise<string[]> {
   );
 
   const inserts: (typeof events.$inferInsert)[] = [];
-  const updates: { id: string; row: ExistingShow; input: EventInput; venueId: string | null }[] = [];
+  /**
+   * Updates keyed by event id, because several incoming listings can land on one
+   * show. Each is folded through `mergeShow` in turn and written once: a separate
+   * statement per listing would recompute from the original row every time, so
+   * the last write would erase the provenance the earlier ones added.
+   */
+  const pending = new Map<string, { row: ExistingShow; listings: { input: EventInput; venueId: string | null }[] }>();
+  const stage = (id: string, row: ExistingShow, input: EventInput, venueId: string | null) => {
+    const entry = pending.get(id) ?? { row, listings: [] };
+    entry.listings.push({ input, venueId });
+    pending.set(id, entry);
+  };
+  /** Rows this batch is about to insert, so a sibling listing can join them. */
+  const staged: { id: string; row: ExistingShow }[] = [];
+
   inputs.forEach((i, idx) => {
+    const venueId = venueFor(i);
     const existing = found[idx];
-    if (existing) updates.push({ id: existing.id, row: existing, input: i, venueId: venueFor(i) });
-    else
-      inserts.push({
-        id: uuid(),
-        artistId: i.artist_id,
-        venueId: venueFor(i),
-        name: i.name,
-        startsAt: i.starts_at,
-        endsAt: i.ends_at ?? null,
-        ticketUrl: i.ticket_url,
-        priceFrom: i.price_from,
-        soldOut: i.sold_out ?? null,
-        isFree: i.is_free ?? null,
-        lineup: i.lineup?.length ? JSON.stringify(i.lineup) : null,
-        source: i.source,
-        sourceEventId: i.source_event_id,
-        sources: JSON.stringify({ [i.source]: i.source_event_id }),
-      });
+    if (existing) {
+      stage(existing.id, existing, i, venueId);
+      return;
+    }
+
+    // Both sources for one artist are fetched together (`refreshArtists`), and
+    // `findExistingShows` ran before any of them was written — so a Ticketmaster
+    // and a Bandsintown listing of the same night have to find each other here,
+    // or they become two rows that only `repair-duplicates` can collapse.
+    const sibling = staged.find((s) =>
+      sameShow(
+        { artistId: s.row.artistId, venueId: s.row.venueId, startsAt: s.row.startsAt },
+        { artistId: i.artist_id, venueId, startsAt: i.starts_at },
+      ),
+    );
+    if (sibling) {
+      stage(sibling.id, sibling.row, i, venueId ?? sibling.row.venueId);
+      return;
+    }
+
+    const id = uuid();
+    const values = {
+      id,
+      artistId: i.artist_id,
+      venueId,
+      name: i.name,
+      startsAt: i.starts_at,
+      endsAt: i.ends_at ?? null,
+      ticketUrl: i.ticket_url,
+      priceFrom: i.price_from,
+      soldOut: i.sold_out ?? null,
+      isFree: i.is_free ?? null,
+      lineup: i.lineup?.length ? JSON.stringify(i.lineup) : null,
+      source: i.source,
+      sourceEventId: i.source_event_id,
+      sources: JSON.stringify({ [i.source]: i.source_event_id }),
+    };
+    inserts.push(values);
+    staged.push({ id, row: { ...values, sources: values.sources } });
   });
 
   const newIds: string[] = [];
@@ -435,22 +472,31 @@ export async function persist(db: DB, inputs: EventInput[]): Promise<string[]> {
         .onConflictDoNothing({ target: [events.source, events.sourceEventId] })
         .returning({ id: events.id }),
     );
-    const res = await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+    const res = await batchChunked<{ id: string }[]>(db, stmts);
     for (const rows of res) if (rows[0]?.id) newIds.push(rows[0].id);
   }
 
-  if (updates.length) {
-    const stmts = updates.map(({ id, row, input, venueId }) =>
-      db.update(events).set(mergeShow(row, input, venueId)).where(eq(events.id, id)),
-    );
-    await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
-  }
+  // After the inserts, so an update against a just-staged row has something to
+  // update.
+  await inBatches(
+    db,
+    [...pending.entries()].map(([id, { row, listings }]) => {
+      let merged = row;
+      let set = mergeShow(row, listings[0].input, listings[0].venueId);
+      for (const { input, venueId } of listings.slice(1)) {
+        merged = { ...merged, ...set };
+        set = mergeShow(merged, input, venueId);
+      }
+      return db.update(events).set(set).where(eq(events.id, id));
+    }),
+  );
 
   return newIds;
 }
 
 type ExistingShow = {
   id: string;
+  artistId: string;
   source: string;
   sourceEventId: string;
   sources: string | null;
@@ -510,6 +556,7 @@ async function findExistingShows(
   if (keys.length === 0) return [];
   const cols = {
     id: events.id,
+    artistId: events.artistId,
     source: events.source,
     sourceEventId: events.sourceEventId,
     sources: events.sources,
@@ -549,9 +596,12 @@ async function findExistingShows(
       .limit(1);
   });
 
-  const res = await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
-  return res.map((rows) => (rows[0] as ExistingShow | undefined) ?? null);
+  const res = await batchChunked<ExistingShow[]>(db, stmts);
+  return res.map((rows) => rows[0] ?? null);
 }
+
+/** How many upcoming events one repair pass will scan; re-run to continue. */
+const REPAIR_EVENT_LIMIT = 5_000;
 
 /**
  * Cluster the whole venue table, repoint events at canonical venues, and merge
@@ -563,6 +613,7 @@ export async function repairDuplicates(db: DB): Promise<{
   events_repointed: number;
   shows_merged: number;
   provenance_filled: number;
+  truncated: boolean;
 }> {
   // Invariant: every row records its own upstream id in `sources`. Rows written
   // before the column existed don't, which would make a later merge lose track of
@@ -575,26 +626,64 @@ export async function repairDuplicates(db: DB): Promise<{
   `);
 
   const all = await db
-    .select({ id: venues.id, name: venues.name, lat: venues.lat, lng: venues.lng, city: venues.city })
+    .select({
+      id: venues.id,
+      name: venues.name,
+      lat: venues.lat,
+      lng: venues.lng,
+      city: venues.city,
+      canonicalVenueId: venues.canonicalVenueId,
+    })
     .from(venues);
 
   // Deterministic order (by id) so the same row wins the cluster on every run.
   const sorted = [...all].sort((a, b) => a.id.localeCompare(b.id));
   const canonicalOf = new Map<string, string>();
-  const accepted: VenuePoint[] = [];
+  // Comparing every venue with every other one is quadratic, and this table only
+  // grows as the crawl finds venues. Candidates are bucketed into a grid instead
+  // and each venue is compared with its own cell and the eight around it — the
+  // cell is wider than the furthest distance `sameVenue` will match over, so no
+  // pair that could have matched is skipped.
+  const CELL_DEG = 0.2; // ~22km of latitude, against a 12km match ceiling.
+  const buckets = new Map<string, VenuePoint[]>();
+  const cellKey = (lat: number, lng: number) =>
+    `${Math.floor(lat / CELL_DEG)}:${Math.floor(lng / CELL_DEG)}`;
+  const neighbours = (lat: number, lng: number): VenuePoint[] => {
+    const out: VenuePoint[] = [];
+    const y = Math.floor(lat / CELL_DEG);
+    const x = Math.floor(lng / CELL_DEG);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cell = buckets.get(`${y + dy}:${x + dx}`);
+        if (cell) out.push(...cell);
+      }
+    }
+    return out;
+  };
+
   for (const v of sorted) {
-    const match = bestVenueMatch(v, accepted);
+    const match = v.lat != null && v.lng != null ? bestVenueMatch(v, neighbours(v.lat, v.lng)) : null;
     const resolved = match ? canonicalOf.get(match.id) ?? match.id : v.id;
     canonicalOf.set(v.id, resolved);
-    if (resolved === v.id) accepted.push(v);
+    if (resolved === v.id && v.lat != null && v.lng != null) {
+      const key = cellKey(v.lat, v.lng);
+      const cell = buckets.get(key);
+      if (cell) cell.push(v);
+      else buckets.set(key, [v]);
+    }
   }
 
   const clustered = [...canonicalOf.entries()].filter(([id, canonical]) => id !== canonical);
+  // Migration 0002 pointed every venue at itself, so only a row whose canonical
+  // actually moves is worth a write.
+  const currentCanonical = new Map(all.map((v) => [v.id, v.canonicalVenueId]));
   await inBatches(
     db,
-    [...canonicalOf.entries()].map(([id, canonical]) =>
-      db.update(venues).set({ canonicalVenueId: canonical }).where(eq(venues.id, id)),
-    ),
+    [...canonicalOf.entries()]
+      .filter(([id, canonical]) => currentCanonical.get(id) !== canonical)
+      .map(([id, canonical]) =>
+        db.update(venues).set({ canonicalVenueId: canonical }).where(eq(venues.id, id)),
+      ),
   );
 
   // Events follow their venue's canonical row.
@@ -628,7 +717,11 @@ export async function repairDuplicates(db: DB): Promise<{
     })
     .from(events)
     .where(gte(events.startsAt, nowIso()))
-    .orderBy(events.artistId, events.venueId, events.startsAt);
+    .orderBy(events.artistId, events.venueId, events.startsAt)
+    // Bounded so one repair can't try to hold the entire future in a single D1
+    // response. Duplicates are found within an (artist, venue) run, and the pass
+    // is idempotent, so a truncated run is a partial repair, not a wrong one.
+    .limit(REPAIR_EVENT_LIMIT);
 
   const merges: { keep: (typeof rows)[number]; drop: (typeof rows)[number] }[] = [];
   const dropped = new Set<string>();
@@ -646,34 +739,46 @@ export async function repairDuplicates(db: DB): Promise<{
     }
   }
 
+  // A keeper can absorb more than one duplicate (three sources, or a repair after
+  // a long gap), so its drops are folded in sequence and written once. One
+  // statement per pair would recompute each merge from the untouched keeper and
+  // the last write would drop the others' provenance.
+  const byKeeper = new Map<string, { keep: (typeof rows)[number]; drops: (typeof rows)[number][] }>();
+  for (const { keep, drop } of merges) {
+    const entry = byKeeper.get(keep.id) ?? { keep, drops: [] };
+    entry.drops.push(drop);
+    byKeeper.set(keep.id, entry);
+  }
+
+  const asInput = (r: (typeof rows)[number]): EventInput => ({
+    source: r.source,
+    source_event_id: r.sourceEventId,
+    name: r.name,
+    starts_at: r.startsAt,
+    ends_at: r.endsAt,
+    ticket_url: r.ticketUrl,
+    price_from: r.priceFrom,
+    sold_out: r.soldOut,
+    is_free: r.isFree,
+    lineup: r.lineup ? (parseGenres(r.lineup) as string[]) : null,
+    artist_id: r.artistId,
+    venue: null,
+  });
+
   await inBatches(
     db,
-    merges.flatMap(({ keep, drop }) => [
-      db
-        .update(events)
-        .set(
-          mergeShow(
-            keep as unknown as ExistingShow,
-            {
-              source: drop.source,
-              source_event_id: drop.sourceEventId,
-              name: drop.name,
-              starts_at: drop.startsAt,
-              ends_at: drop.endsAt,
-              ticket_url: drop.ticketUrl,
-              price_from: drop.priceFrom,
-              sold_out: drop.soldOut,
-              is_free: drop.isFree,
-              lineup: drop.lineup ? (JSON.parse(drop.lineup) as string[]) : null,
-              artist_id: drop.artistId,
-              venue: null,
-            },
-            keep.venueId,
-          ),
-        )
-        .where(eq(events.id, keep.id)),
-      db.delete(events).where(eq(events.id, drop.id)),
-    ]),
+    [...byKeeper.values()].flatMap(({ keep, drops }) => {
+      let merged = keep as unknown as ExistingShow;
+      let set = mergeShow(merged, asInput(drops[0]), keep.venueId);
+      for (const drop of drops.slice(1)) {
+        merged = { ...merged, ...set };
+        set = mergeShow(merged, asInput(drop), keep.venueId);
+      }
+      return [
+        db.update(events).set(set).where(eq(events.id, keep.id)),
+        ...drops.map((drop) => db.delete(events).where(eq(events.id, drop.id))),
+      ];
+    }),
   );
 
   return {
@@ -681,17 +786,30 @@ export async function repairDuplicates(db: DB): Promise<{
     events_repointed: repointed,
     shows_merged: merges.length,
     provenance_filled: filled.meta?.changes ?? 0,
+    // True when the event scan hit its ceiling: run it again to continue.
+    truncated: rows.length === REPAIR_EVENT_LIMIT,
   };
 }
 
 /** D1 caps how much one batch can carry; keep each round modest. */
  
-async function inBatches(db: DB, stmts: any[], size = 50): Promise<void> {
+/**
+ * `db.batch` is one D1 round trip, and one call carries every statement handed to
+ * it — an ingest of a few hundred events, or a repair over the whole venue table,
+ * would otherwise be a single oversized request. Everything that batches goes
+ * through here so the size stays bounded no matter how big the input grows.
+ */
+async function batchChunked<T>(db: DB, stmts: any[], size = 50): Promise<T[]> {
+  const out: T[] = [];
   for (let i = 0; i < stmts.length; i += size) {
     const chunk = stmts.slice(i, i + size);
-     
-    if (chunk.length) await db.batch(chunk as [any, ...any[]]);
+    if (chunk.length) out.push(...((await db.batch(chunk as [any, ...any[]])) as T[]));
   }
+  return out;
+}
+
+async function inBatches(db: DB, stmts: any[], size = 50): Promise<void> {
+  await batchChunked(db, stmts, size);
 }
 
 /**
@@ -747,27 +865,28 @@ async function canonicalizeVenues(
       )
       .limit(100),
   );
-  const res = await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+  type Candidate = VenuePoint & { canonicalVenueId: string | null };
+  const res = await batchChunked<Candidate[]>(db, stmts);
 
   const writes: { id: string; canonicalVenueId: string }[] = [];
   locatable.forEach((t, idx) => {
     const target = { id: t.id, name: t.row.name, lat: t.row.lat, lng: t.row.lng, city: t.row.city };
-    const match = bestVenueMatch(target, res[idx] as VenuePoint[]);
+    const candidates = res[idx] ?? [];
+    const match = bestVenueMatch(target, candidates);
     // Follow the match's own canonical so a third listing of the same room joins
     // the same cluster instead of starting a chain.
-    const resolved = match
-      ? (res[idx].find((c) => c.id === match.id)?.canonicalVenueId ?? match.id)
-      : t.id;
+    const resolved = match ? (candidates.find((c) => c.id === match.id)?.canonicalVenueId ?? match.id) : t.id;
     canonical.set(t.key, resolved);
-    writes.push({ id: t.id, canonicalVenueId: resolved });
+    // The row already points here for anything that didn't cluster (migration
+    // 0002 seeded canonical_venue_id = id), so only a change is worth a write.
+    const current = candidates.find((c) => c.id === t.id)?.canonicalVenueId;
+    if (resolved !== current) writes.push({ id: t.id, canonicalVenueId: resolved });
   });
 
-  if (writes.length) {
-    const updates = writes.map((w) =>
-      db.update(venues).set({ canonicalVenueId: w.canonicalVenueId }).where(eq(venues.id, w.id)),
-    );
-    await db.batch(updates as [(typeof updates)[number], ...(typeof updates)[number][]]);
-  }
+  await inBatches(
+    db,
+    writes.map((w) => db.update(venues).set({ canonicalVenueId: w.canonicalVenueId }).where(eq(venues.id, w.id))),
+  );
   return canonical;
 }
 
@@ -846,4 +965,167 @@ export async function ensureArtistRecord(env: Env, a: IncomingArtist) {
   const row = await ensureArtist(db, a);
   if (!row) return null;
   return artistById(db, row.id);
+}
+
+/**
+ * Find or create an artist we only know by name — a support act off a lineup,
+ * with no Spotify or Ticketmaster id to key on. Matching is on the trimmed,
+ * case-folded name: the crawl adds thousands of these, and inserting blind would
+ * multiply the duplicate-artist rows we already have rather than expand coverage.
+ */
+export async function ensureArtistByName(
+  db: DB,
+  name: string,
+): Promise<{ id: string; created: boolean } | null> {
+  const clean = name.trim();
+  if (!clean) return null;
+  const existing = await db
+    .select({ id: artists.id })
+    .from(artists)
+    .where(sql`lower(trim(${artists.name})) = ${clean.toLowerCase()}`)
+    .limit(1)
+    .get();
+  if (existing) return { id: existing.id, created: false };
+
+  const id = uuid();
+  await db.insert(artists).values({ id, name: clean }).onConflictDoNothing();
+  return { id, created: true };
+}
+
+/** Note that a client asked about these artists; the crawl checks them sooner. */
+export async function touchArtistsRequested(db: DB, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await db.update(artists).set({ lastRequestedAt: nowIso() }).where(inArray(artists.id, ids));
+}
+
+// --- Crawl queue ------------------------------------------------------------
+
+export type DueArtist = {
+  artistId: string;
+  source: string;
+  sourceKey: string | null;
+  state: string;
+  failCount: number;
+  name: string;
+  bandsintownId: string | null;
+  bandsintownName: string | null;
+  lastRequestedAt: string | null;
+};
+
+/** Artists whose next check is in the past, longest-waiting first. */
+export async function dueArtistSources(db: DB, source: string, limit: number): Promise<DueArtist[]> {
+  return db
+    .select({
+      artistId: artistSources.artistId,
+      source: artistSources.source,
+      sourceKey: artistSources.sourceKey,
+      state: artistSources.state,
+      failCount: artistSources.failCount,
+      name: artists.name,
+      bandsintownId: artists.bandsintownId,
+      bandsintownName: artists.bandsintownName,
+      lastRequestedAt: artists.lastRequestedAt,
+    })
+    .from(artistSources)
+    .innerJoin(artists, eq(artists.id, artistSources.artistId))
+    .where(
+      and(
+        eq(artistSources.source, source),
+        inArray(artistSources.state, ['active', 'discovered', 'not_found']),
+        lte(artistSources.nextCheckAt, nowIso()),
+      ),
+    )
+    .orderBy(artistSources.nextCheckAt)
+    .limit(limit);
+}
+
+/**
+ * Put artists on the queue without disturbing rows already there. `nextCheckAt`
+ * defaults to the column default (1970, i.e. due immediately); pass a later time
+ * to queue an artist behind the ones we already care about — the queue is drained
+ * in `next_check_at` order, so that timestamp *is* the priority.
+ */
+export async function enqueueArtistSources(
+  db: DB,
+  rows: {
+    artistId: string;
+    source: string;
+    sourceKey?: string | null;
+    state?: string;
+    nextCheckAt?: string;
+  }[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  await inBatches(
+    db,
+    rows.map((r) =>
+      db
+        .insert(artistSources)
+        .values({
+          artistId: r.artistId,
+          source: r.source,
+          sourceKey: r.sourceKey ?? null,
+          state: r.state ?? 'active',
+          ...(r.nextCheckAt ? { nextCheckAt: r.nextCheckAt } : {}),
+        })
+        .onConflictDoNothing(),
+    ),
+  );
+}
+
+/** Which of these artists have a show coming up (drives the crawl interval)? */
+export async function artistsWithUpcoming(db: DB, ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await db
+    .selectDistinct({ artistId: events.artistId })
+    .from(events)
+    .where(and(inArray(events.artistId, ids), gte(events.startsAt, nowIso())));
+  return new Set(rows.map((r) => r.artistId));
+}
+
+export type CrawlOutcome = {
+  artistId: string;
+  source: string;
+  /** The key that worked, when the lookup succeeded with a different one. */
+  sourceKey?: string | null;
+  state: string;
+  ok: boolean;
+  failCount: number;
+  nextCheckAt: string;
+};
+
+/** Record the result of one crawl attempt and when to try again. */
+export async function recordCrawlOutcomes(db: DB, outcomes: CrawlOutcome[]): Promise<void> {
+  if (outcomes.length === 0) return;
+  const now = nowIso();
+  await inBatches(
+    db,
+    outcomes.map((o) =>
+      db
+        .update(artistSources)
+        .set({
+          state: o.state,
+          failCount: o.failCount,
+          lastCheckedAt: now,
+          nextCheckAt: o.nextCheckAt,
+          ...(o.ok ? { lastOkAt: now } : {}),
+          ...(o.sourceKey !== undefined ? { sourceKey: o.sourceKey } : {}),
+        })
+        .where(and(eq(artistSources.artistId, o.artistId), eq(artistSources.source, o.source))),
+    ),
+  );
+}
+
+/** Queue depth by state, plus how many are due — the numbers /health reports. */
+export async function crawlQueueStats(db: DB, source: string) {
+  const rows = await db
+    .select({
+      state: artistSources.state,
+      total: sql<number>`count(*)`,
+      due: sql<number>`sum(case when ${artistSources.nextCheckAt} <= ${nowIso()} then 1 else 0 end)`,
+    })
+    .from(artistSources)
+    .where(eq(artistSources.source, source))
+    .groupBy(artistSources.state);
+  return rows;
 }

@@ -1,17 +1,34 @@
 import { eq, sql } from 'drizzle-orm';
 
 import {
+  artistsWithUpcoming,
   bestTmImage,
+  dueArtistSources,
+  enqueueArtistSources,
   ensureArtist,
+  ensureArtistByName,
   nowIso,
   persist,
+  recordCrawlOutcomes,
+  touchArtistsRequested,
   upsertTmArtist,
+  type CrawlOutcome,
   type EventInput,
   type IncomingArtist,
   type VenueRow,
 } from './data';
+import {
+  backoffHours,
+  frontierNames,
+  lookupKeys,
+  nextCheckAt,
+  NOT_FOUND_HOURS,
+  TIER_HOURS,
+  tierFor,
+} from './crawl';
 import { getDb, type DB } from './db';
 import { guessUtcOffsetHours } from './dedupe';
+import { utcMsFromLocal, zoneFor } from './timezone';
 import type { Env } from './env';
 import { artists, discoveryLog, events, venues } from './schema';
 
@@ -156,15 +173,21 @@ const HAS_ZONE = /([Zz]|[+-]\d{2}:?\d{2})$/;
 /** `2026-08-06T16:30:00` — the shape Bandsintown sends, with no zone at all. */
 const NAIVE = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/;
 
+/** Where a naive Bandsintown timestamp happened, as far as we can tell. */
+export type BitPlace = { lng: number | null; region?: string | null; country?: string | null };
+
 /**
  * Bandsintown publishes venue-local time with no offset ("2026-08-06T16:30:00"),
  * so taking it as UTC put every show hours out — a 20:00 gig in San Francisco was
- * being stored, and displayed, as 20:00Z (1pm local). The venue's longitude gives
- * the standard offset; that can be a DST hour off, which is worth it against
- * being eight hours off, and a Ticketmaster listing of the same show overwrites
- * it with a real UTC time when we have one.
+ * being stored, and displayed, as 20:00Z (1pm local).
+ *
+ * The venue's state/province gives a real IANA zone, and therefore the right
+ * offset for that date including daylight saving (see `timezone.ts`). Where we
+ * can't name a zone, longitude gives the standard offset, which is an hour out
+ * under DST but eight hours better than nothing — and a Ticketmaster listing of
+ * the same show overwrites it with a true UTC time when we have one.
  */
-export function bitUtc(datetime: unknown, lng: number | null): string | null {
+export function bitUtc(datetime: unknown, place: BitPlace | number | null): string | null {
   if (typeof datetime !== 'string') return null;
   const raw = datetime.trim();
   if (raw === '') return null;
@@ -182,7 +205,11 @@ export function bitUtc(datetime: unknown, lng: number | null): string | null {
   const [, y, mo, d, h, min, s] = m;
   const local = Date.UTC(+y, +mo - 1, +d, +h, +min, s ? +s : 0);
   if (Number.isNaN(local)) return null;
-  return iso(new Date(local - guessUtcOffsetHours(lng) * 3_600_000));
+
+  const where: BitPlace = typeof place === 'number' || place === null ? { lng: place } : place;
+  const zone = zoneFor(where.region, where.country);
+  const exact = zone ? utcMsFromLocal(local, zone) : null;
+  return iso(new Date(exact ?? local - guessUtcOffsetHours(where.lng) * 3_600_000));
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 19) + 'Z';
@@ -191,9 +218,8 @@ const iso = (d: Date) => d.toISOString().slice(0, 19) + 'Z';
  *  unknown artist and one with no upcoming shows both come back empty), so we
  *  use the stored id whenever a previous run learned it. */
 function bitKey(artist: BitArtist): string {
-  return artist.bandsintown_id
-    ? `id_${encodeURIComponent(artist.bandsintown_id)}`
-    : encodeURIComponent(artist.bandsintown_name ?? artist.name);
+  // Returned unencoded — `bitFetchByKeys` owns the URL encoding.
+  return artist.bandsintown_id ? `id_${artist.bandsintown_id}` : (artist.bandsintown_name ?? artist.name);
 }
 
 export type BitArtist = {
@@ -209,13 +235,39 @@ export type BitArtist = {
  * the unit the crawl is built from.
  */
 async function bitFetchEvents(env: Env, artist: BitArtist): Promise<any[]> {
-  if (!env.BANDSINTOWN_APP_ID) return [];
-  const res = await fetchWithTimeout(
-    `https://rest.bandsintown.com/artists/${bitKey(artist)}/events?app_id=${env.BANDSINTOWN_APP_ID}&date=upcoming`,
-  );
-  if (!res.ok) return [];
-  const raw = await res.json();
-  return Array.isArray(raw) ? raw : [];
+  return (await bitFetchByKeys(env, [bitKey(artist)])).events;
+}
+
+/** Result of a Bandsintown lookup: `found` separates "no such artist" from
+ *  "this artist has nothing coming up", which the response body does not. */
+export type BitLookup = { events: any[]; key: string | null; found: boolean };
+
+/**
+ * Try each key in turn until Bandsintown recognises one. Their name lookup
+ * answers on their spelling only ("MJ Lenderman and the Wind" → NotFound), so
+ * the crawl passes several candidates (see `lookupKeys`) and remembers which one
+ * worked. Keys are already encoded here, not by the caller.
+ */
+async function bitFetchByKeys(env: Env, keys: string[], maxAttempts = 3): Promise<BitLookup> {
+  if (!env.BANDSINTOWN_APP_ID) return { events: [], key: null, found: false };
+  let found: string | null = null;
+  for (const key of keys.slice(0, maxAttempts)) {
+    const res = await fetchWithTimeout(
+      `https://rest.bandsintown.com/artists/${encodeURIComponent(key)}/events` +
+        `?app_id=${encodeURIComponent(env.BANDSINTOWN_APP_ID)}&date=upcoming`,
+    );
+    // 403 is what the open tier returns for an unusable app_id, which is a
+    // configuration problem rather than a fact about this artist.
+    if (res.status === 403) throw new Error('bandsintown rejected the app_id (403)');
+    if (!res.ok) continue;
+    const raw = await res.json();
+    if (!Array.isArray(raw)) continue;
+    // A 200 means the artist exists; an empty array only means no dates yet, so
+    // keep the key but carry on in case another spelling has the listings.
+    found ??= key;
+    if (raw.length > 0) return { events: raw, key, found: true };
+  }
+  return { events: [], key: found, found: found !== null };
 }
 
 /** Pure mapping, so it can be tested against a recorded payload. */
@@ -223,10 +275,11 @@ export function bitToEventInputs(artist: BitArtist, bitEvents: any[]): EventInpu
   return bitEvents.flatMap((e: any) => {
     if (!e.datetime || !e.id) return [];
     const { lat, lng } = wkt(e.venue?.longitude, e.venue?.latitude);
+    const place: BitPlace = { lng, region: e.venue?.region ?? null, country: e.venue?.country ?? null };
     // One unparseable datetime would otherwise throw and lose the whole artist.
-    const startsAt = bitUtc(e.datetime, lng);
+    const startsAt = bitUtc(e.datetime, place);
     if (!startsAt) return [];
-    const endsAt = bitUtc(e.ends_at, lng);
+    const endsAt = bitUtc(e.ends_at, place);
     return [
       {
         source: 'bandsintown',
@@ -316,6 +369,181 @@ export async function backfillBandsintown(
   return { artists: rows.length, ingested: total, per_artist: per };
 }
 
+// --- Scheduled crawl --------------------------------------------------------
+
+/**
+ * Artists per scheduled run. Every one is at least one upstream request plus a
+ * few D1 calls, and a Worker invocation has a subrequest and CPU budget it shares
+ * with everything else — so the queue is drained in small bites, often, rather
+ * than in one long pass. At 8 per run and a 15-minute cron this is ~770 artist
+ * checks a day.
+ */
+const CRAWL_BATCH = 8;
+
+/** How many lineup names one crawl may add to the frontier. Every name is a
+ *  write, and the D1 free tier gives 100k a day. */
+const FRONTIER_PER_RUN = 40;
+
+export type CrawlResult = {
+  source: 'bandsintown';
+  checked: number;
+  ingested: number;
+  found: number;
+  not_found: number;
+  failed: number;
+  frontier_added: number;
+  skipped?: string;
+};
+
+/**
+ * One pass of the artist crawl: take the artists whose next check is due, ask
+ * Bandsintown about each, and reschedule them by how much attention they
+ * deserve. Called by the Cron Trigger and by `POST /api/admin/crawl`.
+ *
+ * Artists are visited in series on purpose — this shares a Worker's subrequest
+ * and CPU budget with everything else, and a stampede of parallel fetches to one
+ * upstream is how an open API tier gets closed.
+ */
+export async function crawlBandsintown(env: Env, limit = CRAWL_BATCH): Promise<CrawlResult> {
+  const result: CrawlResult = {
+    source: 'bandsintown',
+    checked: 0,
+    ingested: 0,
+    found: 0,
+    not_found: 0,
+    failed: 0,
+    frontier_added: 0,
+  };
+  if (!env.BANDSINTOWN_APP_ID) return { ...result, skipped: 'BANDSINTOWN_APP_ID not set' };
+
+  const db = getDb(env.DB);
+  const due = await dueArtistSources(db, 'bandsintown', limit);
+  if (due.length === 0) return result;
+
+  const upcoming = await artistsWithUpcoming(
+    db,
+    due.map((d) => d.artistId),
+  );
+  const outcomes: CrawlOutcome[] = [];
+  const frontier: string[] = [];
+
+  for (const row of due) {
+    result.checked++;
+    const artist: BitArtist = {
+      id: row.artistId,
+      name: row.name,
+      bandsintown_name: row.bandsintownName,
+      bandsintown_id: row.bandsintownId,
+    };
+    const keys = lookupKeys({
+      name: row.name,
+      bandsintownId: row.bandsintownId,
+      bandsintownName: row.bandsintownName,
+      sourceKey: row.sourceKey,
+    });
+
+    try {
+      const lookup = await bitFetchByKeys(env, keys);
+      if (!lookup.found) {
+        result.not_found++;
+        outcomes.push({
+          artistId: row.artistId,
+          source: 'bandsintown',
+          state: 'not_found',
+          ok: false,
+          failCount: 0, // Not a failure — upstream answered, it just has nobody.
+          nextCheckAt: nextCheckAt(NOT_FOUND_HOURS),
+        });
+        continue;
+      }
+
+      result.found++;
+      if (lookup.events.length > 0) {
+        await rememberBitIdentity(db, row.artistId, lookup.events[0]);
+        const inputs = bitToEventInputs(artist, lookup.events);
+        result.ingested += (await persist(db, inputs)).length;
+        for (const input of inputs) {
+          if (frontier.length >= FRONTIER_PER_RUN) break;
+          frontier.push(...frontierNames(input.lineup, row.name));
+        }
+      }
+
+      // A lineup name that answers upstream is a real artist, so it graduates
+      // out of the frontier and onto the normal schedule.
+      const hours = TIER_HOURS[tierFor({ lastRequestedAt: row.lastRequestedAt, hasUpcoming: upcoming.has(row.artistId) || lookup.events.length > 0 })];
+      outcomes.push({
+        artistId: row.artistId,
+        source: 'bandsintown',
+        sourceKey: lookup.key,
+        state: 'active',
+        ok: true,
+        failCount: 0,
+        nextCheckAt: nextCheckAt(hours),
+      });
+    } catch (err) {
+      result.failed++;
+      const failCount = row.failCount + 1;
+      console.error(`crawl failed for ${row.name} (${failCount}):`, err);
+      outcomes.push({
+        artistId: row.artistId,
+        source: 'bandsintown',
+        state: row.state === 'discovered' ? 'discovered' : 'active',
+        ok: false,
+        failCount,
+        nextCheckAt: nextCheckAt(backoffHours(failCount)),
+      });
+    }
+  }
+
+  await recordCrawlOutcomes(db, outcomes);
+  result.frontier_added = await addFrontierArtists(db, frontier.slice(0, FRONTIER_PER_RUN));
+  return result;
+}
+
+/**
+ * Support acts become artists in their own right, queued at the lowest priority.
+ * This is the path from the artists a client happened to ask about to the whole
+ * touring circuit, and it costs no extra upstream call — the names arrive inside
+ * the events we already fetched.
+ */
+async function addFrontierArtists(db: DB, names: string[]): Promise<number> {
+  const queue: { artistId: string; source: string; state: string; nextCheckAt: string }[] = [];
+  let added = 0;
+  for (const name of names) {
+    const artist = await ensureArtistByName(db, name);
+    if (!artist) continue;
+    if (artist.created) added++;
+    queue.push({
+      artistId: artist.id,
+      source: 'bandsintown',
+      state: artist.created ? 'discovered' : 'active',
+      // Due now, but behind every artist that has never been checked (whose
+      // next_check_at is still the 1970 default) — a support act we've only seen
+      // a name for is the cheapest thing in the queue to defer.
+      nextCheckAt: nowIso(),
+    });
+  }
+  await enqueueArtistSources(db, queue);
+  return added;
+}
+
+/** Put every artist not already queued onto the crawl queue for a source. */
+export async function backfillCrawlQueue(env: Env, source = 'bandsintown'): Promise<{ queued: number }> {
+  const db = getDb(env.DB);
+  const rows = await db
+    .select({ id: artists.id, bandsintownId: artists.bandsintownId, bandsintownName: artists.bandsintownName })
+    .from(artists);
+  await enqueueArtistSources(
+    db,
+    rows.map((r) => ({
+      artistId: r.id,
+      source,
+      sourceKey: r.bandsintownId ? `id_${r.bandsintownId}` : r.bandsintownName,
+    })),
+  );
+  return { queued: rows.length };
+}
+
 // --- Ingestion orchestrators ------------------------------------------------
 
 export async function discover(env: Env, lat: number, lng: number, radius: number) {
@@ -349,6 +577,9 @@ export async function discover(env: Env, lat: number, lng: number, radius: numbe
 export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {
   const db = getDb(env.DB);
   const newIds: string[] = [];
+  // Someone is looking at these artists right now, which is what earns them the
+  // crawl's short interval (see `tierFor`).
+  const touched: string[] = [];
   for (const a of incoming.slice(0, 25)) {
     if (!a?.name) continue;
     try {
@@ -390,10 +621,22 @@ export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {
         inputs.push(...bitToEventInputs(bitArtist, bitRaw));
       }
       newIds.push(...(await persist(db, inputs)));
+      touched.push(targetId);
     } catch (err) {
       console.error(`refresh failed for ${a.name}: ${err}`);
     }
   }
+  await touchArtistsRequested(db, touched);
+  // We just fetched their Bandsintown dates, so the crawl needn't repeat that
+  // immediately — one hot interval from now is soon enough.
+  await enqueueArtistSources(
+    db,
+    touched.map((artistId) => ({
+      artistId,
+      source: 'bandsintown',
+      nextCheckAt: nextCheckAt(TIER_HOURS.hot),
+    })),
+  );
   return { ingested: newIds.length };
 }
 
