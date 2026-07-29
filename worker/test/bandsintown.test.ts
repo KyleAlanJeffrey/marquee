@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { bitToEventInputs, type BitArtist } from '../src/sources';
+import { bitToEventInputs, bitUtc, type BitArtist } from '../src/sources';
 import fixture from './fixtures/bandsintown-events.json';
 
 // Recorded from rest.bandsintown.com (Wednesday, upcoming) so the mapping is
@@ -12,6 +12,25 @@ const artist: BitArtist = {
   bandsintown_name: null,
   bandsintown_id: '15495936',
 };
+
+describe('bitUtc', () => {
+  it('reads a bare datetime as venue-local, not UTC', () => {
+    // 20:00 in San Francisco is 04:00Z the next day — storing "20:00Z" showed
+    // this gig at 1pm.
+    expect(bitUtc('2026-08-06T20:00:00', -122.4194)).toBe('2026-08-07T04:00:00Z');
+  });
+
+  it('leaves a timestamp that already carries a zone alone', () => {
+    expect(bitUtc('2026-08-06T20:00:00Z', -122.4194)).toBe('2026-08-06T20:00:00Z');
+    expect(bitUtc('2026-08-06T20:00:00+02:00', 13.4)).toBe('2026-08-06T18:00:00Z');
+  });
+
+  it('returns null for the values the API actually sends for "none"', () => {
+    expect(bitUtc('', -122)).toBeNull();
+    expect(bitUtc(null, -122)).toBeNull();
+    expect(bitUtc('not-a-date', -122)).toBeNull();
+  });
+});
 
 describe('bitToEventInputs', () => {
   const inputs = bitToEventInputs(artist, fixture as unknown[]);

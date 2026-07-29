@@ -37,10 +37,13 @@ export const venues = sqliteTable(
     country: text('country'),
     lat: real('lat'),
     lng: real('lng'),
+    /** The venue row representing this physical location (itself, if first). */
+    canonicalVenueId: text('canonical_venue_id'),
   },
   (t) => ({
     sourceUnique: unique().on(t.source, t.sourceVenueId),
     latlngIdx: index('venues_latlng_idx').on(t.lat, t.lng),
+    canonicalIdx: index('venues_canonical_idx').on(t.canonicalVenueId),
   }),
 );
 
@@ -62,12 +65,15 @@ export const events = sqliteTable(
     lineup: text('lineup'), // JSON array of artist names (Bandsintown)
     source: text('source').notNull(),
     sourceEventId: text('source_event_id').notNull(),
+    /** JSON map of every upstream that describes this show: {source: id}. */
+    sources: text('sources'),
     createdAt: createdAt(),
   },
   (t) => ({
     sourceUnique: unique().on(t.source, t.sourceEventId),
     startsAtIdx: index('events_starts_at_idx').on(t.startsAt),
     artistIdx: index('events_artist_idx').on(t.artistId, t.startsAt),
+    dedupeIdx: index('events_dedupe_idx').on(t.venueId, t.artistId, t.startsAt),
   }),
 );
 

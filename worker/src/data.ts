@@ -1,6 +1,14 @@
-import { and, between, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, between, eq, gte, lte, or, sql } from 'drizzle-orm';
 
 import { getDb, type DB } from './db';
+import {
+  bestVenueMatch,
+  hoursApart,
+  mergeField,
+  parseSources,
+  SHOW_MATCH_HOURS,
+  type VenuePoint,
+} from './dedupe';
 import type { Env } from './env';
 import { artists, events, venues } from './schema';
 
@@ -9,6 +17,7 @@ import { artists, events, venues } from './schema';
 export const uuid = () => crypto.randomUUID();
 export const nowIso = () => new Date().toISOString().slice(0, 19) + 'Z';
 export const isoInDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 19) + 'Z';
+export const isoAt = (ms: number) => new Date(ms).toISOString().slice(0, 19) + 'Z';
 
 export function parseGenres(text: unknown): string[] {
   if (typeof text !== 'string') return [];
@@ -120,8 +129,6 @@ export async function nearbyEvents(
         between(venues.lng, lng - lngDelta, lng + lngDelta),
       ),
     )
-    // Collapse the same show listed under multiple TM ids (VIP/packages/etc.).
-    .groupBy(events.artistId, events.venueId, events.startsAt)
     .orderBy(events.startsAt)
     .limit(limit)
     .offset(offset);
@@ -175,7 +182,6 @@ export async function artistEvents(db: DB, id: string) {
     .from(events)
     .leftJoin(venues, eq(venues.id, events.venueId))
     .where(and(eq(events.artistId, id), gte(events.startsAt, nowIso())))
-    .groupBy(events.artistId, events.venueId, events.startsAt)
     .orderBy(events.startsAt);
 }
 
@@ -260,7 +266,6 @@ export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))
     .where(and(eq(events.venueId, id), gte(events.startsAt, nowIso())))
-    .groupBy(events.artistId, events.venueId, events.startsAt)
     .orderBy(events.startsAt)
     .limit(limit)
     .offset(offset);
@@ -316,17 +321,37 @@ export async function persist(db: DB, inputs: EventInput[]): Promise<string[]> {
     });
   }
 
-  // Events: insert, or refresh the fields that move (a show sells out, a date
-  // shifts, a lineup gets filled in). `coalesce(excluded.x, x)` so a source that
-  // simply doesn't carry a field can't blank out one that another source did.
-  const runStart = nowIso();
-  const stmts = inputs.map((i) =>
-    db
-      .insert(events)
-      .values({
+  // Point each venue at the row that represents its physical location, so a room
+  // Ticketmaster and Bandsintown name differently still holds one set of shows.
+  const canonicalByKey = await canonicalizeVenues(db, venueKeys, venueRows, venueIdByKey);
+
+  const venueFor = (i: EventInput) =>
+    i.venue ? canonicalByKey.get(`${i.venue.source}:${i.venue.source_venue_id}`) ?? null : null;
+
+  // Is this show already on file — from this source, or from another one? A
+  // Ticketmaster listing and a Bandsintown listing of the same night must end up
+  // as one row, or the feed shows the gig twice.
+  const found = await findExistingShows(
+    db,
+    inputs.map((i) => ({
+      source: i.source,
+      sourceEventId: i.source_event_id,
+      artistId: i.artist_id,
+      venueId: venueFor(i),
+      startsAt: i.starts_at,
+    })),
+  );
+
+  const inserts: (typeof events.$inferInsert)[] = [];
+  const updates: { id: string; row: ExistingShow; input: EventInput; venueId: string | null }[] = [];
+  inputs.forEach((i, idx) => {
+    const existing = found[idx];
+    if (existing) updates.push({ id: existing.id, row: existing, input: i, venueId: venueFor(i) });
+    else
+      inserts.push({
         id: uuid(),
         artistId: i.artist_id,
-        venueId: i.venue ? venueIdByKey.get(`${i.venue.source}:${i.venue.source_venue_id}`) ?? null : null,
+        venueId: venueFor(i),
         name: i.name,
         startsAt: i.starts_at,
         endsAt: i.ends_at ?? null,
@@ -337,32 +362,354 @@ export async function persist(db: DB, inputs: EventInput[]): Promise<string[]> {
         lineup: i.lineup?.length ? JSON.stringify(i.lineup) : null,
         source: i.source,
         sourceEventId: i.source_event_id,
+        sources: JSON.stringify({ [i.source]: i.source_event_id }),
+      });
+  });
+
+  const newIds: string[] = [];
+  if (inserts.length) {
+    const stmts = inserts.map((values) =>
+      db
+        .insert(events)
+        .values(values)
+        // Two listings in the same batch can still collide on the source key.
+        .onConflictDoNothing({ target: [events.source, events.sourceEventId] })
+        .returning({ id: events.id }),
+    );
+    const res = await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+    for (const rows of res) if (rows[0]?.id) newIds.push(rows[0].id);
+  }
+
+  if (updates.length) {
+    const stmts = updates.map(({ id, row, input, venueId }) =>
+      db.update(events).set(mergeShow(row, input, venueId)).where(eq(events.id, id)),
+    );
+    await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+  }
+
+  return newIds;
+}
+
+type ExistingShow = {
+  id: string;
+  source: string;
+  sourceEventId: string;
+  sources: string | null;
+  name: string;
+  startsAt: string;
+  endsAt: string | null;
+  ticketUrl: string | null;
+  priceFrom: number | null;
+  soldOut: boolean | null;
+  isFree: boolean | null;
+  lineup: string | null;
+  venueId: string | null;
+};
+
+/**
+ * Merge an incoming listing into the show we already have. Field ownership lives
+ * in `dedupe.ts`; the row's `source` stands in for per-field provenance, which is
+ * a simplification but the right one for two sources with clear specialities.
+ */
+function mergeShow(row: ExistingShow, i: EventInput, venueId: string | null) {
+  const from = i.source;
+  const to = row.source;
+  const pick = <T>(field: string, incoming: T | null | undefined, existing: T | null | undefined) =>
+    mergeField(field, incoming, existing, from, to);
+
+  return {
+    name: pick('name', i.name, row.name) ?? row.name,
+    startsAt: pick('starts_at', i.starts_at, row.startsAt) ?? row.startsAt,
+    endsAt: pick('ends_at', i.ends_at ?? null, row.endsAt),
+    ticketUrl: pick('ticket_url', i.ticket_url, row.ticketUrl),
+    priceFrom: pick('price_from', i.price_from, row.priceFrom),
+    soldOut: pick('sold_out', i.sold_out ?? null, row.soldOut),
+    isFree: pick('is_free', i.is_free ?? null, row.isFree),
+    lineup: pick('lineup', i.lineup?.length ? JSON.stringify(i.lineup) : null, row.lineup),
+    // Never drop a venue we already resolved for a listing that lacks one.
+    venueId: venueId ?? row.venueId,
+    // Seed with the row's own id: rows written before `sources` existed have it
+    // null, and a merge must not leave the kept row's provenance out.
+    sources: JSON.stringify({
+      [row.source]: row.sourceEventId,
+      ...parseSources(row.sources),
+      [i.source]: i.source_event_id,
+    }),
+  };
+}
+
+/**
+ * For each incoming listing, the show already on file, or null. Matched by the
+ * source's own id first (cheap and exact), then by the ids recorded in `sources`
+ * from an earlier merge, then by venue + artist + a time window — Bandsintown
+ * publishes venue-local times, so "same show" can't mean "same timestamp".
+ */
+async function findExistingShows(
+  db: DB,
+  keys: { source: string; sourceEventId: string; artistId: string; venueId: string | null; startsAt: string }[],
+): Promise<(ExistingShow | null)[]> {
+  if (keys.length === 0) return [];
+  const cols = {
+    id: events.id,
+    source: events.source,
+    sourceEventId: events.sourceEventId,
+    sources: events.sources,
+    name: events.name,
+    startsAt: events.startsAt,
+    endsAt: events.endsAt,
+    ticketUrl: events.ticketUrl,
+    priceFrom: events.priceFrom,
+    soldOut: events.soldOut,
+    isFree: events.isFree,
+    lineup: events.lineup,
+    venueId: events.venueId,
+  };
+
+  const stmts = keys.map((k) => {
+    const clauses = [
+      and(eq(events.source, k.source), eq(events.sourceEventId, k.sourceEventId)),
+      sql`json_extract(${events.sources}, ${'$."' + k.source + '"'}) = ${k.sourceEventId}`,
+    ];
+    const t = new Date(k.startsAt).getTime();
+    if (k.venueId && !Number.isNaN(t)) {
+      const window = SHOW_MATCH_HOURS * 3_600_000;
+      clauses.push(
+        and(
+          eq(events.venueId, k.venueId),
+          eq(events.artistId, k.artistId),
+          between(events.startsAt, isoAt(t - window), isoAt(t + window)),
+        ),
+      );
+    }
+    // Exact-id matches sort first so a re-ingest updates its own row.
+    return db
+      .select(cols)
+      .from(events)
+      .where(or(...clauses))
+      .orderBy(sql`case when ${events.source} = ${k.source} then 0 else 1 end`)
+      .limit(1);
+  });
+
+  const res = await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+  return res.map((rows) => (rows[0] as ExistingShow | undefined) ?? null);
+}
+
+/**
+ * Cluster the whole venue table, repoint events at canonical venues, and merge
+ * shows that were stored twice before ingestion knew how to match them. Safe to
+ * re-run; returns what it changed.
+ */
+export async function repairDuplicates(db: DB): Promise<{
+  venues_clustered: number;
+  events_repointed: number;
+  shows_merged: number;
+  provenance_filled: number;
+}> {
+  // Invariant: every row records its own upstream id in `sources`. Rows written
+  // before the column existed don't, which would make a later merge lose track of
+  // where the surviving row came from.
+  const filled = await db.run(sql`
+    update events
+       set sources = json_set(coalesce(sources, '{}'), '$.' || source, source_event_id)
+     where sources is null
+        or json_extract(sources, '$.' || source) is null
+  `);
+
+  const all = await db
+    .select({ id: venues.id, name: venues.name, lat: venues.lat, lng: venues.lng, city: venues.city })
+    .from(venues);
+
+  // Deterministic order (by id) so the same row wins the cluster on every run.
+  const sorted = [...all].sort((a, b) => a.id.localeCompare(b.id));
+  const canonicalOf = new Map<string, string>();
+  const accepted: VenuePoint[] = [];
+  for (const v of sorted) {
+    const match = bestVenueMatch(v, accepted);
+    const resolved = match ? canonicalOf.get(match.id) ?? match.id : v.id;
+    canonicalOf.set(v.id, resolved);
+    if (resolved === v.id) accepted.push(v);
+  }
+
+  const clustered = [...canonicalOf.entries()].filter(([id, canonical]) => id !== canonical);
+  await inBatches(
+    db,
+    [...canonicalOf.entries()].map(([id, canonical]) =>
+      db.update(venues).set({ canonicalVenueId: canonical }).where(eq(venues.id, id)),
+    ),
+  );
+
+  // Events follow their venue's canonical row.
+  let repointed = 0;
+  await inBatches(
+    db,
+    clustered.map(([id, canonical]) => {
+      repointed++;
+      return db.update(events).set({ venueId: canonical }).where(eq(events.venueId, id));
+    }),
+  );
+
+  // Now that same-place shows share a venue id, collapse the duplicates.
+  const rows = await db
+    .select({
+      id: events.id,
+      artistId: events.artistId,
+      venueId: events.venueId,
+      startsAt: events.startsAt,
+      source: events.source,
+      sources: events.sources,
+      sourceEventId: events.sourceEventId,
+      name: events.name,
+      endsAt: events.endsAt,
+      ticketUrl: events.ticketUrl,
+      priceFrom: events.priceFrom,
+      soldOut: events.soldOut,
+      isFree: events.isFree,
+      lineup: events.lineup,
+      createdAt: events.createdAt,
+    })
+    .from(events)
+    .where(gte(events.startsAt, nowIso()))
+    .orderBy(events.artistId, events.venueId, events.startsAt);
+
+  const merges: { keep: (typeof rows)[number]; drop: (typeof rows)[number] }[] = [];
+  const dropped = new Set<string>();
+  for (let i = 0; i < rows.length; i++) {
+    if (dropped.has(rows[i].id)) continue;
+    for (let j = i + 1; j < rows.length; j++) {
+      const a = rows[i];
+      const b = rows[j];
+      if (a.artistId !== b.artistId || a.venueId !== b.venueId) break; // ordered
+      if (dropped.has(b.id)) continue;
+      if (hoursApart(a.startsAt, b.startsAt) > SHOW_MATCH_HOURS) break;
+      // Keep the older row so anything already linking to it still resolves.
+      merges.push({ keep: a, drop: b });
+      dropped.add(b.id);
+    }
+  }
+
+  await inBatches(
+    db,
+    merges.flatMap(({ keep, drop }) => [
+      db
+        .update(events)
+        .set(
+          mergeShow(
+            keep as unknown as ExistingShow,
+            {
+              source: drop.source,
+              source_event_id: drop.sourceEventId,
+              name: drop.name,
+              starts_at: drop.startsAt,
+              ends_at: drop.endsAt,
+              ticket_url: drop.ticketUrl,
+              price_from: drop.priceFrom,
+              sold_out: drop.soldOut,
+              is_free: drop.isFree,
+              lineup: drop.lineup ? (JSON.parse(drop.lineup) as string[]) : null,
+              artist_id: drop.artistId,
+              venue: null,
+            },
+            keep.venueId,
+          ),
+        )
+        .where(eq(events.id, keep.id)),
+      db.delete(events).where(eq(events.id, drop.id)),
+    ]),
+  );
+
+  return {
+    venues_clustered: clustered.length,
+    events_repointed: repointed,
+    shows_merged: merges.length,
+    provenance_filled: filled.meta?.changes ?? 0,
+  };
+}
+
+/** D1 caps how much one batch can carry; keep each round modest. */
+ 
+async function inBatches(db: DB, stmts: any[], size = 50): Promise<void> {
+  for (let i = 0; i < stmts.length; i += size) {
+    const chunk = stmts.slice(i, i + size);
+     
+    if (chunk.length) await db.batch(chunk as [any, ...any[]]);
+  }
+}
+
+/**
+ * Give every venue in this batch a canonical row: an existing venue at the same
+ * place if there is one, otherwise itself.
+ */
+async function canonicalizeVenues(
+  db: DB,
+  venueKeys: string[],
+  venueRows: Map<string, VenueRow>,
+  venueIdByKey: Map<string, string>,
+): Promise<Map<string, string>> {
+  const canonical = new Map<string, string>();
+  if (venueKeys.length === 0) return canonical;
+
+  // Narrow box for the distance-based match, plus a town-wide box for the
+  // name-based one (Ticketmaster coordinates can sit kilometres off the door).
+  const DEG = 0.006;
+  const TOWN_DEG = 0.15;
+  const targets = venueKeys
+    .map((key) => ({ key, id: venueIdByKey.get(key), row: venueRows.get(key)! }))
+    .filter((t): t is { key: string; id: string; row: VenueRow } => Boolean(t.id));
+
+  for (const t of targets) canonical.set(t.key, t.id);
+  const locatable = targets.filter((t) => t.row.lat != null && t.row.lng != null);
+  if (locatable.length === 0) return canonical;
+
+  const stmts = locatable.map((t) =>
+    db
+      .select({
+        id: venues.id,
+        name: venues.name,
+        lat: venues.lat,
+        lng: venues.lng,
+        city: venues.city,
+        canonicalVenueId: venues.canonicalVenueId,
       })
-      .onConflictDoUpdate({
-        target: [events.source, events.sourceEventId],
-        set: {
-          name: sql`excluded.name`,
-          startsAt: sql`excluded.starts_at`,
-          endsAt: sql`coalesce(excluded.ends_at, ends_at)`,
-          ticketUrl: sql`coalesce(excluded.ticket_url, ticket_url)`,
-          priceFrom: sql`coalesce(excluded.price_from, price_from)`,
-          soldOut: sql`coalesce(excluded.sold_out, sold_out)`,
-          isFree: sql`coalesce(excluded.is_free, is_free)`,
-          lineup: sql`coalesce(excluded.lineup, lineup)`,
-          venueId: sql`coalesce(excluded.venue_id, venue_id)`,
-        },
-      })
-      // An upsert can't say which branch it took, so new rows are the ones whose
-      // created_at is from this run — updates leave the original untouched.
-      .returning({ id: events.id, createdAt: events.createdAt }),
+      .from(venues)
+      .where(
+        or(
+          and(
+            between(venues.lat, t.row.lat! - DEG, t.row.lat! + DEG),
+            between(venues.lng, t.row.lng! - DEG, t.row.lng! + DEG),
+          ),
+          t.row.city
+            ? and(
+                eq(venues.city, t.row.city),
+                between(venues.lat, t.row.lat! - TOWN_DEG, t.row.lat! + TOWN_DEG),
+                between(venues.lng, t.row.lng! - TOWN_DEG, t.row.lng! + TOWN_DEG),
+              )
+            : undefined,
+        ),
+      )
+      .limit(100),
   );
   const res = await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
-  const newIds: string[] = [];
-  for (const rows of res) {
-    const row = rows[0];
-    if (row?.id && row.createdAt >= runStart) newIds.push(row.id);
+
+  const writes: { id: string; canonicalVenueId: string }[] = [];
+  locatable.forEach((t, idx) => {
+    const target = { id: t.id, name: t.row.name, lat: t.row.lat, lng: t.row.lng, city: t.row.city };
+    const match = bestVenueMatch(target, res[idx] as VenuePoint[]);
+    // Follow the match's own canonical so a third listing of the same room joins
+    // the same cluster instead of starting a chain.
+    const resolved = match
+      ? (res[idx].find((c) => c.id === match.id)?.canonicalVenueId ?? match.id)
+      : t.id;
+    canonical.set(t.key, resolved);
+    writes.push({ id: t.id, canonicalVenueId: resolved });
+  });
+
+  if (writes.length) {
+    const updates = writes.map((w) =>
+      db.update(venues).set({ canonicalVenueId: w.canonicalVenueId }).where(eq(venues.id, w.id)),
+    );
+    await db.batch(updates as [(typeof updates)[number], ...(typeof updates)[number][]]);
   }
-  return newIds;
+  return canonical;
 }
 
 /** Ticketmaster returns several resolutions per attraction; pick the sharpest

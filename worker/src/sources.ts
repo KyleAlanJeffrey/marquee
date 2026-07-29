@@ -11,6 +11,7 @@ import {
   type VenueRow,
 } from './data';
 import { getDb, type DB } from './db';
+import { guessUtcOffsetHours } from './dedupe';
 import type { Env } from './env';
 import { artists, discoveryLog, events, venues } from './schema';
 
@@ -150,7 +151,40 @@ export async function refreshVenue(env: Env, venueId: string): Promise<{ ingeste
 
 // --- Bandsintown ------------------------------------------------------------
 
-/** Bandsintown datetimes are local-naive; we store second-precision UTC. */
+/** Anything with a `Z` or a `±hh:mm` already knows what it means. */
+const HAS_ZONE = /([Zz]|[+-]\d{2}:?\d{2})$/;
+/** `2026-08-06T16:30:00` — the shape Bandsintown sends, with no zone at all. */
+const NAIVE = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/;
+
+/**
+ * Bandsintown publishes venue-local time with no offset ("2026-08-06T16:30:00"),
+ * so taking it as UTC put every show hours out — a 20:00 gig in San Francisco was
+ * being stored, and displayed, as 20:00Z (1pm local). The venue's longitude gives
+ * the standard offset; that can be a DST hour off, which is worth it against
+ * being eight hours off, and a Ticketmaster listing of the same show overwrites
+ * it with a real UTC time when we have one.
+ */
+export function bitUtc(datetime: unknown, lng: number | null): string | null {
+  if (typeof datetime !== 'string') return null;
+  const raw = datetime.trim();
+  if (raw === '') return null;
+
+  if (HAS_ZONE.test(raw)) {
+    const zoned = new Date(raw);
+    return Number.isNaN(zoned.getTime()) ? null : iso(zoned);
+  }
+
+  // Parsed field by field on purpose: `new Date('2026-08-06T20:00:00')` means
+  // local time, which is UTC in a Worker but the developer's zone in a test, so
+  // the same input produced two different answers.
+  const m = NAIVE.exec(raw);
+  if (!m) return null;
+  const [, y, mo, d, h, min, s] = m;
+  const local = Date.UTC(+y, +mo - 1, +d, +h, +min, s ? +s : 0);
+  if (Number.isNaN(local)) return null;
+  return iso(new Date(local - guessUtcOffsetHours(lng) * 3_600_000));
+}
+
 const iso = (d: Date) => d.toISOString().slice(0, 19) + 'Z';
 
 /** Bandsintown's `id_{id}` form is exact; a display-name lookup is not (an
@@ -188,18 +222,18 @@ async function bitFetchEvents(env: Env, artist: BitArtist): Promise<any[]> {
 export function bitToEventInputs(artist: BitArtist, bitEvents: any[]): EventInput[] {
   return bitEvents.flatMap((e: any) => {
     if (!e.datetime || !e.id) return [];
-    // One unparseable datetime would otherwise throw and lose the whole artist.
-    const startsAt = new Date(e.datetime);
-    if (Number.isNaN(startsAt.getTime())) return [];
-    const endsAt = e.ends_at ? new Date(e.ends_at) : null;
     const { lat, lng } = wkt(e.venue?.longitude, e.venue?.latitude);
+    // One unparseable datetime would otherwise throw and lose the whole artist.
+    const startsAt = bitUtc(e.datetime, lng);
+    if (!startsAt) return [];
+    const endsAt = bitUtc(e.ends_at, lng);
     return [
       {
         source: 'bandsintown',
         source_event_id: String(e.id),
         name: e.title || `${artist.name} @ ${e.venue?.name ?? 'TBA'}`,
-        starts_at: iso(startsAt),
-        ends_at: endsAt && !Number.isNaN(endsAt.getTime()) ? iso(endsAt) : null,
+        starts_at: startsAt,
+        ends_at: endsAt,
         ticket_url: e.offers?.[0]?.url ?? e.url ?? null,
         price_from: null,
         sold_out: typeof e.sold_out === 'boolean' ? e.sold_out : null,

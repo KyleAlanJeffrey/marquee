@@ -1,12 +1,16 @@
 import { Hono } from 'hono';
 import { sql } from 'drizzle-orm';
 
+import { repairDuplicates } from '../data';
 import { getDb } from '../db';
 import type { AppEnv, Env } from '../env';
 import { artists, events } from '../schema';
 import { backfillBandsintown } from '../sources';
 
 export const admin = new Hono<AppEnv>();
+
+const authorized = (c: { env: Env; req: { header: (k: string) => string | undefined } }) =>
+  Boolean(c.env.ADMIN_TOKEN) && c.req.header('authorization') === `Bearer ${c.env.ADMIN_TOKEN}`;
 
 /**
  * Which upstreams are actually usable. Ingestion silently no-ops on a missing
@@ -49,10 +53,7 @@ admin.get('/health', async (c) => {
  * crawl (phase 3) replaces it; until then it's paged by hand.
  */
 admin.post('/backfill-bandsintown', async (c) => {
-  if (!c.env.ADMIN_TOKEN) return c.json({ error: 'admin not configured' }, 503);
-  if (c.req.header('authorization') !== `Bearer ${c.env.ADMIN_TOKEN}`) {
-    return c.json({ error: 'unauthorized' }, 401);
-  }
+  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
   if (!c.env.BANDSINTOWN_APP_ID) return c.json({ error: 'Bandsintown not configured' }, 503);
 
   const url = new URL(c.req.url);
@@ -75,5 +76,20 @@ admin.post('/backfill-bandsintown', async (c) => {
   } catch (err) {
     console.error('backfill-bandsintown failed:', err);
     return c.json({ error: 'backfill failed' }, 500);
+  }
+});
+
+/**
+ * Cluster venues and collapse shows that were stored twice before ingestion knew
+ * how to match across sources. Idempotent — run it after adding a source, or
+ * after a backfill that predates the matcher.
+ */
+admin.post('/repair-duplicates', async (c) => {
+  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+  try {
+    return c.json(await repairDuplicates(getDb(c.env.DB)));
+  } catch (err) {
+    console.error('repair-duplicates failed:', err);
+    return c.json({ error: 'repair failed' }, 500);
   }
 });
