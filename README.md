@@ -98,6 +98,7 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/refresh-artist-events` | pull shows for the on-device follow list (Ticketmaster + Bandsintown) |
 | `GET /api/towns?q=` | towns with upcoming shows (busiest first when `q` is empty) |
 | `GET /api/admin/health` | configured sources, event counts per source, sources yielding nothing, crawl queue depth |
+| `GET /api/admin/stats?days=` | ingest runs per source, what they produced, coverage per town (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/crawl?limit=` | run one pass of the scheduled artist crawl by hand (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/crawl-queue` | enqueue every artist not on the crawl queue yet (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/repair-duplicates` | cluster venues, collapse shows stored twice; idempotent (needs `ADMIN_TOKEN`) |

@@ -13,7 +13,7 @@ import {
   type VenuePoint,
 } from './dedupe';
 import type { Env } from './env';
-import { artists, artistSources, events, venues } from './schema';
+import { artists, artistSources, events, ingestRuns, venues } from './schema';
 
 // --- helpers ----------------------------------------------------------------
 
@@ -353,8 +353,37 @@ export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
 
 // --- Writes -----------------------------------------------------------------
 
+/**
+ * A show more than this far out is almost always a data error (a mis-parsed year,
+ * a placeholder date), and one already past is dead weight in a table whose reads
+ * are all "upcoming".
+ */
+const MAX_YEARS_AHEAD = 2;
+/** Cap per artist per pass, so one malformed feed can't flood the table. */
+const MAX_EVENTS_PER_ARTIST = 200;
+
+/** Drop listings we shouldn't store at all: past, absurdly far out, or a flood. */
+export function sanitizeInputs(inputs: EventInput[], now = Date.now()): EventInput[] {
+  const horizon = now + MAX_YEARS_AHEAD * 365 * 86_400_000;
+  const perArtist = new Map<string, number>();
+  const kept: EventInput[] = [];
+  for (const i of inputs) {
+    const t = Date.parse(i.starts_at);
+    if (Number.isNaN(t) || t < now - 86_400_000 || t > horizon) continue;
+    const n = perArtist.get(i.artist_id) ?? 0;
+    if (n >= MAX_EVENTS_PER_ARTIST) continue;
+    perArtist.set(i.artist_id, n + 1);
+    kept.push(i);
+  }
+  return kept;
+}
+
 /** Upsert venues + insert unseen events; returns ids of newly inserted events. */
-export async function persist(db: DB, inputs: EventInput[]): Promise<string[]> {
+export async function persist(db: DB, raw: EventInput[]): Promise<string[]> {
+  const inputs = sanitizeInputs(raw);
+  if (raw.length !== inputs.length) {
+    console.warn(`persist: dropped ${raw.length - inputs.length} unusable listing(s)`);
+  }
   if (inputs.length === 0) return [];
 
   // Venues: upsert each, map (source:id) -> venue uuid.
@@ -1173,6 +1202,96 @@ export async function recordCrawlOutcomes(db: DB, outcomes: CrawlOutcome[]): Pro
         .where(and(eq(artistSources.artistId, o.artistId), eq(artistSources.source, o.source))),
     ),
   );
+}
+
+// --- Ingest runs ------------------------------------------------------------
+
+export type RunTotals = { scanned?: number; inserted?: number; failed?: number; note?: string | null };
+
+/**
+ * Record an ingestion pass. Every source no-ops politely when misconfigured, so
+ * "nothing came back" and "nothing ran" look identical from the event table —
+ * this is the difference between them.
+ *
+ * Never throws: the log going missing must not take an ingest down with it.
+ */
+export async function startRun(db: DB, source: string, kind: string): Promise<string | null> {
+  const id = uuid();
+  try {
+    await db.insert(ingestRuns).values({ id, source, kind, startedAt: nowIso() });
+    return id;
+  } catch (err) {
+    console.error('startRun failed:', err);
+    return null;
+  }
+}
+
+export async function finishRun(db: DB, id: string | null, totals: RunTotals): Promise<void> {
+  if (!id) return;
+  try {
+    await db
+      .update(ingestRuns)
+      .set({
+        finishedAt: nowIso(),
+        scanned: totals.scanned ?? 0,
+        inserted: totals.inserted ?? 0,
+        failed: totals.failed ?? 0,
+        note: totals.note ?? null,
+      })
+      .where(eq(ingestRuns.id, id));
+  } catch (err) {
+    console.error('finishRun failed:', err);
+  }
+}
+
+/**
+ * Per-source ingest health over a window: how many runs, what they produced, and
+ * when each source last actually inserted something. A source whose runs succeed
+ * while inserting nothing is the failure this exists to surface.
+ */
+export async function ingestStats(db: DB, days = 7) {
+  const since = isoInDays(-days);
+  const runs = await db
+    .select({
+      source: ingestRuns.source,
+      kind: ingestRuns.kind,
+      runs: sql<number>`count(*)`,
+      scanned: sql<number>`sum(${ingestRuns.scanned})`,
+      inserted: sql<number>`sum(${ingestRuns.inserted})`,
+      failed: sql<number>`sum(${ingestRuns.failed})`,
+      unfinished: sql<number>`sum(case when ${ingestRuns.finishedAt} is null then 1 else 0 end)`,
+      last_run_at: sql<string>`max(${ingestRuns.startedAt})`,
+      last_insert_at: sql<string | null>`max(case when ${ingestRuns.inserted} > 0 then ${ingestRuns.startedAt} end)`,
+    })
+    .from(ingestRuns)
+    .where(gte(ingestRuns.startedAt, since))
+    .groupBy(ingestRuns.source, ingestRuns.kind)
+    .orderBy(sql`max(${ingestRuns.startedAt}) desc`);
+
+  const notes = await db
+    .select({ source: ingestRuns.source, note: ingestRuns.note, at: ingestRuns.startedAt })
+    .from(ingestRuns)
+    .where(and(gte(ingestRuns.startedAt, since), sql`${ingestRuns.note} is not null`))
+    .orderBy(sql`${ingestRuns.startedAt} desc`)
+    .limit(10);
+
+  // Coverage by town and source: where a source stops contributing, it shows up
+  // here as a column of zeroes long before anyone notices a thin feed.
+  const coverage = await db
+    .select({
+      city: venues.city,
+      region: venues.region,
+      source: events.source,
+      upcoming: sql<number>`count(*)`,
+    })
+    .from(events)
+    .innerJoin(venues, eq(venues.id, events.venueId))
+    .where(and(gte(events.startsAt, nowIso()), lte(events.startsAt, isoInDays(90))))
+    .groupBy(venues.city, venues.region, events.source)
+    .orderBy(sql`count(*) desc`)
+    .limit(40);
+
+  return { window_days: days, runs, recent_notes: notes, coverage };
 }
 
 /** Queue depth by state, plus how many are due — the numbers /health reports. */

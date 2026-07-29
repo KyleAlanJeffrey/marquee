@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { sql } from 'drizzle-orm';
 
-import { crawlQueueStats, repairDuplicates } from '../data';
+import { crawlQueueStats, ingestStats, repairDuplicates } from '../data';
 import { getDb } from '../db';
 import type { AppEnv, Env } from '../env';
 import { artists, events } from '../schema';
@@ -57,6 +57,27 @@ admin.get('/health', async (c) => {
     { ok, configured, events_by_source: counts, silent_sources: silent, crawl_queue: queue },
     ok ? 200 : 500,
   );
+});
+
+/**
+ * What ingestion has actually been doing: runs per source, what they produced,
+ * when each source last inserted anything, and upcoming events per town per
+ * source. A source that keeps succeeding while inserting nothing is exactly how
+ * Bandsintown managed to contribute zero for weeks.
+ */
+admin.get('/stats', async (c) => {
+  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+  const n = Number(new URL(c.req.url).searchParams.get('days'));
+  const days = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 90) : 7;
+  try {
+    const stats = await ingestStats(getDb(c.env.DB), days);
+    // Called out rather than left to be spotted in the table.
+    const silent = stats.runs.filter((r) => r.runs > 0 && !r.inserted).map((r) => `${r.source}/${r.kind}`);
+    return c.json({ ...stats, yielding_nothing: silent });
+  } catch (err) {
+    console.error('stats failed:', err);
+    return c.json({ error: 'stats failed' }, 500);
+  }
 });
 
 /**

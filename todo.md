@@ -362,13 +362,22 @@ the name is the weak one, which sets the matcher's priorities.
 - [ ] Keep the existing per-venue TM refresh for arena/club lineups.
 
 ### Phase 5 — observability and guardrails
-- [ ] `ingest_runs` (source, started_at, scanned, inserted, updated, failed) plus
-  an admin-token `/api/admin/stats`: per-source counts, per-cell freshness, top
-  failures.
-- [ ] Coverage check: events per metro per source per week, logged loudly when a
-  source's yield hits zero — exactly the failure found by hand above.
-- [ ] Sanity guards: drop events >2 years out or already past, cap events per
-  artist per run, and keep the sitemap to canonical shows only.
+- [x] `ingest_runs` (migration `0006`) — one row per pass with scanned/inserted/
+  failed and a note, written by the crawl, the backfill, discover and the
+  client-driven artist refresh. Recorded **even when a pass can't run**: "the
+  crawl is misconfigured" and "the crawl isn't running" used to look identical
+  from the event table. The logging never throws — losing the log must not take
+  an ingest down with it.
+- [x] `GET /api/admin/stats?days=` — runs per source and kind, what they
+  produced, when each source last inserted anything, upcoming events per town per
+  source, the last ten notes, and a `yielding_nothing` list that names any source
+  whose runs keep succeeding while inserting nothing. That is the exact failure
+  that hid Bandsintown for weeks, and now it says so.
+- [x] Sanity guards in `persist()` (`sanitizeInputs`, tested): drop anything
+  already past, further out than two years, or unparseable, and cap one artist at
+  200 events per pass so a malformed feed can't flood the table.
+- [x] The sitemap is canonical by construction now — one row per show since phase
+  2, filtered to upcoming.
 
 Order matters: phase 2 before phase 3, or the crawl multiplies duplicates
 instead of coverage.

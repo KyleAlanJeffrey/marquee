@@ -106,6 +106,30 @@ export const events = sqliteTable(
   }),
 );
 
+/**
+ * One row per ingestion pass. The point is being able to answer "when did this
+ * source last produce anything?" without inferring it from event rows — a source
+ * whose key goes missing keeps returning success and zero (see migration 0006).
+ */
+export const ingestRuns = sqliteTable(
+  'ingest_runs',
+  {
+    id: text('id').primaryKey(),
+    source: text('source').notNull(),
+    /** crawl | backfill | discover | refresh-artists | refresh-venue */
+    kind: text('kind').notNull(),
+    startedAt: text('started_at').notNull(),
+    finishedAt: text('finished_at'),
+    scanned: integer('scanned').notNull().default(0),
+    inserted: integer('inserted').notNull().default(0),
+    failed: integer('failed').notNull().default(0),
+    note: text('note'),
+  },
+  (t) => ({
+    recentIdx: index('ingest_runs_recent_idx').on(t.source, t.startedAt),
+  }),
+);
+
 export const discoveryLog = sqliteTable('discovery_log', {
   cell: text('cell').primaryKey(),
   fetchedAt: text('fetched_at').notNull(),

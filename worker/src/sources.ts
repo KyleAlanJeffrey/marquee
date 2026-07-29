@@ -7,10 +7,12 @@ import {
   enqueueArtistSources,
   ensureArtist,
   ensureArtistByName,
+  finishRun,
   nowIso,
   persist,
   deferArtistSources,
   recordCrawlOutcomes,
+  startRun,
   touchArtistsRequested,
   upsertTmArtist,
   type CrawlOutcome,
@@ -353,6 +355,7 @@ export async function backfillBandsintown(
   offset: number,
 ): Promise<{ artists: number; ingested: number; per_artist: { name: string; ingested: number }[] }> {
   const db = getDb(env.DB);
+  const run = await startRun(db, 'bandsintown', 'backfill');
   const rows = await db
     .select({
       id: artists.id,
@@ -367,15 +370,18 @@ export async function backfillBandsintown(
 
   const per: { name: string; ingested: number }[] = [];
   let total = 0;
+  let failed = 0;
   for (const row of rows) {
     try {
       const ids = await ingestBitArtist(env, db, row);
       if (ids.length) per.push({ name: row.name, ingested: ids.length });
       total += ids.length;
     } catch (err) {
+      failed++;
       console.error(`bandsintown backfill failed for ${row.name}: ${err}`);
     }
   }
+  await finishRun(db, run, { scanned: rows.length, inserted: total, failed });
   return { artists: rows.length, ingested: total, per_artist: per };
 }
 
@@ -424,11 +430,21 @@ export async function crawlBandsintown(env: Env, limit = CRAWL_BATCH): Promise<C
     failed: 0,
     frontier_added: 0,
   };
-  if (!env.BANDSINTOWN_APP_ID) return { ...result, skipped: 'BANDSINTOWN_APP_ID not set' };
-
   const db = getDb(env.DB);
+  // Logged even when it can't run: "the crawl is misconfigured" and "the crawl
+  // isn't running" are different problems and used to look the same.
+  const run = await startRun(db, 'bandsintown', 'crawl');
+  if (!env.BANDSINTOWN_APP_ID) {
+    const skipped = 'BANDSINTOWN_APP_ID not set';
+    await finishRun(db, run, { note: skipped });
+    return { ...result, skipped };
+  }
+
   const due = await dueArtistSources(db, 'bandsintown', limit);
-  if (due.length === 0) return result;
+  if (due.length === 0) {
+    await finishRun(db, run, { note: 'nothing due' });
+    return result;
+  }
 
   const upcoming = await artistsWithUpcoming(
     db,
@@ -515,6 +531,12 @@ export async function crawlBandsintown(env: Env, limit = CRAWL_BATCH): Promise<C
 
   await recordCrawlOutcomes(db, outcomes);
   result.frontier_added = await addFrontierArtists(db, frontier.slice(0, FRONTIER_PER_RUN));
+  await finishRun(db, run, {
+    scanned: result.checked,
+    inserted: result.ingested,
+    failed: result.failed,
+    note: result.skipped ?? null,
+  });
   return result;
 }
 
@@ -566,6 +588,7 @@ export async function backfillCrawlQueue(env: Env, source = 'bandsintown'): Prom
 
 export async function discover(env: Env, lat: number, lng: number, radius: number) {
   const db = getDb(env.DB);
+  const run = await startRun(db, 'ticketmaster', 'discover');
   const cell = `${lat.toFixed(1)},${lng.toFixed(1)},${Math.round(radius)}`;
   const log = await db
     .select({ fetchedAt: discoveryLog.fetchedAt })
@@ -573,6 +596,7 @@ export async function discover(env: Env, lat: number, lng: number, radius: numbe
     .where(eq(discoveryLog.cell, cell))
     .get();
   if (log && Date.now() - new Date(log.fetchedAt).getTime() < 6 * 3600_000) {
+    await finishRun(db, run, { note: 'recently fetched' });
     return { skipped: true, reason: 'recently fetched', ingested: 0 };
   }
 
@@ -589,12 +613,15 @@ export async function discover(env: Env, lat: number, lng: number, radius: numbe
     .insert(discoveryLog)
     .values({ cell, fetchedAt: nowIso() })
     .onConflictDoUpdate({ target: discoveryLog.cell, set: { fetchedAt: sql`excluded.fetched_at` } });
+  await finishRun(db, run, { scanned: tmEvents.length, inserted: newIds.length });
   return { ingested: newIds.length, scanned: tmEvents.length };
 }
 
 export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {
   const db = getDb(env.DB);
+  const run = await startRun(db, 'ticketmaster+bandsintown', 'refresh-artists');
   const newIds: string[] = [];
+  let failed = 0;
   // Someone is looking at these artists right now, which is what earns them the
   // crawl's short interval (see `tierFor`).
   const touched: string[] = [];
@@ -641,6 +668,7 @@ export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {
       newIds.push(...(await persist(db, inputs)));
       touched.push(targetId);
     } catch (err) {
+      failed++;
       console.error(`refresh failed for ${a.name}: ${err}`);
     }
   }
@@ -655,6 +683,7 @@ export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {
     touched.map((artistId) => ({ artistId, source: 'bandsintown', nextCheckAt: soon })),
   );
   await deferArtistSources(db, touched, 'bandsintown', soon);
+  await finishRun(db, run, { scanned: touched.length, inserted: newIds.length, failed });
   return { ingested: newIds.length };
 }
 
