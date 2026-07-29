@@ -873,8 +873,10 @@ export async function discover(env: Env, lat: number, lng: number, radius: numbe
   }
   // Only throttle the area when the whole sweep worked. A partial failure marked
   // "fetched" would lock the missing source out for six hours; re-running the
-  // source that did succeed costs a request and inserts nothing.
-  if (failed.length === 0) {
+  // source that did succeed costs a request and inserts nothing. `attempted`
+  // matters too: with no source configured there is nothing to throttle, and
+  // recording the cell would suppress the first real sweep after a key arrives.
+  if (attempted > 0 && failed.length === 0) {
     await db
       .insert(discoveryLog)
       .values({ cell, fetchedAt: nowIso() })
