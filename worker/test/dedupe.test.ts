@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { representative } from '../src/data';
 import {
   bestVenueMatch,
   guessUtcOffsetHours,
@@ -177,5 +178,31 @@ describe('parseSources', () => {
     expect(parseSources('{"ticketmaster":123,"bandsintown":{"id":"x"},"seed":null,"ok":"y"}')).toEqual({
       ok: 'y',
     });
+  });
+});
+
+describe('cluster representative', () => {
+  it('is the same id whichever member asks, so no two-cycle can form', () => {
+    // The production failure: two venues at one set of coordinates were resolved
+    // in a single batch, each against a candidate row read before either write
+    // landed. Following "the match's canonical" made A point at B and B at A, so
+    // neither was canonical, the cluster never collapsed, and ENHYPEN showed up
+    // twice in the San Francisco feed.
+    const a = '0b1fad0b-oakland-arena';
+    const b = '59105b6a-yoshis-oakland';
+    expect(representative([a, b, b])).toBe(representative([b, a, a]));
+    expect(representative([a, b, b])).toBe(a);
+  });
+
+  it('ignores the empty slots a fresh row has', () => {
+    expect(representative(['zeta', null, undefined, 'alpha'])).toBe('alpha');
+    expect(representative(['solo'])).toBe('solo');
+  });
+
+  it('is stable once a cluster has settled', () => {
+    // Re-running must not re-point anything, or every pass writes the whole table.
+    const ids = ['b', 'c', 'a'];
+    const first = representative(ids);
+    expect(representative([...ids, first])).toBe(first);
   });
 });

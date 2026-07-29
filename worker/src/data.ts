@@ -5,6 +5,7 @@ import { zoneFor } from './timezone';
 import {
   bestVenueMatch,
   hoursApart,
+  sameVenue,
   mergeField,
   parseSources,
   sameShow,
@@ -873,6 +874,26 @@ async function inBatches(db: DB, stmts: any[], size = 50): Promise<void> {
 }
 
 /**
+ * The row that represents a cluster of listings for one physical venue:
+ * deterministically the lexicographically smallest id involved.
+ *
+ * It has to be order-independent. Two venues in the *same* batch are resolved
+ * against candidate rows that were read before either write landed, so following
+ * "the match's canonical" let each point at the other — Oakland Arena → Yoshi's
+ * Oakland → Oakland Arena, observed in production. In a two-cycle neither row is
+ * its own canonical, so the cluster never collapses to one id, and two listings of
+ * one show keep separate venue ids and never merge: ENHYPEN appeared twice in the
+ * San Francisco feed, at two venues sharing one set of coordinates.
+ *
+ * A minimum can't do that. Whatever order the batch is processed in, and whatever
+ * each row currently points at, every member picks the same representative.
+ */
+export function representative(ids: (string | null | undefined)[]): string {
+  const real = ids.filter((v): v is string => typeof v === 'string' && v !== '');
+  return real.reduce((min, id) => (id < min ? id : min), real[0]);
+}
+
+/**
  * Give every venue in this batch a canonical row: an existing venue at the same
  * place if there is one, otherwise itself.
  */
@@ -928,24 +949,42 @@ async function canonicalizeVenues(
   type Candidate = VenuePoint & { canonicalVenueId: string | null };
   const res = await batchChunked<Candidate[]>(db, stmts);
 
-  const writes: { id: string; canonicalVenueId: string }[] = [];
+  const writes = new Map<string, string>();
   locatable.forEach((t, idx) => {
     const target = { id: t.id, name: t.row.name, lat: t.row.lat, lng: t.row.lng, city: t.row.city };
     const candidates = res[idx] ?? [];
-    const match = bestVenueMatch(target, candidates);
-    // Follow the match's own canonical so a third listing of the same room joins
-    // the same cluster instead of starting a chain.
-    const resolved = match ? (candidates.find((c) => c.id === match.id)?.canonicalVenueId ?? match.id) : t.id;
+    if (!bestVenueMatch(target, candidates)) {
+      canonical.set(t.key, t.id);
+      return;
+    }
+    // Everything here that is the same physical room, plus wherever those rows
+    // already point.
+    const cluster = candidates.filter((c) => c.id !== t.id && sameVenue(target, c));
+    const resolved = representative([
+      t.id,
+      ...cluster.map((c) => c.id),
+      ...cluster.map((c) => c.canonicalVenueId),
+    ]);
     canonical.set(t.key, resolved);
-    // The row already points here for anything that didn't cluster (migration
-    // 0002 seeded canonical_venue_id = id), so only a change is worth a write.
-    const current = candidates.find((c) => c.id === t.id)?.canonicalVenueId;
-    if (resolved !== current) writes.push({ id: t.id, canonicalVenueId: resolved });
+
+    // Every member points at the representative, including the representative
+    // itself — a row whose canonical isn't itself can't be a cluster head, and a
+    // second head is how the feed ends up showing one show twice.
+    const currentOf = new Map<string, string | null>(
+      candidates.map((c) => [c.id, c.canonicalVenueId] as const),
+    );
+    for (const id of [t.id, ...cluster.map((c) => c.id)]) {
+      // Untouched rows already point at themselves (migration 0002 seeded
+      // canonical_venue_id = id), so only a change is worth a write.
+      if (currentOf.get(id) !== resolved) writes.set(id, resolved);
+    }
   });
 
   await inBatches(
     db,
-    writes.map((w) => db.update(venues).set({ canonicalVenueId: w.canonicalVenueId }).where(eq(venues.id, w.id))),
+    [...writes.entries()].map(([id, canonicalVenueId]) =>
+      db.update(venues).set({ canonicalVenueId }).where(eq(venues.id, id)),
+    ),
   );
   return canonical;
 }
