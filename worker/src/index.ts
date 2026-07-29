@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
+import { admin } from './routes/admin';
 import type { AppEnv } from './env';
 import { artists } from './routes/artists';
 import { events } from './routes/events';
@@ -22,6 +23,7 @@ api.route('/', search); // /search-artists
 api.route('/artists', artists);
 api.route('/venues', venues);
 api.route('/events', events);
+api.route('/admin', admin); // /health, /backfill-bandsintown
 
 // Root app: API first, then static assets for everything else.
 const app = new Hono<AppEnv>();

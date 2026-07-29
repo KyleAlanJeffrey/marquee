@@ -261,13 +261,29 @@ new `fetch`. Probed 2026-07-28:
   volume today would double-list every overlapping show.
 
 ### Phase 1 — turn Bandsintown on and see it (small)
-- [ ] Set `BANDSINTOWN_APP_ID` in `.dev.vars` + as a Worker secret.
-- [ ] `/api/health` reporting which sources are configured, so a missing key
-  surfaces as a signal instead of a silent zero (this is how the above hid).
-- [ ] Store what BIT already gives us: `ends_at`, `sold_out`, `free` on `events`
-  (nullable), and keep `lineup` for phase 3.
-- [ ] One-off admin backfill: run BIT for every artist already in D1 and record
-  new-events-per-artist as the baseline number to beat.
+- [ ] **Set `BANDSINTOWN_APP_ID`** in `.dev.vars` + as a Worker secret — the one
+  remaining step, and it needs a key issued to this project (see README; the open
+  endpoints answer for a few `app_id` values that belong to other people, which
+  is not something to build on).
+- [x] `GET /api/admin/health` — which sources are configured, events per source,
+  and `silent_sources` for anything configured that has produced nothing. A
+  missing key no-ops silently; that's how this hid.
+- [x] Store what Bandsintown already sends: `ends_at`, `sold_out`, `is_free` and
+  `lineup` on `events` (migration `0001_ingest_extras.sql`), plus
+  `artists.bandsintown_id` / `mbid` so lookups can use the unambiguous
+  `id_{id}` form instead of a display name.
+- [x] **D1 migrations** (`worker/migrations/`, `npm run db:migrate`) — `schema.sql`
+  is now just the baseline; changes after it are numbered files.
+- [x] `persist()` refreshes instead of ignoring: an existing row's name, date,
+  price, ticket url, sold-out and lineup are updated on re-ingest, with
+  `coalesce(excluded.x, x)` so a source that doesn't carry a field can't blank
+  one another source filled in. New-vs-updated is told apart by `created_at`, so
+  `ingested` counts stay honest. Verified live against Ticketmaster.
+- [x] **Tests exist now** (`npm test`, vitest): the Bandsintown mapping is pinned
+  to a recorded payload in `worker/test/fixtures/`.
+- [ ] `POST /api/admin/backfill-bandsintown?limit&offset` (built, `ADMIN_TOKEN`
+  guarded) — run it once the key lands and record new-events-per-artist as the
+  baseline number to beat.
 
 ### Phase 2 — canonical shows + venues (the blocker)
 - [ ] Venue identity: cluster source rows into a canonical venue (geo <150m +

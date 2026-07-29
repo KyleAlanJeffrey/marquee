@@ -150,32 +150,61 @@ export async function refreshVenue(env: Env, venueId: string): Promise<{ ingeste
 
 // --- Bandsintown ------------------------------------------------------------
 
-async function bitEventsForArtist(
-  env: Env,
-  artist: { id: string; name: string; bandsintown_name: string | null },
-): Promise<EventInput[]> {
+/** Bandsintown datetimes are local-naive; we store second-precision UTC. */
+const iso = (d: Date) => d.toISOString().slice(0, 19) + 'Z';
+
+/** Bandsintown's `id_{id}` form is exact; a display-name lookup is not (an
+ *  unknown artist and one with no upcoming shows both come back empty), so we
+ *  use the stored id whenever a previous run learned it. */
+function bitKey(artist: BitArtist): string {
+  return artist.bandsintown_id
+    ? `id_${encodeURIComponent(artist.bandsintown_id)}`
+    : encodeURIComponent(artist.bandsintown_name ?? artist.name);
+}
+
+export type BitArtist = {
+  id: string;
+  name: string;
+  bandsintown_name: string | null;
+  bandsintown_id?: string | null;
+};
+
+/**
+ * Upcoming shows for one artist. Bandsintown has no location endpoint on the
+ * open API — coverage comes from asking about every artist we know, so this is
+ * the unit the crawl is built from.
+ */
+async function bitFetchEvents(env: Env, artist: BitArtist): Promise<any[]> {
   if (!env.BANDSINTOWN_APP_ID) return [];
-  const name = artist.bandsintown_name ?? artist.name;
   const res = await fetchWithTimeout(
-    `https://rest.bandsintown.com/artists/${encodeURIComponent(name)}/events?app_id=${env.BANDSINTOWN_APP_ID}&date=upcoming`,
+    `https://rest.bandsintown.com/artists/${bitKey(artist)}/events?app_id=${env.BANDSINTOWN_APP_ID}&date=upcoming`,
   );
   if (!res.ok) return [];
-  const bitEvents = await res.json();
-  if (!Array.isArray(bitEvents)) return [];
+  const raw = await res.json();
+  return Array.isArray(raw) ? raw : [];
+}
+
+/** Pure mapping, so it can be tested against a recorded payload. */
+export function bitToEventInputs(artist: BitArtist, bitEvents: any[]): EventInput[] {
   return bitEvents.flatMap((e: any) => {
     if (!e.datetime || !e.id) return [];
     // One unparseable datetime would otherwise throw and lose the whole artist.
     const startsAt = new Date(e.datetime);
     if (Number.isNaN(startsAt.getTime())) return [];
+    const endsAt = e.ends_at ? new Date(e.ends_at) : null;
     const { lat, lng } = wkt(e.venue?.longitude, e.venue?.latitude);
     return [
       {
         source: 'bandsintown',
         source_event_id: String(e.id),
         name: e.title || `${artist.name} @ ${e.venue?.name ?? 'TBA'}`,
-        starts_at: startsAt.toISOString().slice(0, 19) + 'Z',
+        starts_at: iso(startsAt),
+        ends_at: endsAt && !Number.isNaN(endsAt.getTime()) ? iso(endsAt) : null,
         ticket_url: e.offers?.[0]?.url ?? e.url ?? null,
         price_from: null,
+        sold_out: typeof e.sold_out === 'boolean' ? e.sold_out : null,
+        is_free: typeof e.free === 'boolean' ? e.free : null,
+        lineup: Array.isArray(e.lineup) ? e.lineup.filter((n: unknown) => typeof n === 'string') : null,
         artist_id: artist.id,
         venue: e.venue
           ? {
@@ -192,6 +221,65 @@ async function bitEventsForArtist(
       },
     ];
   });
+}
+
+/**
+ * Learn an artist's Bandsintown id (and MusicBrainz id) from an event payload,
+ * so the next lookup is by id instead of by name. Every event embeds the artist
+ * it was fetched for, so this costs no extra request.
+ */
+async function rememberBitIdentity(db: DB, artistId: string, raw: any): Promise<void> {
+  const a = raw?.artist;
+  if (!a?.id) return;
+  const set: Record<string, string> = { bandsintownId: String(a.id) };
+  if (typeof a.name === 'string' && a.name) set.bandsintownName = a.name;
+  if (typeof a.mbid === 'string' && a.mbid) set.mbid = a.mbid;
+  await db.update(artists).set(set).where(eq(artists.id, artistId)).catch(() => {});
+}
+
+/** Bandsintown shows for one artist, persisted. Returns new-event ids. */
+async function ingestBitArtist(env: Env, db: DB, artist: BitArtist): Promise<string[]> {
+  const raw = await bitFetchEvents(env, artist);
+  if (raw.length === 0) return [];
+  await rememberBitIdentity(db, artist.id, raw[0]);
+  return persist(db, bitToEventInputs(artist, raw));
+}
+
+/**
+ * Pull Bandsintown shows for artists already in D1, oldest-known first. The
+ * one-off backfill behind `/api/admin/backfill-bandsintown` until the scheduled
+ * crawl (phase 3) owns this.
+ */
+export async function backfillBandsintown(
+  env: Env,
+  limit: number,
+  offset: number,
+): Promise<{ artists: number; ingested: number; per_artist: { name: string; ingested: number }[] }> {
+  const db = getDb(env.DB);
+  const rows = await db
+    .select({
+      id: artists.id,
+      name: artists.name,
+      bandsintown_name: artists.bandsintownName,
+      bandsintown_id: artists.bandsintownId,
+    })
+    .from(artists)
+    .orderBy(artists.createdAt)
+    .limit(limit)
+    .offset(offset);
+
+  const per: { name: string; ingested: number }[] = [];
+  let total = 0;
+  for (const row of rows) {
+    try {
+      const ids = await ingestBitArtist(env, db, row);
+      if (ids.length) per.push({ name: row.name, ingested: ids.length });
+      total += ids.length;
+    } catch (err) {
+      console.error(`bandsintown backfill failed for ${row.name}: ${err}`);
+    }
+  }
+  return { artists: rows.length, ingested: total, per_artist: per };
 }
 
 // --- Ingestion orchestrators ------------------------------------------------
@@ -256,9 +344,17 @@ export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {
         const tmEvents = await tmEventsForAttraction(env, tmId);
         inputs.push(...tmEvents.flatMap((e) => tmToEventInput(e, targetId) ?? []));
       }
-      inputs.push(
-        ...(await bitEventsForArtist(env, { id: targetId, name: row.name, bandsintown_name: row.bandsintown_name })),
-      );
+      const bitArtist: BitArtist = {
+        id: targetId,
+        name: row.name,
+        bandsintown_name: row.bandsintown_name,
+        bandsintown_id: row.bandsintown_id,
+      };
+      const bitRaw = await bitFetchEvents(env, bitArtist);
+      if (bitRaw.length) {
+        await rememberBitIdentity(db, targetId, bitRaw[0]);
+        inputs.push(...bitToEventInputs(bitArtist, bitRaw));
+      }
       newIds.push(...(await persist(db, inputs)));
     } catch (err) {
       console.error(`refresh failed for ${a.name}: ${err}`);

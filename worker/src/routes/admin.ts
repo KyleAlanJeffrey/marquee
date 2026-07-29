@@ -1,0 +1,79 @@
+import { Hono } from 'hono';
+import { sql } from 'drizzle-orm';
+
+import { getDb } from '../db';
+import type { AppEnv, Env } from '../env';
+import { artists, events } from '../schema';
+import { backfillBandsintown } from '../sources';
+
+export const admin = new Hono<AppEnv>();
+
+/**
+ * Which upstreams are actually usable. Ingestion silently no-ops on a missing
+ * key (`if (!env.BANDSINTOWN_APP_ID) return []`), which is how Bandsintown
+ * managed to contribute zero events without anyone noticing — so the
+ * configuration is now something you can look at.
+ */
+const sourceConfig = (env: Env) => ({
+  ticketmaster: Boolean(env.TICKETMASTER_API_KEY),
+  bandsintown: Boolean(env.BANDSINTOWN_APP_ID),
+  spotify: Boolean(env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET),
+});
+
+admin.get('/health', async (c) => {
+  const configured = sourceConfig(c.env);
+  const db = getDb(c.env.DB);
+  let counts: Record<string, number> = {};
+  let ok = true;
+  try {
+    const rows = await db
+      .select({ source: events.source, n: sql<number>`count(*)` })
+      .from(events)
+      .groupBy(events.source);
+    counts = Object.fromEntries(rows.map((r) => [r.source, r.n]));
+  } catch (err) {
+    console.error('health: event counts failed:', err);
+    ok = false;
+  }
+  // A source that's configured but has never produced a row is the interesting
+  // case — it looks healthy from the outside and isn't.
+  const silent = Object.entries(configured)
+    .filter(([name, on]) => on && name !== 'spotify' && !counts[name])
+    .map(([name]) => name);
+  return c.json({ ok, configured, events_by_source: counts, silent_sources: silent }, ok ? 200 : 500);
+});
+
+/**
+ * One-off Bandsintown backfill over artists already in D1 — the phase-1
+ * measurement of what Bandsintown adds on top of Ticketmaster. The scheduled
+ * crawl (phase 3) replaces it; until then it's paged by hand.
+ */
+admin.post('/backfill-bandsintown', async (c) => {
+  if (!c.env.ADMIN_TOKEN) return c.json({ error: 'admin not configured' }, 503);
+  if (c.req.header('authorization') !== `Bearer ${c.env.ADMIN_TOKEN}`) {
+    return c.json({ error: 'unauthorized' }, 401);
+  }
+  if (!c.env.BANDSINTOWN_APP_ID) return c.json({ error: 'Bandsintown not configured' }, 503);
+
+  const url = new URL(c.req.url);
+  const num = (key: string, fallback: number, max: number) => {
+    const n = Number(url.searchParams.get(key));
+    return Number.isFinite(n) && n >= 0 ? Math.min(Math.floor(n), max) : fallback;
+  };
+  // Bounded per call: each artist is one upstream request, and a Worker request
+  // has a wall-clock budget.
+  const limit = Math.max(num('limit', 20, 50), 1);
+  const offset = num('offset', 0, 1_000_000);
+
+  try {
+    const result = await backfillBandsintown(c.env, limit, offset);
+    const total = await getDb(c.env.DB)
+      .select({ n: sql<number>`count(*)` })
+      .from(artists)
+      .get();
+    return c.json({ ...result, offset, next_offset: offset + limit, artists_total: total?.n ?? null });
+  } catch (err) {
+    console.error('backfill-bandsintown failed:', err);
+    return c.json({ error: 'backfill failed' }, 500);
+  }
+});

@@ -43,6 +43,7 @@
     "eslint": "^9.0.0",
     "eslint-config-expo": "~56.0.4",
     "typescript": "~6.0.3",
+    "vitest": "^3.2.7",
     "wrangler": "^3.114.0"
   },
   "scripts": {
@@ -54,9 +55,12 @@
     "build": "expo export -p web",
     "deploy": "wrangler deploy",
     "cf:dev": "wrangler dev",
-    "db:apply:local": "wrangler d1 execute marquee --local --file=worker/schema.sql && wrangler d1 execute marquee --local --file=worker/seed.sql",
-    "db:apply": "wrangler d1 execute marquee --remote --file=worker/schema.sql",
+    "db:apply:local": "wrangler d1 execute marquee --local --file=worker/schema.sql && npm run db:migrate && wrangler d1 execute marquee --local --file=worker/seed.sql",
+    "db:apply": "wrangler d1 execute marquee --remote --file=worker/schema.sql && npm run db:migrate:remote",
+    "db:migrate": "wrangler d1 migrations apply marquee --local",
+    "db:migrate:remote": "wrangler d1 migrations apply marquee --remote",
     "lint": "expo lint",
+    "test": "vitest run",
     "db:unseed": "wrangler d1 execute marquee --local --file=worker/unseed.sql",
     "db:unseed:remote": "wrangler d1 execute marquee --remote --file=worker/unseed.sql"
   },

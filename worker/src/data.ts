@@ -48,8 +48,14 @@ export type EventInput = {
   source_event_id: string;
   name: string;
   starts_at: string;
+  /** Only some sources publish an end time (Bandsintown, festivals). */
+  ends_at?: string | null;
   ticket_url: string | null;
   price_from: number | null;
+  sold_out?: boolean | null;
+  is_free?: boolean | null;
+  /** Billed acts, headliner first (Bandsintown). */
+  lineup?: string[] | null;
   artist_id: string;
   venue: VenueRow | null;
 };
@@ -67,6 +73,7 @@ export type ArtistIdentity = {
   name: string;
   ticketmaster_id: string | null;
   bandsintown_name: string | null;
+  bandsintown_id: string | null;
 };
 
 // --- Reads (feed / detail) --------------------------------------------------
@@ -309,7 +316,10 @@ export async function persist(db: DB, inputs: EventInput[]): Promise<string[]> {
     });
   }
 
-  // Events: insert-if-new, RETURNING only new rows.
+  // Events: insert, or refresh the fields that move (a show sells out, a date
+  // shifts, a lineup gets filled in). `coalesce(excluded.x, x)` so a source that
+  // simply doesn't carry a field can't blank out one that another source did.
+  const runStart = nowIso();
   const stmts = inputs.map((i) =>
     db
       .insert(events)
@@ -319,17 +329,39 @@ export async function persist(db: DB, inputs: EventInput[]): Promise<string[]> {
         venueId: i.venue ? venueIdByKey.get(`${i.venue.source}:${i.venue.source_venue_id}`) ?? null : null,
         name: i.name,
         startsAt: i.starts_at,
+        endsAt: i.ends_at ?? null,
         ticketUrl: i.ticket_url,
         priceFrom: i.price_from,
+        soldOut: i.sold_out ?? null,
+        isFree: i.is_free ?? null,
+        lineup: i.lineup?.length ? JSON.stringify(i.lineup) : null,
         source: i.source,
         sourceEventId: i.source_event_id,
       })
-      .onConflictDoNothing({ target: [events.source, events.sourceEventId] })
-      .returning({ id: events.id }),
+      .onConflictDoUpdate({
+        target: [events.source, events.sourceEventId],
+        set: {
+          name: sql`excluded.name`,
+          startsAt: sql`excluded.starts_at`,
+          endsAt: sql`coalesce(excluded.ends_at, ends_at)`,
+          ticketUrl: sql`coalesce(excluded.ticket_url, ticket_url)`,
+          priceFrom: sql`coalesce(excluded.price_from, price_from)`,
+          soldOut: sql`coalesce(excluded.sold_out, sold_out)`,
+          isFree: sql`coalesce(excluded.is_free, is_free)`,
+          lineup: sql`coalesce(excluded.lineup, lineup)`,
+          venueId: sql`coalesce(excluded.venue_id, venue_id)`,
+        },
+      })
+      // An upsert can't say which branch it took, so new rows are the ones whose
+      // created_at is from this run — updates leave the original untouched.
+      .returning({ id: events.id, createdAt: events.createdAt }),
   );
   const res = await db.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
   const newIds: string[] = [];
-  for (const rows of res) if (rows[0]?.id) newIds.push(rows[0].id);
+  for (const rows of res) {
+    const row = rows[0];
+    if (row?.id && row.createdAt >= runStart) newIds.push(row.id);
+  }
   return newIds;
 }
 
@@ -373,6 +405,7 @@ export async function ensureArtist(db: DB, a: IncomingArtist): Promise<ArtistIde
     name: artists.name,
     ticketmaster_id: artists.ticketmasterId,
     bandsintown_name: artists.bandsintownName,
+    bandsintown_id: artists.bandsintownId,
   };
   if (a.artistId) {
     const r = await db.select(cols).from(artists).where(eq(artists.id, a.artistId)).get();

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, real, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
 
 // Drizzle table definitions for the Marquee D1 database. These mirror
 // `worker/schema.sql` (which is still the applied DDL + dev seed — keep the two
@@ -16,6 +16,10 @@ export const artists = sqliteTable('artists', {
   spotifyId: text('spotify_id').unique(),
   ticketmasterId: text('ticketmaster_id').unique(),
   bandsintownName: text('bandsintown_name'),
+  // Bandsintown's numeric artist id; lookups by `id_{id}` are unambiguous where
+  // a display-name lookup isn't (see migration 0001).
+  bandsintownId: text('bandsintown_id'),
+  mbid: text('mbid'),
   imageUrl: text('image_url'),
   genres: text('genres').notNull().default('[]'),
   createdAt: createdAt(),
@@ -50,8 +54,12 @@ export const events = sqliteTable(
     venueId: text('venue_id').references(() => venues.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     startsAt: text('starts_at').notNull(), // ISO 8601 UTC
+    endsAt: text('ends_at'),
     ticketUrl: text('ticket_url'),
     priceFrom: real('price_from'),
+    soldOut: integer('sold_out', { mode: 'boolean' }),
+    isFree: integer('is_free', { mode: 'boolean' }),
+    lineup: text('lineup'), // JSON array of artist names (Bandsintown)
     source: text('source').notNull(),
     sourceEventId: text('source_event_id').notNull(),
     createdAt: createdAt(),

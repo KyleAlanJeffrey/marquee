@@ -27,8 +27,9 @@ info() { printf '\033[1;34m▶\033[0m %s\n' "$1"; }
 [ -d node_modules ] || { info "Installing dependencies…"; npm install; }
 
 # 2. Local D1 schema + seed
-info "Loading the D1 schema + seed into the local database…"
+info "Loading the D1 schema + migrations + seed into the local database…"
 npx wrangler d1 execute marquee --local --file=worker/schema.sql
+npx wrangler d1 migrations apply marquee --local
 npx wrangler d1 execute marquee --local --file=worker/seed.sql
 
 # 3. App env → local Worker

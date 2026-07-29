@@ -24,6 +24,9 @@
       "binding": "DB",
       "database_name": "marquee",
       "database_id": "3905e807-3b98-465c-874d-ba558bf319da",
+      // worker/schema.sql is the baseline; every change after it is a numbered
+      // migration (`npm run db:migrate` / `db:migrate:remote`).
+      "migrations_dir": "worker/migrations",
     },
   ],
   "observability": {

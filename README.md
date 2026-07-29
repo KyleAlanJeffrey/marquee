@@ -22,11 +22,13 @@ src/
   lib/            api client (Worker), TanStack Query hooks, local follows/prefs stores, reminders
 worker/
   src/index.ts    thin entry: mounts the API routers, robots/sitemap, asset SEO
-  src/routes/     per-resource Hono routers (artists, venues, events, feed, search)
+  src/routes/     per-resource Hono routers (artists, venues, events, feed, search, admin)
   src/data.ts     D1 repository (reads/writes) via Drizzle · src/sources.ts external APIs
   src/seo.ts      robots.txt, sitemap.xml, per-page <head> + JSON-LD injection
-  schema.sql      D1 schema (DDL only — this is what production gets)
+  schema.sql      D1 baseline schema (DDL only — this is what production gets)
+  migrations/     numbered D1 migrations applied after the baseline
   seed.sql        local-only dev seed (fictional shows) · unseed.sql removes it
+  test/           vitest specs (pure mapping/parsing — `npm test`)
 public/           copied to the web export root (og-image, icons, manifest.json)
 scripts/dev.sh    one-command local dev (Worker + local D1 + Expo)
 ```
@@ -56,7 +58,13 @@ Set a **Ticketmaster Discovery** key (and optionally Spotify for search) in
 TICKETMASTER_API_KEY=your-key
 SPOTIFY_CLIENT_ID=…
 SPOTIFY_CLIENT_SECRET=…
+BANDSINTOWN_APP_ID=…      # widens coverage a lot; see "API keys" below
+ADMIN_TOKEN=…             # enables /api/admin/* (backfill); unset = off
 ```
+
+`GET /api/admin/health` reports which of these are actually configured and how
+many events each source has produced — a source with a missing key no-ops
+silently, so check there first when a source looks dead.
 
 Then on a device with real location, open **Near Me** and pull to refresh — the
 app calls the Worker's `/discover-events`, which pulls nearby shows from
@@ -74,7 +82,9 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `GET /api/events/:id` | event detail |
 | `POST /api/search-artists` | Spotify artist search |
 | `POST /api/discover-events` | pull nearby shows from Ticketmaster (throttled per area) |
-| `POST /api/refresh-artist-events` | pull shows for the on-device follow list |
+| `POST /api/refresh-artist-events` | pull shows for the on-device follow list (Ticketmaster + Bandsintown) |
+| `GET /api/admin/health` | configured sources, event counts per source, sources yielding nothing |
+| `POST /api/admin/backfill-bandsintown?limit&offset` | one-off Bandsintown sweep over known artists (needs `ADMIN_TOKEN`) |
 | `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (sitemap built live from D1) |
 
 ## Deploying
@@ -90,12 +100,18 @@ After the first deploy, one time:
 ```sh
 # load the schema into the remote D1 (DDL only — the dev seed in worker/seed.sql
 # is deliberately local, so production never serves made-up shows)
-npm run db:apply
+npm run db:apply        # baseline schema + numbered migrations
 # set the Worker's secrets (Worker → Settings → Variables and Secrets, or CLI)
 npx wrangler secret put TICKETMASTER_API_KEY
 npx wrangler secret put SPOTIFY_CLIENT_ID
 npx wrangler secret put SPOTIFY_CLIENT_SECRET
+npx wrangler secret put BANDSINTOWN_APP_ID
+npx wrangler secret put ADMIN_TOKEN
 ```
+
+Schema changes after the baseline are numbered files in `worker/migrations/`
+(`npm run db:migrate` locally, `npm run db:migrate:remote` for production) —
+`schema.sql` is only the starting point for a fresh database.
 
 The web is served same-origin, so it needs no API URL. Deploy by hand with
 `npm run deploy` (after `npm run build`).
@@ -110,7 +126,16 @@ Push/reminders need a dev or store build on a physical device.
 |---|---|---|
 | Ticketmaster Discovery key | developer.ticketmaster.com | discover-events, refresh-artist-events |
 | Spotify client id/secret | developer.spotify.com | search-artists |
-| Bandsintown app id (optional) | artists.bandsintown.com | refresh-artist-events |
+| Bandsintown app id | see below | refresh-artist-events, admin backfill |
+
+**Bandsintown** has far more of the club/DIY tier than Ticketmaster, and its API
+is gated: it's for "artists and anyone working on their behalf". If you manage an
+artist profile, the key is under **Settings → General → Get API Key** in
+[Bandsintown for Artists](https://artists.bandsintown.com). Otherwise email
+`API@bandsintown.com` with the project and your traffic projections (they state
+they don't accept student/educational requests). The open endpoints answer for
+some `app_id` values that aren't yours — don't build on those; the crawl in
+`todo.md` assumes a key issued to this project.
 
 ## SEO
 
