@@ -1,11 +1,25 @@
 import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
 
+import { searchTowns } from '../data';
+import { getDb } from '../db';
 import type { AppEnv } from '../env';
-import { searchBody } from '../schemas';
+import { searchBody, townsQuery } from '../schemas';
 import { searchArtists } from '../sources';
 
 export const search = new Hono<AppEnv>();
+
+// Towns with upcoming shows. Unlike artist search this is answered from our own
+// data, so it needs no Spotify key.
+search.get('/towns', zValidator('query', townsQuery), async (c) => {
+  const { q, limit } = c.req.valid('query');
+  try {
+    return c.json({ towns: await searchTowns(getDb(c.env.DB), q, limit) });
+  } catch (err) {
+    console.error('towns failed:', err);
+    return c.json({ towns: [], error: 'search failed' }, 500);
+  }
+});
 
 // Spotify catalog search for artists to follow.
 search.post('/search-artists', zValidator('json', searchBody), async (c) => {

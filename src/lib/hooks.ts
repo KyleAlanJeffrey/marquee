@@ -12,6 +12,7 @@ import type {
   EventLineup,
   NearbyEvent,
   Page,
+  Town,
   VenueDetail,
   VenueEvent,
 } from '@/lib/types';
@@ -107,6 +108,23 @@ export function useInfiniteVenueEvents(venueId: string, pageSize = 20) {
     queryFn: ({ pageParam }): Promise<Page<VenueEvent>> =>
       apiGet(`/venues/${venueId}/events?limit=${pageSize}&offset=${pageParam}`),
     getNextPageParam: (last) => last.nextCursor,
+  });
+}
+
+/**
+ * Towns we have shows in. This is answered from our own database rather than
+ * Spotify, so an empty query is valid and returns the busiest towns — which is
+ * what makes the search screen useful before anyone types.
+ */
+export function useTownSearch(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ['town-search', q],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<Town[]> => {
+      const data = await apiGet<{ towns?: Town[] }>(`/towns?q=${encodeURIComponent(q)}&limit=8`);
+      return data.towns ?? [];
+    },
   });
 }
 

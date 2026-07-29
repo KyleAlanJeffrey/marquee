@@ -16,7 +16,7 @@ import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { useInfiniteNearby } from '@/lib/hooks';
-import { parseCoords, parseRadius } from '@/lib/params';
+import { parseCoords, parseRadius, scalar } from '@/lib/params';
 import type { NearbyEvent } from '@/lib/types';
 
 const ALL = 'All';
@@ -24,13 +24,15 @@ const ref = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_sp
 
 export default function BrowseScreen() {
   const theme = useTheme();
-  const params = useLocalSearchParams<{ lat: string; lng: string; radius: string }>();
+  const params = useLocalSearchParams<{ lat: string; lng: string; radius: string; town: string }>();
   const { isFollowing, toggle } = useFollows();
 
   // Route params arrive as string | string[] | undefined, and a bad value must
   // not become NaN in a query key.
   const coords = parseCoords(params.lat, params.lng);
   const radiusMiles = parseRadius(params.radius);
+  // Set when Browse was opened from a town in search, rather than from "near me".
+  const town = scalar(params.town)?.trim().slice(0, 60) || null;
   const q = useInfiniteNearby(coords, radiusMiles);
 
   const [genre, setGenre] = useState(ALL);
@@ -72,11 +74,15 @@ export default function BrowseScreen() {
   return (
     <View style={{ flex: 1 }}>
       <PageMeta
-        title="Browse concerts near you"
-        description="Every upcoming show inside your radius, filterable by genre — grid, list or map."
+        title={town ? `Concerts in ${town}` : 'Browse concerts near you'}
+        description={
+          town
+            ? `Every upcoming show in and around ${town}, filterable by genre — grid, list or map.`
+            : 'Every upcoming show inside your radius, filterable by genre — grid, list or map.'
+        }
       />
       <MeshBackground />
-      <TopBar back title="Browse" onSearchPress={() => router.push('/search')} />
+      <TopBar back title={town ?? 'Browse'} onSearchPress={() => router.push('/search')} />
 
       <FlatList
         key={mode}
@@ -117,7 +123,9 @@ export default function BrowseScreen() {
 
             <View style={styles.titleRow}>
               <View style={styles.titleLeft}>
-                <ThemedText type="title">Browse All</ThemedText>
+                <ThemedText type="title" numberOfLines={1} style={styles.title}>
+                  {town ?? 'Browse All'}
+                </ThemedText>
                 <ThemedText type="label" style={{ color: theme.textTertiary }}>
                   {filtered.length}
                   {q.hasNextPage ? '+' : ''}
@@ -152,7 +160,7 @@ export default function BrowseScreen() {
               </View>
             ) : (
               <ThemedText themeColor="textSecondary" style={styles.empty}>
-                No events within this radius.
+                {town ? `No upcoming events in ${town}.` : 'No events within this radius.'}
               </ThemedText>
             )}
           </View>
@@ -210,7 +218,8 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.two,
     paddingBottom: Spacing.three,
   },
-  titleLeft: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
+  titleLeft: { flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: Spacing.two },
+  title: { flexShrink: 1 },
   toggle: { flexDirection: 'row', gap: Spacing.one },
   toggleBtn: { padding: Spacing.one + 2, borderRadius: Radius.sm },
   feature: { marginBottom: Spacing.three },

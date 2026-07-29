@@ -19,6 +19,9 @@ export const nowIso = () => new Date().toISOString().slice(0, 19) + 'Z';
 export const isoInDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 19) + 'Z';
 export const isoAt = (ms: number) => new Date(ms).toISOString().slice(0, 19) + 'Z';
 
+/** Sources send both `null` and `''` for "no region"; the UI only handles one. */
+const blankToNull = (v: string | null) => (v && v.trim() !== '' ? v : null);
+
 export function parseGenres(text: unknown): string[] {
   if (typeof text !== 'string') return [];
   try {
@@ -230,6 +233,62 @@ export async function eventById(db: DB, id: string) {
       ? { id: r.v_id, name: r.v_name, city: r.v_city, region: r.v_region, lat: r.v_lat, lng: r.v_lng }
       : null,
   };
+}
+
+/**
+ * Towns with upcoming shows, best match first. `q` matches anywhere in the city
+ * name but ranks a prefix hit first, so "port" finds Portland before Millersport.
+ * Without `q` this is the busiest towns we know about, which is what the search
+ * screen shows before anyone types.
+ *
+ * The centroid is the average of the town's venue coordinates — enough to open
+ * the feed on, and it needs no geocoding service.
+ */
+export async function searchTowns(db: DB, q: string, limit = 12) {
+  const term = q.trim().toLowerCase();
+  const busiest = sql`count(distinct ${events.id}) desc`;
+  // A prefix hit is what the user meant; after that, the busiest town wins. Note
+  // sql`1` would be an *ordinal* reference in SQLite (sort by the first column),
+  // so the no-search case has to omit the ranking term rather than neutralise it.
+  const order = term
+    ? [sql`case when lower(${venues.city}) like ${`${term}%`} then 0 else 1 end`, busiest]
+    : [busiest];
+
+  const rows = await db
+    .select({
+      city: venues.city,
+      region: venues.region,
+      country: venues.country,
+      lat: sql<number>`avg(${venues.lat})`,
+      lng: sql<number>`avg(${venues.lng})`,
+      upcoming: sql<number>`count(distinct ${events.id})`,
+      venues: sql<number>`count(distinct ${venues.id})`,
+    })
+    .from(venues)
+    .innerJoin(events, eq(events.venueId, venues.id))
+    .where(
+      and(
+        gte(events.startsAt, nowIso()),
+        lte(events.startsAt, isoInDays(365)),
+        sql`${venues.city} is not null and trim(${venues.city}) <> ''`,
+        sql`${venues.lat} is not null and ${venues.lng} is not null`,
+        term ? sql`lower(${venues.city}) like ${`%${term}%`}` : undefined,
+      ),
+    )
+    // One town per (city, region): "Portland, OR" and "Portland, ME" are two.
+    .groupBy(sql`lower(${venues.city})`, sql`lower(coalesce(${venues.region}, ''))`)
+    .orderBy(...order)
+    .limit(limit);
+
+  return rows.map((r) => ({
+    city: r.city as string,
+    region: blankToNull(r.region),
+    country: blankToNull(r.country),
+    lat: r.lat,
+    lng: r.lng,
+    upcoming: r.upcoming,
+    venues: r.venues,
+  }));
 }
 
 /** Venue metadata. */

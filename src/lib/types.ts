@@ -137,4 +137,16 @@ export type ArtistSearchResult = {
   popularity: number;
 };
 
+/** A town we have upcoming shows in, with the centroid of its venues. */
+export type Town = {
+  city: string;
+  region: string | null;
+  country: string | null;
+  lat: number;
+  lng: number;
+  /** Upcoming shows in the next year. */
+  upcoming: number;
+  venues: number;
+};
+
 export type Coords = { lat: number; lng: number };

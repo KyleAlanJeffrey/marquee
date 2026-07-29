@@ -14,8 +14,13 @@ import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ensureArtist } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
-import { useArtistSearch } from '@/lib/hooks';
-import type { ArtistSearchResult } from '@/lib/types';
+import { useArtistSearch, useTownSearch } from '@/lib/hooks';
+import type { ArtistSearchResult, Town } from '@/lib/types';
+
+/** Wide enough to cover a metro area from the centroid of its venues. */
+const TOWN_RADIUS_MILES = 25;
+
+const townLabel = (t: Town) => [t.city, t.region].filter(Boolean).join(', ');
 
 export default function SearchScreen() {
   const theme = useTheme();
@@ -25,6 +30,7 @@ export default function SearchScreen() {
   const [focused, setFocused] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
   const search = useArtistSearch(query);
+  const towns = useTownSearch(query);
 
   useEffect(() => {
     const t = setTimeout(() => setQuery(input), 350);
@@ -47,11 +53,20 @@ export default function SearchScreen() {
     if (id) router.push(`/artist/${id}`);
   }
 
+  // A town opens the normal nearby feed, centred on the town instead of on the
+  // device — so genres, paging and the map all come for free.
+  function openTown(town: Town) {
+    const label = encodeURIComponent(townLabel(town));
+    router.push(`/browse?lat=${town.lat}&lng=${town.lng}&radius=${TOWN_RADIUS_MILES}&town=${label}`);
+  }
+
+  const townRows = towns.data ?? [];
+
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <PageMeta
-        title="Find artists"
-        description="Search millions of artists and follow the ones you love to track their upcoming tour dates near you."
+        title="Find artists and towns"
+        description="Search millions of artists, or jump straight to the upcoming shows in any town."
       />
       <View
         style={[
@@ -67,7 +82,7 @@ export default function SearchScreen() {
           onChangeText={setInput}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder="Artists, venues, or vibes…"
+          placeholder="Artists or towns…"
           placeholderTextColor={theme.textTertiary}
           autoFocus
           autoCorrect={false}
@@ -84,69 +99,107 @@ export default function SearchScreen() {
         )}
       </View>
 
-      {search.isLoading && query.length >= 2 ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={theme.primary} />
-        </View>
-      ) : (
-        <FlatList
-          data={search.data ?? []}
-          keyExtractor={(a) => a.spotify_id}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
+      <FlatList
+        data={search.data ?? []}
+        keyExtractor={(a) => a.spotify_id}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          <View>
+            {townRows.length > 0 && (
+              <View style={styles.section}>
+                <ThemedText type="label" style={{ color: theme.textTertiary }}>
+                  {query.length >= 2 ? 'TOWNS' : 'BUSIEST TOWNS'}
+                </ThemedText>
+                {townRows.map((town) => (
+                  <PressableScale
+                    key={`${town.city}|${town.region ?? ''}`}
+                    haptic={false}
+                    onPress={() => openTown(town)}
+                    style={styles.townRow}>
+                    <View style={[styles.townIcon, { backgroundColor: theme.backgroundElevated }]}>
+                      <Ionicons name="location" size={18} color={theme.cyan} />
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <ThemedText type="smallBold" numberOfLines={1}>
+                        {townLabel(town)}
+                      </ThemedText>
+                      <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                        {town.upcoming} {town.upcoming === 1 ? 'show' : 'shows'} · {town.venues}{' '}
+                        {town.venues === 1 ? 'venue' : 'venues'}
+                      </ThemedText>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+                  </PressableScale>
+                ))}
+              </View>
+            )}
+            {query.length >= 2 && townRows.length > 0 && (
+              <View style={styles.section}>
+                <ThemedText type="label" style={{ color: theme.textTertiary }}>
+                  ARTISTS
+                </ThemedText>
+              </View>
+            )}
+            {search.isLoading && query.length >= 2 && (
+              <ActivityIndicator color={theme.primary} style={{ marginTop: Spacing.three }} />
+            )}
+          </View>
+        }
+        ListEmptyComponent={
+          search.isLoading && query.length >= 2 ? null : (
             <ThemedText themeColor="textSecondary" style={styles.hint}>
               {query.length >= 2 && search.isFetched
                 ? `No artists found for “${query}”.`
-                : 'Search Spotify’s catalog and follow artists to spotlight their shows near you.'}
+                : 'Search artists and towns — follow the acts you love to spotlight their shows near you.'}
             </ThemedText>
-          }
-          renderItem={({ item, index }) => {
-            const following = isFollowing({ spotifyId: item.spotify_id });
-            const isOpening = opening === item.spotify_id;
-            return (
-              <Animated.View
-                entering={FadeInDown.delay(Math.min(index * 40, 300)).duration(320)}
-                style={styles.row}>
-                <PressableScale
-                  haptic={false}
-                  onPress={() => openArtist(item)}
-                  style={styles.rowMain}>
-                  <Image
-                    source={item.image_url ? { uri: item.image_url } : undefined}
-                    style={[styles.avatar, { backgroundColor: theme.backgroundElevated }]}
-                    contentFit="cover"
-                  />
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <ThemedText type="smallBold" numberOfLines={1}>
-                      {item.name}
-                    </ThemedText>
-                    {item.genres.length > 0 && <GenreChip label={item.genres[0]} tone="neutral" />}
-                  </View>
-                  {isOpening ? (
-                    <ActivityIndicator color={theme.textTertiary} />
-                  ) : (
-                    <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
-                  )}
-                </PressableScale>
-                <FollowButton
-                  compact
-                  following={following}
-                  onToggle={() =>
-                    toggle({
-                      artistId: null,
-                      spotifyId: item.spotify_id,
-                      name: item.name,
-                      imageUrl: item.image_url,
-                      genres: item.genres,
-                    })
-                  }
+          )
+        }
+        renderItem={({ item, index }) => {
+          const following = isFollowing({ spotifyId: item.spotify_id });
+          const isOpening = opening === item.spotify_id;
+          return (
+            <Animated.View
+              entering={FadeInDown.delay(Math.min(index * 40, 300)).duration(320)}
+              style={styles.row}>
+              <PressableScale
+                haptic={false}
+                onPress={() => openArtist(item)}
+                style={styles.rowMain}>
+                <Image
+                  source={item.image_url ? { uri: item.image_url } : undefined}
+                  style={[styles.avatar, { backgroundColor: theme.backgroundElevated }]}
+                  contentFit="cover"
                 />
-              </Animated.View>
-            );
-          }}
-        />
-      )}
+                <View style={{ flex: 1, gap: 4 }}>
+                  <ThemedText type="smallBold" numberOfLines={1}>
+                    {item.name}
+                  </ThemedText>
+                  {item.genres.length > 0 && <GenreChip label={item.genres[0]} tone="neutral" />}
+                </View>
+                {isOpening ? (
+                  <ActivityIndicator color={theme.textTertiary} />
+                ) : (
+                  <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+                )}
+              </PressableScale>
+              <FollowButton
+                compact
+                following={following}
+                onToggle={() =>
+                  toggle({
+                    artistId: null,
+                    spotifyId: item.spotify_id,
+                    name: item.name,
+                    imageUrl: item.image_url,
+                    genres: item.genres,
+                  })
+                }
+              />
+            </Animated.View>
+          );
+        }}
+      />
     </View>
   );
 }
@@ -163,8 +216,16 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   input: { flex: 1, paddingVertical: Spacing.two + 4, fontSize: 16, fontFamily: Fonts.body },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   list: { paddingBottom: Spacing.five },
+  section: { paddingHorizontal: Spacing.three, paddingTop: Spacing.three, gap: Spacing.one },
+  townRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingVertical: Spacing.two },
+  townIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   hint: { textAlign: 'center', padding: Spacing.five },
   row: {
     flexDirection: 'row',

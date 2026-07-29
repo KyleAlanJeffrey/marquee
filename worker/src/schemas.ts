@@ -25,6 +25,12 @@ export const pageQuery = z.object({
 
 export const searchBody = z.object({ query: z.string().trim().min(1) });
 
+export const townsQuery = z.object({
+  // Empty is meaningful here: it asks for the busiest towns we know about.
+  q: z.string().trim().max(80).optional().default(''),
+  limit: z.coerce.number().int().positive().max(50).optional().default(12),
+});
+
 export const ensureBody = artistRef.refine((b) => b.spotifyId || b.artistId, {
   message: 'spotifyId or artistId is required',
 });
