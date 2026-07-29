@@ -167,13 +167,23 @@ export function sameShow(
  * owns prices, real UTC times and the marketing name; Bandsintown owns the
  * lineup and the sold-out/free flags. Neither should be able to blank a field
  * the other filled in.
+ *
+ * SeatGeek joins Ticketmaster on `starts_at` because it publishes a true UTC
+ * timestamp *and* the venue's IANA zone, so its time is measured rather than
+ * inferred — either may correct a Bandsintown guess. It does not own `price_from`:
+ * `stats.lowest_price` is the cheapest resale listing, which can sit either side
+ * of Ticketmaster's face value, so it only fills a price nobody else knows. Same
+ * for `ticket_url` — a SeatGeek link is fine when there's no primary one, but it
+ * shouldn't displace the box office. `name` stays Ticketmaster's: SeatGeek titles
+ * carry booking noise ("Johnny Dynamite (21+)"). And it contributes no `ends_at`
+ * at all — see `sgToEventInputs` for why that field is a template, not a fact.
  */
 export const FIELD_OWNER: Record<string, string[]> = {
-  starts_at: ['ticketmaster'],
+  starts_at: ['ticketmaster', 'seatgeek'],
   name: ['ticketmaster'],
   price_from: ['ticketmaster'],
   ticket_url: ['ticketmaster'],
-  lineup: ['bandsintown'],
+  lineup: ['bandsintown', 'seatgeek'],
   sold_out: ['bandsintown'],
   is_free: ['bandsintown'],
   ends_at: ['bandsintown'],

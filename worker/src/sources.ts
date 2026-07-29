@@ -7,7 +7,9 @@ import {
   enqueueArtistSources,
   ensureArtist,
   ensureArtistByName,
+  ensureArtistsByName,
   finishRun,
+  isoAt,
   nowIso,
   persist,
   deferArtistSources,
@@ -584,11 +586,230 @@ export async function backfillCrawlQueue(env: Env, source = 'bandsintown'): Prom
   return { queued: rows.length };
 }
 
+// --- SeatGeek ---------------------------------------------------------------
+
+/**
+ * SeatGeek is a geographic source, like Ticketmaster and unlike Bandsintown: it
+ * searches by lat/lon and radius, so it fills in the venues Ticketmaster's
+ * catalogue misses rather than the artists Bandsintown knows about. Its first SF
+ * page is mostly small rooms — Kilowatt Bar, the Castro Theatre — which is exactly
+ * the gap phase 4 was opened to close.
+ *
+ * Two things it publishes that nothing else here does: a true UTC timestamp
+ * (`datetime_utc`) and the venue's IANA zone, so its show times need no inference
+ * at all.
+ */
+const SG_BASE = 'https://api.seatgeek.com/2';
+const SG_MAX_RETRIES = 3;
+/** The API's own ceiling — asking for 200 quietly returns 100. */
+const SG_PER_PAGE = 100;
+/**
+ * Pages per sweep. A dense metro has ~600 concerts inside 25 miles, but this
+ * shares a Worker invocation (and its subrequest budget) with the Ticketmaster
+ * pass, and shows are returned soonest-first, so three pages takes the part of
+ * the tail that matters and leaves the rest to the next sweep.
+ */
+const SG_MAX_PAGES = 3;
+/**
+ * Performer names kept as the lineup. Festival bills run long — Outside Lands
+ * lists 76 — and the whole list is neither useful on a card nor worth the bytes.
+ * The crawl's frontier expansion promotes these to artist rows at its own pace.
+ */
+const SG_LINEUP_MAX = 12;
+
+/** SeatGeek stamps some `*_local` fields with a `Z` they don't mean. */
+const stripZ = (s: string) => s.replace(/[Zz]$/, '');
+
+/**
+ * A show's start as real UTC. `datetime_utc` is UTC by name but carries no zone
+ * suffix, so parsing it as-is would read it as the *reader's* local time — seven
+ * hours out for a California venue, and wrong in a way that looks plausible.
+ */
+export function sgUtc(e: any): string | null {
+  const utc = typeof e?.datetime_utc === 'string' ? e.datetime_utc.trim() : '';
+  if (utc) {
+    const t = Date.parse(HAS_ZONE.test(utc) ? utc : `${utc.replace(' ', 'T')}Z`);
+    if (!Number.isNaN(t)) return isoAt(t);
+  }
+  // No UTC field: the local time plus the venue's own IANA zone is as good, and
+  // better than anything we could infer from a longitude.
+  const local = typeof e?.datetime_local === 'string' ? stripZ(e.datetime_local.trim()) : '';
+  const zone = typeof e?.venue?.timezone === 'string' ? e.venue.timezone.trim() : '';
+  if (!local || !zone) return null;
+  const naive = Date.parse(`${local.replace(' ', 'T')}Z`);
+  if (Number.isNaN(naive)) return null;
+  const ms = utcMsFromLocal(naive, zone);
+  return ms === null ? null : isoAt(ms);
+}
+
+function sgVenue(e: any): VenueRow | null {
+  const v = e?.venue;
+  if (!v?.id) return null;
+  const { lat, lng } = wkt(v.location?.lon, v.location?.lat);
+  return {
+    source: 'seatgeek',
+    source_venue_id: String(v.id),
+    name: v.name_v2 || v.name || 'Unknown venue',
+    city: v.city ?? null,
+    region: v.state ?? null,
+    country: v.country ?? null,
+    lat,
+    lng,
+  };
+}
+
+export type SgPerformer = { name: string; imageUrl: string | null };
+
+/**
+ * The billed acts, headliner first. SeatGeek marks one performer `primary`; the
+ * rest keep their payload order, which is the running order often enough.
+ */
+export function sgPerformers(e: any): SgPerformer[] {
+  const raw = Array.isArray(e?.performers) ? e.performers : [];
+  const seen = new Set<string>();
+  const out: SgPerformer[] = [];
+  for (const p of [...raw].sort((a, b) => Number(b?.primary === true) - Number(a?.primary === true))) {
+    const name = typeof p?.name === 'string' ? p.name.trim() : '';
+    if (!name) continue;
+    const folded = name.toLowerCase();
+    if (seen.has(folded)) continue;
+    seen.add(folded);
+    out.push({ name, imageUrl: typeof p?.image === 'string' && p.image ? p.image : null });
+    if (out.length >= SG_LINEUP_MAX) break;
+  }
+  return out;
+}
+
+/** `stats.lowest_price` is the cheapest live listing; 0 means "no listings". */
+function sgPrice(e: any): number | null {
+  const low = e?.stats?.lowest_price;
+  return typeof low === 'number' && low > 0 ? low : null;
+}
+
+/**
+ * Pure mapping, so it can be tested against a recorded payload. `artistIdFor`
+ * takes a case-folded performer name and returns the artist row it resolved to —
+ * resolution needs the database, mapping doesn't.
+ *
+ * `enddatetime_utc` is deliberately ignored. It looks like data and isn't: across
+ * a recorded San Francisco page, 45 of 49 events ended exactly 90 minutes after
+ * they started and the other 4 exactly 60, so it's a template SeatGeek fills in
+ * rather than a time anyone published. Carrying it would print a made-up "ends at"
+ * on every show, and worse, fill that field on Ticketmaster rows that are honestly
+ * empty today.
+ */
+export function sgToEventInputs(
+  sgEvents: any[],
+  artistIdFor: (foldedName: string) => string | undefined,
+): EventInput[] {
+  return sgEvents.flatMap((e: any) => {
+    if (!e?.id || e.date_tbd === true) return [];
+    const startsAt = sgUtc(e);
+    if (!startsAt) return [];
+    const performers = sgPerformers(e);
+    const headliner = performers[0];
+    if (!headliner) return [];
+    const artistId = artistIdFor(headliner.name.toLowerCase());
+    if (!artistId) return [];
+    return [
+      {
+        source: 'seatgeek',
+        source_event_id: String(e.id),
+        name: e.title || e.short_title || `${headliner.name} @ ${e.venue?.name ?? 'TBA'}`,
+        starts_at: startsAt,
+        ticket_url: typeof e.url === 'string' && e.url ? e.url : null,
+        price_from: sgPrice(e),
+        lineup: performers.length > 1 ? performers.map((p) => p.name) : null,
+        artist_id: artistId,
+        venue: sgVenue(e),
+      },
+    ];
+  });
+}
+
+async function sgFetch(env: Env, path: string, params: Record<string, string>): Promise<any> {
+  const qs = new URLSearchParams({ ...params, client_id: env.SEATGEEK_CLIENT_ID! });
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetchWithTimeout(`${SG_BASE}/${path}?${qs}`);
+    if ((res.status === 429 || res.status >= 500) && attempt < SG_MAX_RETRIES) {
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      continue;
+    }
+    // A bad client_id is a 401 that would otherwise look like "no shows here".
+    if (!res.ok) throw new Error(`SeatGeek ${path}: ${res.status}`);
+    return res.json();
+  }
+}
+
+/** Upcoming concerts near a point, soonest first, over at most `SG_MAX_PAGES`. */
+async function sgEventsNear(env: Env, lat: number, lng: number, radiusMiles: number): Promise<any[]> {
+  const range = `${Math.min(Math.max(Math.round(radiusMiles), 1), 150)}mi`;
+  const out: any[] = [];
+  for (let page = 1; page <= SG_MAX_PAGES; page++) {
+    const json = await sgFetch(env, 'events', {
+      lat: String(lat),
+      lon: String(lng),
+      range,
+      'taxonomies.name': 'concert',
+      'datetime_utc.gte': nowIso().slice(0, 19),
+      sort: 'datetime_utc.asc',
+      per_page: String(SG_PER_PAGE),
+      page: String(page),
+    });
+    const batch = Array.isArray(json?.events) ? json.events : [];
+    out.push(...batch);
+    // Short page means we've reached the end of the listing.
+    if (batch.length < SG_PER_PAGE) break;
+  }
+  return out;
+}
+
+/**
+ * One SeatGeek sweep of an area, persisted. Kept separate from the Ticketmaster
+ * pass in `discover` so `/api/admin/stats` can attribute what each source added —
+ * and because persisting them in two calls still merges duplicates: the second
+ * pass finds the first pass's rows in D1 and folds into them.
+ */
+export async function ingestSeatGeek(
+  env: Env,
+  lat: number,
+  lng: number,
+  radius: number,
+): Promise<{ scanned: number; ingested: number; artists_created: number; skipped?: string }> {
+  const db = getDb(env.DB);
+  if (!env.SEATGEEK_CLIENT_ID) return { scanned: 0, ingested: 0, artists_created: 0, skipped: 'SEATGEEK_CLIENT_ID not set' };
+
+  const run = await startRun(db, 'seatgeek', 'discover');
+  try {
+    const sgEvents = await sgEventsNear(env, lat, lng, radius);
+    // Headliners only: support acts live in `lineup`, and the crawl's frontier
+    // expansion promotes them to artist rows at a rate D1's write quota can take.
+    const headliners = sgEvents.flatMap((e) => sgPerformers(e).slice(0, 1));
+    const { ids, created } = await ensureArtistsByName(db, headliners);
+    const inputs = sgToEventInputs(sgEvents, (folded) => ids.get(folded));
+    const newIds = await persist(db, inputs);
+    await finishRun(db, run, {
+      scanned: sgEvents.length,
+      inserted: newIds.length,
+      note: `${created} new artist(s)`,
+    });
+    return { scanned: sgEvents.length, ingested: newIds.length, artists_created: created };
+  } catch (err) {
+    await finishRun(db, run, { failed: 1, note: String(err).slice(0, 200) });
+    throw err;
+  }
+}
+
 // --- Ingestion orchestrators ------------------------------------------------
 
+/**
+ * Sweep an area for shows. Both geographic sources are asked — Ticketmaster for
+ * the ticketed catalogue, SeatGeek for the clubs it doesn't list — and the
+ * six-hour throttle covers the pair, since they cost one round trip each to the
+ * same question.
+ */
 export async function discover(env: Env, lat: number, lng: number, radius: number) {
   const db = getDb(env.DB);
-  const run = await startRun(db, 'ticketmaster', 'discover');
   const cell = `${lat.toFixed(1)},${lng.toFixed(1)},${Math.round(radius)}`;
   const log = await db
     .select({ fetchedAt: discoveryLog.fetchedAt })
@@ -596,25 +817,47 @@ export async function discover(env: Env, lat: number, lng: number, radius: numbe
     .where(eq(discoveryLog.cell, cell))
     .get();
   if (log && Date.now() - new Date(log.fetchedAt).getTime() < 6 * 3600_000) {
-    await finishRun(db, run, { note: 'recently fetched' });
     return { skipped: true, reason: 'recently fetched', ingested: 0 };
   }
 
-  const tmEvents = await tmEventsNear(env, lat, lng, radius);
-  const inputs: EventInput[] = [];
-  for (const e of tmEvents) {
-    const artistId = await upsertTmArtist(db, e._embedded?.attractions?.[0]);
-    if (!artistId) continue;
-    const input = tmToEventInput(e, artistId);
-    if (input) inputs.push(input);
+  let tmScanned = 0;
+  let tmIngested = 0;
+  if (env.TICKETMASTER_API_KEY) {
+    const run = await startRun(db, 'ticketmaster', 'discover');
+    const tmEvents = await tmEventsNear(env, lat, lng, radius);
+    const inputs: EventInput[] = [];
+    for (const e of tmEvents) {
+      const artistId = await upsertTmArtist(db, e._embedded?.attractions?.[0]);
+      if (!artistId) continue;
+      const input = tmToEventInput(e, artistId);
+      if (input) inputs.push(input);
+    }
+    tmScanned = tmEvents.length;
+    tmIngested = (await persist(db, inputs)).length;
+    await finishRun(db, run, { scanned: tmScanned, inserted: tmIngested });
   }
-  const newIds = await persist(db, inputs);
+
+  // A SeatGeek failure must not lose the Ticketmaster pass that already
+  // succeeded, nor mark the cell unfetched and re-run the whole sweep.
+  let sg = { scanned: 0, ingested: 0, artists_created: 0 } as Awaited<ReturnType<typeof ingestSeatGeek>>;
+  try {
+    sg = await ingestSeatGeek(env, lat, lng, radius);
+  } catch (err) {
+    console.error('seatgeek discover failed:', err);
+  }
+
   await db
     .insert(discoveryLog)
     .values({ cell, fetchedAt: nowIso() })
     .onConflictDoUpdate({ target: discoveryLog.cell, set: { fetchedAt: sql`excluded.fetched_at` } });
-  await finishRun(db, run, { scanned: tmEvents.length, inserted: newIds.length });
-  return { ingested: newIds.length, scanned: tmEvents.length };
+  return {
+    ingested: tmIngested + sg.ingested,
+    scanned: tmScanned + sg.scanned,
+    by_source: {
+      ticketmaster: { scanned: tmScanned, ingested: tmIngested },
+      seatgeek: { scanned: sg.scanned, ingested: sg.ingested, artists_created: sg.artists_created },
+    },
+  };
 }
 
 export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {

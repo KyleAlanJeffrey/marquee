@@ -1,0 +1,903 @@
+[
+ {
+  "announce_date": "2026-06-08T00:00:00",
+  "date_tbd": false,
+  "datetime_local": "2026-07-29T19:00:00",
+  "datetime_utc": "2026-07-30T02:00:00",
+  "enddatetime_utc": "2026-07-30T03:30:00",
+  "id": 18293203,
+  "performers": [
+   {
+    "type": "band",
+    "name": "Johnny Dynamite",
+    "image": "https://seatgeekimages.com/performers-landscape/johnny-dynamite-3894a4/702536/huge.jpg",
+    "id": 702536,
+    "primary": true,
+    "url": "https://seatgeek.com/johnny-dynamite-tickets",
+    "slug": "johnny-dynamite"
+   }
+  ],
+  "popularity": 0.7178599069,
+  "short_title": "Johnny Dynamite (21+)",
+  "stats": {
+   "listing_count": 0,
+   "average_price": null,
+   "lowest_price": null,
+   "highest_price": null,
+   "median_price": 0,
+   "lowest_sg_base_price": null
+  },
+  "taxonomies": [
+   {
+    "id": 2000000,
+    "name": "concert"
+   }
+  ],
+  "time_tbd": false,
+  "title": "Johnny Dynamite (21+)",
+  "url": "https://seatgeek.com/johnny-dynamite-tickets/san-francisco-california-kilowatt-bar-2026-07-29-7-pm/concert/18293203",
+  "venue": {
+   "id": 521382,
+   "name": "Kilowatt Bar",
+   "postal_code": "94103",
+   "timezone": "America/Los_Angeles",
+   "address": null,
+   "country": "US",
+   "city": "San Francisco",
+   "state": "CA",
+   "slug": "kilowatt-bar",
+   "capacity": 0,
+   "extended_address": "San Francisco, CA 94103",
+   "location": {
+    "lat": 37.7651,
+    "lon": -122.423
+   },
+   "url": "https://seatgeek.com/venues/kilowatt-bar/tickets"
+  },
+  "type": "concert"
+ },
+ {
+  "announce_date": "2026-04-14T00:00:00",
+  "date_tbd": false,
+  "datetime_local": "2026-07-29T19:30:00",
+  "datetime_utc": "2026-07-30T02:30:00",
+  "enddatetime_utc": "2026-07-30T04:00:00",
+  "id": 18177184,
+  "performers": [
+   {
+    "type": "band",
+    "name": "ENHYPEN",
+    "image": "https://seatgeekimages.com/performers-landscape/enhypen-bb5737/798971/70745/huge.jpg",
+    "id": 798971,
+    "primary": true,
+    "url": "https://seatgeek.com/enhypen-tickets",
+    "slug": "enhypen"
+   }
+  ],
+  "popularity": 0.8769023708,
+  "short_title": "ENHYPEN",
+  "stats": {
+   "listing_count": 59,
+   "average_price": 162,
+   "lowest_price": 60,
+   "highest_price": 274,
+   "median_price": 174,
+   "lowest_sg_base_price": 50
+  },
+  "taxonomies": [
+   {
+    "id": 2000000,
+    "name": "concert"
+   }
+  ],
+  "time_tbd": false,
+  "title": "ENHYPEN",
+  "url": "https://seatgeek.com/enhypen-tickets/oakland-california-oakland-arena-2026-07-29-7-30-pm/concert/18177184",
+  "venue": {
+   "id": 132,
+   "name": "Oakland Arena",
+   "postal_code": "94621",
+   "timezone": "America/Los_Angeles",
+   "address": "7000 Coliseum Way",
+   "country": "US",
+   "city": "Oakland",
+   "state": "CA",
+   "slug": "oakland-arena",
+   "capacity": 19596,
+   "extended_address": "Oakland, CA 94621",
+   "location": {
+    "lat": 37.7503,
+    "lon": -122.203
+   },
+   "url": "https://seatgeek.com/venues/oakland-arena/tickets"
+  },
+  "type": "concert"
+ },
+ {
+  "announce_date": "2026-03-10T00:00:00",
+  "date_tbd": false,
+  "datetime_local": "2026-07-29T20:00:00",
+  "datetime_utc": "2026-07-30T03:00:00",
+  "enddatetime_utc": "2026-07-30T04:30:00",
+  "id": 18116196,
+  "performers": [
+   {
+    "type": "band",
+    "name": "Kim Gordon",
+    "image": "https://seatgeekimages.com/performers-landscape/kim-gordon-c0c18f/753075/huge.jpg",
+    "id": 753075,
+    "primary": true,
+    "url": "https://seatgeek.com/kim-gordon-tickets",
+    "slug": "kim-gordon"
+   },
+   {
+    "type": "band",
+    "name": "Sasami Ashworth",
+    "image": "https://seatgeekimages.com/performers-landscape/sasami-ashworth-655bd7/666272/huge.jpg",
+    "id": 666272,
+    "url": "https://seatgeek.com/sasami-ashworth-tickets",
+    "slug": "sasami-ashworth"
+   }
+  ],
+  "popularity": 0.706450748,
+  "short_title": "Kim Gordon",
+  "stats": {
+   "listing_count": 22,
+   "average_price": 110,
+   "lowest_price": 57,
+   "highest_price": 272,
+   "median_price": 86,
+   "lowest_sg_base_price": 47
+  },
+  "taxonomies": [
+   {
+    "id": 2000000,
+    "name": "concert"
+   }
+  ],
+  "time_tbd": false,
+  "title": "Kim Gordon",
+  "url": "https://seatgeek.com/kim-gordon-tickets/san-francisco-california-castro-theatre-2026-07-29-8-pm/concert/18116196",
+  "venue": {
+   "id": 3557,
+   "name": "Castro Theatre",
+   "postal_code": "94114",
+   "timezone": "America/Los_Angeles",
+   "address": "429 Castro Street",
+   "country": "US",
+   "city": "San Francisco",
+   "state": "CA",
+   "slug": "castro-theatre",
+   "capacity": 0,
+   "extended_address": "San Francisco, CA 94114",
+   "location": {
+    "lat": 37.762,
+    "lon": -122.435
+   },
+   "url": "https://seatgeek.com/venues/castro-theatre/tickets"
+  },
+  "type": "concert"
+ },
+ {
+  "announce_date": "2026-05-21T00:00:00",
+  "date_tbd": false,
+  "datetime_local": "2026-08-01T15:00:00",
+  "datetime_utc": "2026-08-01T22:00:00",
+  "enddatetime_utc": "2026-08-01T23:00:00",
+  "id": 18388543,
+  "performers": [
+   {
+    "type": "music_festival",
+    "name": "R&B Rewind Fest",
+    "image": "https://seatgeekimages.com/performers-landscape/r-b-rewind-fest-486542/389385/huge.jpg",
+    "id": 389385,
+    "primary": true,
+    "url": "https://seatgeek.com/r-b-rewind-fest-tickets",
+    "slug": "r-b-rewind-fest"
+   }
+  ],
+  "popularity": 0.6752776556,
+  "short_title": "R&B Rewind Fest",
+  "stats": {
+   "listing_count": 1,
+   "average_price": 74,
+   "lowest_price": 75,
+   "highest_price": 74,
+   "median_price": 74,
+   "lowest_sg_base_price": 60
+  },
+  "taxonomies": [
+   {
+    "id": 2000000,
+    "name": "concert"
+   },
+   {
+    "id": 2010000,
+    "name": "music_festival"
+   }
+  ],
+  "time_tbd": false,
+  "title": "R&B Rewind Fest",
+  "url": "https://seatgeek.com/r-b-rewind-fest-tickets/san-francisco-california-the-midway-sf-2026-08-01-3-pm/music-festival/18388543",
+  "venue": {
+   "id": 78766,
+   "name": "The Midway - SF",
+   "postal_code": "94124",
+   "timezone": "America/Los_Angeles",
+   "address": "900 Marin Street",
+   "country": "US",
+   "city": "San Francisco",
+   "state": "CA",
+   "slug": "the-midway-sf",
+   "capacity": 0,
+   "extended_address": "San Francisco, CA 94124",
+   "location": {
+    "lat": 37.7492,
+    "lon": -122.386
+   },
+   "url": "https://seatgeek.com/venues/the-midway-sf/tickets"
+  },
+  "type": "music_festival"
+ },
+ {
+  "announce_date": "2025-11-14T00:00:00",
+  "date_tbd": false,
+  "datetime_local": "2026-08-07T03:30:00",
+  "datetime_utc": "2026-08-07T10:30:00",
+  "enddatetime_utc": null,
+  "id": 17906601,
+  "performers": [
+   {
+    "type": "music_festival",
+    "name": "Outside Lands Music Festival",
+    "image": "https://seatgeekimages.com/performers-landscape/outside-lands-music-festival-1-16fcf1/4968/huge.jpg",
+    "id": 4968,
+    "primary": true,
+    "url": "https://seatgeek.com/outside-lands-music-festival-1-tickets",
+    "slug": "outside-lands-music-festival-1"
+   },
+   {
+    "type": "band",
+    "name": "Boys Noize",
+    "image": "https://seatgeekimages.com/performers-landscape/boys-noize-a64fc5/9903/huge.jpg",
+    "id": 9903,
+    "url": "https://seatgeek.com/boys-noize-tickets",
+    "slug": "boys-noize"
+   },
+   {
+    "type": "band",
+    "name": "Charli XCX",
+    "image": "https://seatgeekimages.com/performers-landscape/charli-xcx-f99dfe/16709/huge.jpg",
+    "id": 16709,
+    "url": "https://seatgeek.com/charli-xcx-tickets",
+    "slug": "charli-xcx"
+   },
+   {
+    "type": "band",
+    "name": "RUFUS DU SOL",
+    "image": "https://seatgeekimages.com/performers-landscape/rufus-du-sol-0323b1/267482/huge.jpg",
+    "id": 267482,
+    "url": "https://seatgeek.com/rufus-du-sol-tickets",
+    "slug": "rufus-du-sol"
+   },
+   {
+    "type": "band",
+    "name": "The Strokes",
+    "image": "https://seatgeekimages.com/performers-landscape/the-strokes-057c9a/6296/huge.jpg",
+    "id": 6296,
+    "url": "https://seatgeek.com/the-strokes-tickets",
+    "slug": "the-strokes"
+   },
+   {
+    "type": "band",
+    "name": "The xx",
+    "image": "https://seatgeekimages.com/performers-landscape/the-xx-5207a1/24610/huge.jpg",
+    "id": 24610,
+    "url": "https://seatgeek.com/the-xx-tickets",
+    "slug": "the-xx"
+   },
+   {
+    "type": "band",
+    "name": "Baby Keem",
+    "image": "https://seatgeekimages.com/performers-landscape/baby-keem-14f769/770186/huge.jpg",
+    "id": 770186,
+    "url": "https://seatgeek.com/baby-keem-tickets",
+    "slug": "baby-keem"
+   },
+   {
+    "type": "band",
+    "name": "Turnstile",
+    "image": "https://seatgeekimages.com/performers-landscape/turnstile-1-a2122e/159824/huge.jpg",
+    "id": 159824,
+    "url": "https://seatgeek.com/turnstile-1-tickets",
+    "slug": "turnstile-1"
+   },
+   {
+    "type": "band",
+    "name": "Griztronics",
+    "image": "https://seatgeekimages.com/performers-landscape/griztronics-842e51/1967575/huge.jpg",
+    "id": 1967575,
+    "url": "https://seatgeek.com/griztronics-tickets",
+    "slug": "griztronics"
+   },
+   {
+    "type": "band",
+    "name": "Djo",
+    "image": "https://seatgeekimages.com/performers-landscape/djo-f4233b/779118/huge.jpg",
+    "id": 779118,
+    "url": "https://seatgeek.com/djo-tickets",
+    "slug": "djo"
+   },
+   {
+    "type": "band",
+    "name": "Labrinth",
+    "image": "https://seatgeekimages.com/performers-landscape/labrinth-88e927/22888/huge.jpg",
+    "id": 22888,
+    "url": "https://seatgeek.com/labrinth-tickets",
+    "slug": "labrinth"
+   },
+   {
+    "type": "band",
+    "name": "Empire of the Sun",
+    "image": "https://seatgeekimages.com/performers-landscape/empire-of-the-sun-dd99c4/4900/huge.jpg",
+    "id": 4900,
+    "url": "https://seatgeek.com/empire-of-the-sun-tickets",
+    "slug": "empire-of-the-sun"
+   },
+   {
+    "type": "band",
+    "name": "Dijon",
+    "image": "https://seatgeekimages.com/performers-landscape/dijon-b38326/715434/huge.jpg",
+    "id": 715434,
+    "url": "https://seatgeek.com/dijon-tickets",
+    "slug": "dijon"
+   },
+   {
+    "type": "band",
+    "name": "Disco Lines",
+    "image": "https://seatgeekimages.com/performers-landscape/disco-lines-1549d6/799256/huge.jpg",
+    "id": 799256,
+    "url": "https://seatgeek.com/disco-lines-tickets",
+    "slug": "disco-lines"
+   },
+   {
+    "type": "band",
+    "name": "GloRilla",
+    "image": "https://seatgeekimages.com/performers-landscape/glorilla-8df3fa/800326/huge.jpg",
+    "id": 800326,
+    "url": "https://seatgeek.com/glorilla-tickets",
+    "slug": "glorilla"
+   },
+   {
+    "type": "band",
+    "name": "Ethel Cain",
+    "image": "https://seatgeekimages.com/performers-landscape/ethel-cain-deebec/798453/huge.jpg",
+    "id": 798453,
+    "url": "https://seatgeek.com/ethel-cain-tickets",
+    "slug": "ethel-cain"
+   },
+   {
+    "type": "band",
+    "name": "Geese",
+    "image": "https://seatgeekimages.com/performers-landscape/geese-bb198e/794882/huge.jpg",
+    "id": 794882,
+    "url": "https://seatgeek.com/geese-tickets",
+    "slug": "geese"
+   },
+   {
+    "type": "band",
+    "name": "Mariah the Scientist",
+    "image": "https://seatgeekimages.com/performers-landscape/mariah-the-scientist-d4bef6/790190/huge.jpg",
+    "id": 790190,
+    "url": "https://seatgeek.com/mariah-the-scientist-tickets",
+    "slug": "mariah-the-scientist"
+   },
+   {
+    "type": "band",
+    "name": "Modest Mouse",
+    "image": "https://seatgeekimages.com/performers-landscape/modest-mouse-0601c6/1272/huge.jpg",
+    "id": 1272,
+    "url": "https://seatgeek.com/modest-mouse-tickets",
+    "slug": "modest-mouse"
+   },
+   {
+    "type": "band",
+    "name": "Malcolm Todd",
+    "image": "https://seatgeekimages.com/performers-landscape/malcolm-todd-1c68d9/807371/huge.jpg",
+    "id": 807371,
+    "url": "https://seatgeek.com/malcolm-todd-tickets",
+    "slug": "malcolm-todd"
+   },
+   {
+    "type": "band",
+    "name": "Lane 8",
+    "image": "https://seatgeekimages.com/performers-landscape/lane-8-c8d165/293706/huge.jpg",
+    "id": 293706,
+    "url": "https://seatgeek.com/lane-8-tickets",
+    "slug": "lane-8"
+   },
+   {
+    "type": "band",
+    "name": "Boris Brejcha",
+    "image": "https://seatgeekimages.com/performers-landscape/boris-brejcha-9edb63/110203/huge.jpg",
+    "id": 110203,
+    "url": "https://seatgeek.com/boris-brejcha-tickets",
+    "slug": "boris-brejcha"
+   },
+   {
+    "type": "band",
+    "name": "Audrey Hobert",
+    "image": "https://seatgeekimages.com/performers-landscape/audrey-hobert-5cbc1a/1965509/huge.jpg",
+    "id": 1965509,
+    "url": "https://seatgeek.com/audrey-hobert-tickets",
+    "slug": "audrey-hobert"
+   },
+   {
+    "type": "band",
+    "name": "Ben Bohmer",
+    "image": "https://seatgeekimages.com/performers-landscape/ben-bohmer-27ef10/704698/huge.jpg",
+    "id": 704698,
+    "url": "https://seatgeek.com/ben-bohmer-tickets",
+    "slug": "ben-bohmer"
+   },
+   {
+    "type": "band",
+    "name": "The Temper Trap",
+    "image": "https://seatgeekimages.com/performers-landscape/the-temper-trap-d3445d/4237/huge.jpg",
+    "id": 4237,
+    "url": "https://seatgeek.com/the-temper-trap-tickets",
+    "slug": "the-temper-trap"
+   },
+   {
+    "type": "band",
+    "name": "kwn",
+    "image": "https://seatgeekimages.com/performers-landscape/kwn-cd9a9b/1964152/huge.jpg",
+    "id": 1964152,
+    "url": "https://seatgeek.com/kwn-tickets",
+    "slug": "kwn"
+   },
+   {
+    "type": "band",
+    "name": "Laszewo",
+    "image": "https://seatgeekimages.com/performers-landscape/laszewo-377f01/801963/huge.jpg",
+    "id": 801963,
+    "url": "https://seatgeek.com/laszewo-tickets",
+    "slug": "laszewo"
+   },
+   {
+    "type": "band",
+    "name": "Trixie Mattel",
+    "image": "https://seatgeekimages.com/performers-landscape/trixie-mattel-131177/338898/huge.jpg",
+    "id": 338898,
+    "url": "https://seatgeek.com/trixie-mattel-tickets",
+    "slug": "trixie-mattel"
+   },
+   {
+    "type": "band",
+    "name": "Durand Bernarr",
+    "image": "https://seatgeekimages.com/performers-landscape/durand-bernarr-a50c4d/800174/huge.jpg",
+    "id": 800174,
+    "url": "https://seatgeek.com/durand-bernarr-tickets",
+    "slug": "durand-bernarr"
+   },
+   {
+    "type": "band",
+    "name": "Kingfishr",
+    "image": "https://seatgeekimages.com/performers-landscape/kingfishr-30325a/720640/huge.jpg",
+    "id": 720640,
+    "url": "https://seatgeek.com/kingfishr-tickets",
+    "slug": "kingfishr"
+   },
+   {
+    "type": "band",
+    "name": "Sultan + Shepard",
+    "image": "https://seatgeekimages.com/performers-landscape/sultan-shepard-1-3c1ea3/1957471/huge.jpg",
+    "id": 1957471,
+    "url": "https://seatgeek.com/sultan-ned-shepard-tickets",
+    "slug": "sultan-shepard-1"
+   },
+   {
+    "type": "band",
+    "name": "Frost Children",
+    "image": "https://seatgeekimages.com/performers-landscape/frost-children-d64266/801873/huge.jpg",
+    "id": 801873,
+    "url": "https://seatgeek.com/frost-children-tickets",
+    "slug": "frost-children"
+   },
+   {
+    "type": "band",
+    "name": "Miss Monique",
+    "image": "https://seatgeekimages.com/performers-landscape/miss-monique-d6ec1a/364556/huge.jpg",
+    "id": 364556,
+    "url": "https://seatgeek.com/miss-monique-tickets",
+    "slug": "miss-monique"
+   },
+   {
+    "type": "band",
+    "name": "Haute & Freddy",
+    "image": "https://seatgeekimages.com/performers-landscape/haute-and-freddy-763113/1964871/huge.jpg",
+    "id": 1964871,
+    "url": "https://seatgeek.com/haute-and-freddy-tickets",
+    "slug": "haute-and-freddy"
+   },
+   {
+    "type": "band",
+    "name": "Goldie Boutilier",
+    "image": "https://seatgeekimages.com/performers-landscape/goldie-boutilier-72ff6e/811500/huge.jpg",
+    "id": 811500,
+    "url": "https://seatgeek.com/goldie-boutilier-tickets",
+    "slug": "goldie-boutilier"
+   },
+   {
+    "type": "band",
+    "name": "Amble",
+    "image": "https://seatgeekimages.com/performers-landscape/amble-5650db/1957189/huge.jpg",
+    "id": 1957189,
+    "url": "https://seatgeek.com/amble-tickets",
+    "slug": "amble"
+   },
+   {
+    "type": "band",
+    "name": "YARD ACT",
+    "image": "https://seatgeekimages.com/performers-landscape/yard-act-8effce/797257/huge.jpg",
+    "id": 797257,
+    "url": "https://seatgeek.com/yard-act-tickets",
+    "slug": "yard-act"
+   },
+   {
+    "type": "band",
+    "name": "Infinity Song",
+    "image": "https://seatgeekimages.com/performers-landscape/infinity-song-abc07d/788354/huge.jpg",
+    "id": 788354,
+    "url": "https://seatgeek.com/infinity-song-tickets",
+    "slug": "infinity-song"
+   },
+   {
+    "type": "band",
+    "name": "Billie Marten",
+    "image": "https://seatgeekimages.com/performers-landscape/billie-marten-be2411/418566/huge.jpg",
+    "id": 418566,
+    "url": "https://seatgeek.com/billie-marten-tickets",
+    "slug": "billie-marten"
+   },
+   {
+    "type": "band",
+    "name": "Night Tapes",
+    "image": "https://seatgeekimages.com/performers-landscape/night-tapes-6c54ce/1955574/huge.jpg",
+    "id": 1955574,
+    "url": "https://seatgeek.com/night-tapes-tickets",
+    "slug": "night-tapes"
+   },
+   {
+    "type": "band",
+    "name": "Bandalos Chinos",
+    "image": "https://seatgeekimages.com/performers-landscape/bandalos-chinos-e99676/803916/huge.jpg",
+    "id": 803916,
+    "url": "https://seatgeek.com/bandalos-chinos-tickets",
+    "slug": "bandalos-chinos"
+   },
+   {
+    "type": "band",
+    "name": "Bad Nerves",
+    "image": "https://seatgeekimages.com/performers-landscape/bad-nerves-3aa297/1957982/huge.jpg",
+    "id": 1957982,
+    "url": "https://seatgeek.com/bad-nerves-tickets",
+    "slug": "bad-nerves"
+   },
+   {
+    "type": "band",
+    "name": "Chezile",
+    "image": "https://seatgeekimages.com/performers-landscape/chezile-f1f742/1962599/huge.jpg",
+    "id": 1962599,
+    "url": "https://seatgeek.com/chezile-tickets",
+    "slug": "chezile"
+   },
+   {
+    "type": "band",
+    "name": "Rio Kosta",
+    "image": "https://seatgeekimages.com/performers-landscape/rio-kosta-a5dc8c/1967916/huge.jpg",
+    "id": 1967916,
+    "url": "https://seatgeek.com/rio-kosta-tickets",
+    "slug": "rio-kosta"
+   },
+   {
+    "type": "band",
+    "name": "sosocamo",
+    "image": "https://seatgeekimages.com/performers-landscape/generic-concerts-51db0c/677165/35972/huge.jpg",
+    "id": 1965582,
+    "url": "https://seatgeek.com/sosocamo-tickets",
+    "slug": "sosocamo"
+   },
+   {
+    "type": "band",
+    "name": "Red Leather",
+    "image": "https://seatgeekimages.com/performers-landscape/red-leather-b39c60/806321/huge.jpg",
+    "id": 806321,
+    "url": "https://seatgeek.com/red-leather-tickets",
+    "slug": "red-leather"
+   },
+   {
+    "type": "band",
+    "name": "Death Cab for Cutie",
+    "image": "https://seatgeekimages.com/performers-landscape/death-cab-for-cutie-893da7/571/huge.jpg",
+    "id": 571,
+    "url": "https://seatgeek.com/death-cab-for-cutie-tickets",
+    "slug": "death-cab-for-cutie"
+   },
+   {
+    "type": "band",
+    "name": "Clipse",
+    "image": "https://seatgeekimages.com/performers-landscape/clipse-e02957/804721/huge.jpg",
+    "id": 804721,
+    "url": "https://seatgeek.com/clipse-tickets",
+    "slug": "clipse"
+   },
+   {
+    "type": "band",
+    "name": "Lucy Dacus",
+    "image": "https://seatgeekimages.com/performers-landscape/lucy-dacus-cfc398/358064/huge.jpg",
+    "id": 358064,
+    "url": "https://seatgeek.com/lucy-dacus-tickets",
+    "slug": "lucy-dacus"
+   },
+   {
+    "type": "band",
+    "name": "Wet Leg",
+    "image": "https://seatgeekimages.com/performers-landscape/wet-leg-14f41d/795993/huge.jpg",
+    "id": 795993,
+    "url": "https://seatgeek.com/wet-leg-tickets",
+    "slug": "wet-leg"
+   },
+   {
+    "type": "band",
+    "name": "Not For Radio - Maria Zardoya of The Marias",
+    "image": "https://seatgeekimages.com/performers-landscape/not-for-radio-4dd387/1967418/huge.jpg",
+    "id": 1967418,
+    "url": "https://seatgeek.com/not-for-radio-tickets",
+    "slug": "not-for-radio"
+   },
+   {
+    "type": "band",
+    "name": "Sierra Ferrell",
+    "image": "https://seatgeekimages.com/performers-landscape/sierra-ferrell-6f0197/695289/huge.jpg",
+    "id": 695289,
+    "url": "https://seatgeek.com/sierra-ferrell-tickets",
+    "slug": "sierra-ferrell"
+   },
+   {
+    "type": "band",
+    "name": "Snow Strippers",
+    "image": "https://seatgeekimages.com/performers-landscape/snow-strippers-ebeb36/807705/huge.jpg",
+    "id": 807705,
+    "url": "https://seatgeek.com/snow-strippers-tickets",
+    "slug": "snow-strippers"
+   },
+   {
+    "type": "band",
+    "name": "it's murph",
+    "image": "https://seatgeekimages.com/performers-landscape/generic-concerts-1095cf/677165/47517/huge.jpg",
+    "id": 804712,
+    "url": "https://seatgeek.com/it-s-murph-tickets",
+    "slug": "it-s-murph"
+   },
+   {
+    "type": "band",
+    "name": "Tinashe",
+    "image": "https://seatgeekimages.com/performers-landscape/tinashe-c5ca13/181545/huge.jpg",
+    "id": 181545,
+    "url": "https://seatgeek.com/tinashe-tickets",
+    "slug": "tinashe"
+   },
+   {
+    "type": "band",
+    "name": "Odd Mob",
+    "image": "https://seatgeekimages.com/performers-landscape/odd-mob-954b6f/788152/huge.jpg",
+    "id": 788152,
+    "url": "https://seatgeek.com/odd-mob-tickets",
+    "slug": "odd-mob"
+   },
+   {
+    "type": "band",
+    "name": "Jade",
+    "image": "https://seatgeekimages.com/performers-landscape/jade-b0e96d/242489/huge.jpg",
+    "id": 242489,
+    "url": "https://seatgeek.com/jade-tickets",
+    "slug": "jade"
+   },
+   {
+    "type": "band",
+    "name": "The Story So Far",
+    "image": "https://seatgeekimages.com/performers-landscape/the-story-so-far-208d9a/17747/huge.jpg",
+    "id": 17747,
+    "url": "https://seatgeek.com/the-story-so-far-tickets",
+    "slug": "the-story-so-far"
+   },
+   {
+    "type": "band",
+    "name": "KI/KI",
+    "image": "https://seatgeekimages.com/performers-landscape/ki-ki-6906ad/1963661/huge.jpg",
+    "id": 1963661,
+    "url": "https://seatgeek.com/ki-ki-tickets",
+    "slug": "ki-ki"
+   },
+   {
+    "type": "band",
+    "name": "Sienna Spiro",
+    "image": "https://seatgeekimages.com/performers-landscape/sienna-spiro-5b3f2f/1962775/huge.jpg",
+    "id": 1962775,
+    "url": "https://seatgeek.com/sienna-spiro-tickets",
+    "slug": "sienna-spiro"
+   },
+   {
+    "type": "band",
+    "name": "Destin Conrad",
+    "image": "https://seatgeekimages.com/performers-landscape/destin-conrad-278378/808212/huge.jpg",
+    "id": 808212,
+    "url": "https://seatgeek.com/destin-conrad-tickets",
+    "slug": "destin-conrad"
+   },
+   {
+    "type": "band",
+    "name": "ALLEYCVT",
+    "image": "https://seatgeekimages.com/performers-landscape/alleycvt-29b691/1955366/huge.jpg",
+    "id": 1955366,
+    "url": "https://seatgeek.com/alleycvt-tickets",
+    "slug": "alleycvt"
+   },
+   {
+    "type": "band",
+    "name": "Balu Brigada",
+    "image": "https://seatgeekimages.com/performers-landscape/balu-brigada-e9d382/724884/huge.jpg",
+    "id": 724884,
+    "url": "https://seatgeek.com/balu-brigada-tickets",
+    "slug": "balu-brigada"
+   },
+   {
+    "type": "band",
+    "name": "MPH",
+    "image": "https://seatgeekimages.com/performers-landscape/mph-eceb78/1958576/huge.jpg",
+    "id": 1958576,
+    "url": "https://seatgeek.com/mph-tickets",
+    "slug": "mph"
+   },
+   {
+    "type": "band",
+    "name": "Die Spitz",
+    "image": "https://seatgeekimages.com/performers-landscape/die-spitz-4140b2/1954264/huge.jpg",
+    "id": 1954264,
+    "url": "https://seatgeek.com/die-spitz-tickets",
+    "slug": "die-spitz"
+   },
+   {
+    "type": "band",
+    "name": "Carlita",
+    "image": "https://seatgeekimages.com/performers-landscape/carlita-dc384c/809260/huge.jpg",
+    "id": 809260,
+    "url": "https://seatgeek.com/carlita-tickets",
+    "slug": "carlita"
+   },
+   {
+    "type": "band",
+    "name": "Silvana Estrada",
+    "image": "https://seatgeekimages.com/performers-landscape/silvana-estrada-955caf/795832/huge.jpg",
+    "id": 795832,
+    "url": "https://seatgeek.com/silvana-estrada-tickets",
+    "slug": "silvana-estrada"
+   },
+   {
+    "type": "band",
+    "name": "Tobiahs",
+    "image": "https://seatgeekimages.com/performers-landscape/tobiahs-b6544c/1962309/huge.jpg",
+    "id": 1962309,
+    "url": "https://seatgeek.com/tobiahs-tickets",
+    "slug": "tobiahs"
+   },
+   {
+    "type": "band",
+    "name": "Wunderhorse",
+    "image": "https://seatgeekimages.com/performers-landscape/wunderhorse-194bda/1959452/huge.jpg",
+    "id": 1959452,
+    "url": "https://seatgeek.com/wunderhorse-tickets",
+    "slug": "wunderhorse"
+   },
+   {
+    "type": "band",
+    "name": "Momma",
+    "image": "https://seatgeekimages.com/performers-landscape/momma-74e75c/798598/huge.jpg",
+    "id": 798598,
+    "url": "https://seatgeek.com/momma-tickets",
+    "slug": "momma"
+   },
+   {
+    "type": "band",
+    "name": "Faouzia",
+    "image": "https://seatgeekimages.com/performers-landscape/faouzia-827299/789751/huge.jpg",
+    "id": 789751,
+    "url": "https://seatgeek.com/faouzia-tickets",
+    "slug": "faouzia"
+   },
+   {
+    "type": "band",
+    "name": "Marlon Funaki",
+    "image": "https://seatgeekimages.com/performers-landscape/marlon-funaki-f851ff/1958407/huge.jpg",
+    "id": 1958407,
+    "url": "https://seatgeek.com/marlon-funaki-tickets",
+    "slug": "marlon-funaki"
+   },
+   {
+    "type": "band",
+    "name": "X Club",
+    "image": "https://seatgeekimages.com/performers-landscape/x-club-3c986e/1961392/huge.jpg",
+    "id": 1961392,
+    "url": "https://seatgeek.com/x-club-tickets",
+    "slug": "x-club"
+   },
+   {
+    "type": "band",
+    "name": "After",
+    "image": "https://seatgeekimages.com/performers-landscape/after-2c3c5a/1955546/huge.jpg",
+    "id": 1955546,
+    "url": "https://seatgeek.com/after-tickets",
+    "slug": "after"
+   },
+   {
+    "type": "band",
+    "name": "Automatic",
+    "image": "https://seatgeekimages.com/performers-landscape/automatic-26a3c1/808052/huge.jpg",
+    "id": 808052,
+    "url": "https://seatgeek.com/automatic-tickets",
+    "slug": "automatic"
+   },
+   {
+    "type": "band",
+    "name": "Sawyer Hill",
+    "image": "https://seatgeekimages.com/performers-landscape/sawyer-hill-8ec5a1/811516/huge.jpg",
+    "id": 811516,
+    "url": "https://seatgeek.com/sawyer-hill-tickets",
+    "slug": "sawyer-hill"
+   }
+  ],
+  "popularity": 0.8432382363,
+  "short_title": "Outside Lands Music Festival - 3 Day Pass",
+  "stats": {
+   "listing_count": 28,
+   "average_price": 1863,
+   "lowest_price": 928,
+   "highest_price": 3172,
+   "median_price": 1656,
+   "lowest_sg_base_price": 777
+  },
+  "taxonomies": [
+   {
+    "id": 2000000,
+    "name": "concert"
+   },
+   {
+    "id": 2010000,
+    "name": "music_festival"
+   }
+  ],
+  "time_tbd": true,
+  "title": "Outside Lands Music Festival - 3 Day Pass - with Charli XCX, RUFUS DU SOL, The Strokes and more",
+  "url": "https://seatgeek.com/outside-lands-music-festival-1-tickets/san-francisco-california-golden-gate-park-2026-08-07-3-30-am/music-festival/17906601",
+  "venue": {
+   "id": 75,
+   "name": "Golden Gate Park",
+   "postal_code": "94117",
+   "timezone": "America/Los_Angeles",
+   "address": "501 Stanyan Street",
+   "country": "US",
+   "city": "San Francisco",
+   "state": "CA",
+   "slug": "golden-gate-park",
+   "capacity": 0,
+   "extended_address": "San Francisco, CA 94117",
+   "location": {
+    "lat": 37.7718,
+    "lon": -122.455
+   },
+   "url": "https://seatgeek.com/venues/golden-gate-park/tickets"
+  },
+  "type": "music_festival"
+ }
+]

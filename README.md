@@ -23,7 +23,8 @@ src/
 worker/
   src/index.ts    thin entry: mounts the API routers, robots/sitemap, asset SEO
   src/routes/     per-resource Hono routers (artists, venues, events, feed, search, admin)
-  src/data.ts     D1 repository (reads/writes) via Drizzle · src/sources.ts external APIs
+  src/data.ts     D1 repository (reads/writes) via Drizzle
+  src/sources.ts  external APIs (Ticketmaster, Bandsintown, SeatGeek, Spotify, Bluesky)
   src/dedupe.ts   cross-source venue/show identity · src/crawl.ts crawl scheduling
   src/timezone.ts venue-local → UTC (state/province zone + Intl, longitude fallback)
   src/seo.ts      robots.txt, sitemap.xml, per-page <head> + JSON-LD injection
@@ -61,6 +62,7 @@ TICKETMASTER_API_KEY=your-key
 SPOTIFY_CLIENT_ID=…
 SPOTIFY_CLIENT_SECRET=…
 BANDSINTOWN_APP_ID=…      # widens coverage a lot; see "API keys" below
+SEATGEEK_CLIENT_ID=…      # the club tier Ticketmaster doesn't list
 ADMIN_TOKEN=…             # enables /api/admin/* (backfill); unset = off
 ```
 
@@ -94,13 +96,14 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `GET /api/artists/:id` · `GET /api/artists/:id/events` | artist + their upcoming shows |
 | `GET /api/events/:id` | event detail |
 | `POST /api/search-artists` | Spotify artist search |
-| `POST /api/discover-events` | pull nearby shows from Ticketmaster (throttled per area) |
+| `POST /api/discover-events` | pull nearby shows from Ticketmaster + SeatGeek (throttled per area) |
 | `POST /api/refresh-artist-events` | pull shows for the on-device follow list (Ticketmaster + Bandsintown) |
 | `GET /api/towns?q=` | towns with upcoming shows (busiest first when `q` is empty) |
 | `GET /api/admin/health` | configured sources, event counts per source, sources yielding nothing, crawl queue depth |
 | `GET /api/admin/stats?days=` | ingest runs per source, what they produced, coverage per town (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/crawl?limit=` | run one pass of the scheduled artist crawl by hand (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/crawl-queue` | enqueue every artist not on the crawl queue yet (needs `ADMIN_TOKEN`) |
+| `POST /api/admin/discover-seatgeek?lat&lng&radius` | sweep one area with SeatGeek, ignoring the per-area throttle (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/repair-duplicates` | cluster venues, collapse shows stored twice; idempotent (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/backfill-bandsintown?limit&offset` | one-off Bandsintown sweep over known artists (needs `ADMIN_TOKEN`) |
 | `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (sitemap built live from D1) |
@@ -124,6 +127,7 @@ npx wrangler secret put TICKETMASTER_API_KEY
 npx wrangler secret put SPOTIFY_CLIENT_ID
 npx wrangler secret put SPOTIFY_CLIENT_SECRET
 npx wrangler secret put BANDSINTOWN_APP_ID
+npx wrangler secret put SEATGEEK_CLIENT_ID
 npx wrangler secret put ADMIN_TOKEN
 ```
 
@@ -145,6 +149,7 @@ Push/reminders need a dev or store build on a physical device.
 | Ticketmaster Discovery key | developer.ticketmaster.com | discover-events, refresh-artist-events |
 | Spotify client id/secret | developer.spotify.com | search-artists |
 | Bandsintown app id | see below | refresh-artist-events, admin backfill |
+| SeatGeek client id | seatgeek.com/account/develop | discover-events, admin discover-seatgeek |
 
 **Bandsintown** has far more of the club/DIY tier than Ticketmaster, and its API
 is gated: it's for "artists and anyone working on their behalf". If you manage an
@@ -154,6 +159,17 @@ artist profile, the key is under **Settings → General → Get API Key** in
 they don't accept student/educational requests). The open endpoints answer for
 some `app_id` values that aren't yours — don't build on those; the crawl in
 `todo.md` assumes a key issued to this project.
+
+**SeatGeek** is the third source, and the only one besides Ticketmaster that
+searches by *place* rather than by artist — which is what it's here for: its first
+San Francisco page is mostly rooms Ticketmaster has never heard of. Registering at
+[seatgeek.com/account/develop](https://seatgeek.com/account/develop) gives a
+`client_id` immediately, with no review. Two things it publishes that nothing else
+here does: a true UTC timestamp and the venue's IANA timezone, so its show times
+need no inference at all. Two it publishes that look like data and aren't:
+`enddatetime_utc` (a 90-minute template — ignored) and `stats.lowest_price` (the
+cheapest resale listing, so it fills a price but never overwrites Ticketmaster's
+face value).
 
 ## SEO
 

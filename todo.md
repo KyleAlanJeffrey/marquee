@@ -354,16 +354,37 @@ the name is the weak one, which sets the matcher's priorities.
 
 ### Phase 4 — complement with location-capable sources
 
-**Not started, and deliberately not started blind.** Both items need something
-this session couldn't supply:
+- [x] **SeatGeek, measured against real responses.** `client_id` supplied, so the
+  adapter was written against recorded payloads rather than guessed at. It joins
+  `discover()` alongside Ticketmaster: both are geographic, and the six-hour
+  per-area throttle covers the pair.
 
-- [ ] SeatGeek — **needs a free `client_id`** from
-  [seatgeek.com/account/develop](https://seatgeek.com/account/develop); the API
-  403s unauthenticated, so an adapter written now couldn't be run against a single
-  real response. Writing an unverifiable adapter is how Bandsintown came to
-  contribute nothing for weeks, so this waits for the key. Its value is that
-  `/2/events?lat=&lon=&range=` is *geographic*, which is exactly what Bandsintown
-  can't do. Phases 2 and 3 already put the dedupe and the queue in place for it.
+  What it added, on a live local run — **San Francisco, 25 miles**: 300 events
+  scanned, **230 new shows**, 153 new artists, and **68 listings folded into
+  Ticketmaster rows we already had** rather than duplicating them. 46 SeatGeek
+  venues arrived and **31 were recognised as places already in the table**. Two
+  further runs ingested 0 — idempotent. **Austin, 25 miles**: SeatGeek 162 new
+  against Ticketmaster's 24, which is the coverage gap it was brought in for.
+  `repair-duplicates` afterwards reported `shows_merged: 0` twice: ingestion
+  caught everything at write time, so phases 2 and 3 did their job.
+
+  Two fields it publishes that look like data and aren't, both found by looking
+  rather than assuming:
+  - `enddatetime_utc` — **ignored.** Across a recorded page, 45 of 49 events ended
+    exactly 90 minutes after they started and the other 4 exactly 60. It's a
+    template. Storing it would print a made-up end time on every show, and fill
+    that field on Ticketmaster rows that are honestly empty.
+  - `stats.lowest_price` — the cheapest *resale* listing, which is a different
+    claim from Ticketmaster's minimum face value, so SeatGeek fills a price nobody
+    else knows and never overwrites one. `0` means "no listings", not "free".
+
+  Two it publishes that nothing else here does: a true UTC timestamp and the
+  venue's IANA zone, so its times need no inference — it owns `starts_at` jointly
+  with Ticketmaster and may correct a Bandsintown conversion.
+
+  Support acts go to `lineup` (capped at 12 — Outside Lands bills 76) and become
+  artist rows through the crawl's frontier expansion, at a rate D1's write quota
+  can take, rather than 1,200 inserts inside one request.
 - [ ] Venue-calendar adapters for the DIY tier (WordPress "The Events Calendar"
   at `/wp-json/tribe/events/v1/events`, or iCal). Reaches shows neither TM nor
   BIT lists, but it means fetching from venues' own sites: needs a per-venue

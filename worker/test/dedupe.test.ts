@@ -129,6 +129,24 @@ describe('field ownership', () => {
     expect(mergeField('price_from', 99, 42, 'bandsintown', 'ticketmaster')).toBe(42);
     expect(mergeField('sold_out', true, false, 'bandsintown', 'ticketmaster')).toBe(true);
   });
+
+  it('lets SeatGeek correct a guessed time but not a face-value price', () => {
+    // SeatGeek publishes true UTC, so it may overwrite Bandsintown's conversion.
+    expect(prefersSource('starts_at', 'seatgeek', 'bandsintown')).toBe(true);
+    // Its price is the cheapest *resale* listing, which is not the same claim as
+    // Ticketmaster's minimum face value — so it fills a gap and nothing more.
+    expect(prefersSource('price_from', 'seatgeek', 'ticketmaster')).toBe(false);
+    expect(mergeField('price_from', 250, 42, 'seatgeek', 'ticketmaster')).toBe(42);
+    expect(mergeField('price_from', 250, null, 'seatgeek', 'ticketmaster')).toBe(250);
+    // Nor should a resale link displace the box office.
+    expect(prefersSource('ticket_url', 'seatgeek', 'ticketmaster')).toBe(false);
+    // Its titles carry booking noise ("Johnny Dynamite (21+)").
+    expect(prefersSource('name', 'seatgeek', 'ticketmaster')).toBe(false);
+  });
+
+  it('never lets SeatGeek write an end time, since it templates them', () => {
+    expect(prefersSource('ends_at', 'seatgeek', 'bandsintown')).toBe(false);
+  });
 });
 
 describe('timezone guess', () => {

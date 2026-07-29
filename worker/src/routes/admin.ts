@@ -5,7 +5,7 @@ import { crawlQueueStats, ingestStats, repairDuplicates } from '../data';
 import { getDb } from '../db';
 import type { AppEnv, Env } from '../env';
 import { artists, events } from '../schema';
-import { backfillBandsintown, backfillCrawlQueue, crawlBandsintown } from '../sources';
+import { backfillBandsintown, backfillCrawlQueue, crawlBandsintown, ingestSeatGeek } from '../sources';
 
 export const admin = new Hono<AppEnv>();
 
@@ -21,6 +21,7 @@ const authorized = (c: { env: Env; req: { header: (k: string) => string | undefi
 const sourceConfig = (env: Env) => ({
   ticketmaster: Boolean(env.TICKETMASTER_API_KEY),
   bandsintown: Boolean(env.BANDSINTOWN_APP_ID),
+  seatgeek: Boolean(env.SEATGEEK_CLIENT_ID),
   spotify: Boolean(env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET),
 });
 
@@ -93,6 +94,31 @@ admin.post('/crawl', async (c) => {
   } catch (err) {
     console.error('crawl failed:', err);
     return c.json({ error: 'crawl failed' }, 500);
+  }
+});
+
+/**
+ * Sweep one area with SeatGeek alone, ignoring the six-hour cell throttle that
+ * `/api/discover-events` applies — the only way to check a fresh key or a new
+ * metro without waiting the window out.
+ */
+admin.post('/discover-seatgeek', async (c) => {
+  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+  if (!c.env.SEATGEEK_CLIENT_ID) return c.json({ error: 'SeatGeek not configured' }, 503);
+  const url = new URL(c.req.url);
+  const num = (key: string, fallback: number) => {
+    const n = Number(url.searchParams.get(key));
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const lat = num('lat', 37.7749);
+  const lng = num('lng', -122.4194);
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return c.json({ error: 'lat/lng out of range' }, 400);
+  const radius = Math.min(Math.max(num('radius', 25), 1), 150);
+  try {
+    return c.json(await ingestSeatGeek(c.env, lat, lng, radius));
+  } catch (err) {
+    console.error('discover-seatgeek failed:', err);
+    return c.json({ error: 'discovery failed' }, 500);
   }
 });
 

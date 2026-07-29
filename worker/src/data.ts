@@ -1056,6 +1056,74 @@ export async function ensureArtistByName(
   return { id, created: true };
 }
 
+/** A name to resolve, plus an image to use if the artist turns out to be new. */
+export type ArtistNameInput = { name: string; imageUrl?: string | null };
+
+/** Names per `in (...)` lookup, under D1's 100-bound-parameter ceiling. */
+const ARTIST_LOOKUP_CHUNK = 90;
+
+/**
+ * `ensureArtistByName` for a whole page of listings at once. A SeatGeek geo page
+ * is up to 100 events, and doing this one name at a time would be 200 round trips
+ * to D1 inside a single request; this is one read plus one batched write, keyed
+ * on the same folded name so it lands on the artist rows the other sources built.
+ *
+ * Returns a map from folded name to artist id, so callers can look up whichever
+ * spelling their payload used.
+ */
+export async function ensureArtistsByName(
+  db: DB,
+  inputs: ArtistNameInput[],
+): Promise<{ ids: Map<string, string>; created: number }> {
+  const wanted = new Map<string, ArtistNameInput>();
+  for (const i of inputs) {
+    const clean = i.name?.trim();
+    if (!clean) continue;
+    const folded = clean.toLowerCase();
+    // First spelling wins, but a later duplicate may supply the image.
+    const prev = wanted.get(folded);
+    if (!prev) wanted.set(folded, { name: clean, imageUrl: i.imageUrl ?? null });
+    else if (!prev.imageUrl && i.imageUrl) prev.imageUrl = i.imageUrl;
+  }
+  const ids = new Map<string, string>();
+  if (wanted.size === 0) return { ids, created: 0 };
+
+  const folded = [...wanted.keys()];
+  // D1 allows 100 bound parameters per query — not SQLite's 999 — and a metro's
+  // worth of headliners is a few hundred, so the lookup is chunked under that.
+  for (let i = 0; i < folded.length; i += ARTIST_LOOKUP_CHUNK) {
+    const rows = await db
+      .select({ id: artists.id, name: artists.name })
+      .from(artists)
+      .where(inArray(sql`lower(trim(${artists.name}))`, folded.slice(i, i + ARTIST_LOOKUP_CHUNK)))
+      // Duplicate artist rows exist (two bands can share a name, and older
+      // ingestion made some by accident), so pick deterministically: the oldest
+      // row is the one the rest of the data already points at.
+      .orderBy(artists.createdAt, artists.id);
+    for (const r of rows) {
+      const key = r.name.trim().toLowerCase();
+      if (!ids.has(key)) ids.set(key, r.id);
+    }
+  }
+
+  const missing = folded.filter((f) => !ids.has(f));
+  if (missing.length) {
+    await inBatches(
+      db,
+      missing.map((f) => {
+        const i = wanted.get(f)!;
+        const id = uuid();
+        ids.set(f, id);
+        return db
+          .insert(artists)
+          .values({ id, name: i.name, imageUrl: i.imageUrl ?? null })
+          .onConflictDoNothing();
+      }),
+    );
+  }
+  return { ids, created: missing.length };
+}
+
 /** Note that a client asked about these artists; the crawl checks them sooner. */
 export async function touchArtistsRequested(db: DB, ids: string[]): Promise<void> {
   if (ids.length === 0) return;
