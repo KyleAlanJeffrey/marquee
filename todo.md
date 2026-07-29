@@ -15,15 +15,18 @@ Ran the CodeRabbit CLI over the whole repo (in per-directory slices; the free CL
 allowance times out on the full 15k-line diff). Fixed:
 
 - [x] **Unbounded Ticketmaster 429 retry** (`sources.ts`) — recursed forever on a
-  spent quota; now 3 tries with increasing backoff.
+  spent quota; now at most 4 requests (the first plus 3 retries) with increasing
+  backoff.
 - [x] **No timeouts on outbound calls** — added `fetchWithTimeout` (8s,
   AbortController) and routed TM/Bandsintown/Spotify/Deezer/Wikipedia/Bluesky
-  through it, so a hung upstream can't hold a Worker request open.
+  through it, so a stalled upstream can't hold a Worker request open. The
+  deadline covers the response headers, not the body read.
 - [x] **One bad Bandsintown datetime** threw and dropped an artist's whole
   schedule; that record is now skipped.
 - [x] **Dev seed shipped to production**: `worker/schema.sql` is DDL only,
   `worker/seed.sql` is local-only (`db:apply:local`), `worker/unseed.sql` +
-  `npm run db:unseed` clean a database that already has it. Made-up shows must
+  `npm run db:unseed` (`:remote` for the deployed one) clean a database that
+  already has it. Made-up shows must
   never reach the sitemap or social cards.
 - [x] **API errors**: `String(err)` no longer returned to callers (logged
   instead), and missing-config paths return 503 rather than a 200 with
@@ -53,6 +56,33 @@ allowance times out on the full 15k-line diff). Fixed:
   without coords; the grid-map fallback pinned same-latitude venues to an edge;
   `GradientButton block` didn't stretch; "This Weekend" wasn't weekend-filtered
   (retitled "Up Next Near You"); accessibility labels on icon-only controls.
+
+Second pass — CodeRabbit reviewing the fix commit itself:
+
+- [x] **Reverse geocode failure looked like a denied permission** on the home tab
+  (it shared the location `try`), hiding the feed even though coordinates were
+  in hand. The label lookup now has its own `catch`.
+- [x] **Route coordinates were parsed three different ways**; `/map` still used
+  `Number(lat)`, so `?lat=` mapped 0,0 and an out-of-range latitude threw inside
+  Mapbox. `src/lib/params.ts` is now the single validated parser (blank/NaN/
+  out-of-bounds → no location), shared by browse + both map screens, and `/map`
+  says what to do instead of rendering an empty screen.
+- [x] **A bad Mapbox token or unreachable style** failed asynchronously, after
+  `loadMapbox()` had resolved, leaving a blank canvas; GL `error` events before
+  the style lands now trip the list fallback (later ones don't — a single missing
+  tile shouldn't tear down a working map).
+- [x] **`/search-artists` only checked `SPOTIFY_CLIENT_ID`** and 500'd when the
+  secret was the missing half; both are required for the 503.
+- [x] **`db:unseed` defaulted to `--remote`** — it's the local database now,
+  with `db:unseed:remote` for the deployed one.
+- [x] **Re-seeding kept stale dates** (`insert or ignore` on relative
+  `strftime`), so seed shows drifted into the past; the seed events are now
+  deleted and rewritten on every run.
+
+Also skipped from that pass: swapping `openUrl()`'s web `console.warn` for a
+toast — there's no toast/banner primitive in the app, and adding one to report a
+failed `Linking.openURL` (which on web means a blocked popup) isn't worth a new
+UI layer.
 
 Deliberately skipped (verified as non-issues): unhandled rejections in
 `discoverEvents`/`refreshArtistEvents`/`ensureArtist` (they already catch

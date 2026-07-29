@@ -55,8 +55,14 @@ export default function ExploreScreen() {
           return;
         }
         setCoords(c);
-        const label = await reverseGeocodeLabel(c);
-        if (!cancelled) setLabel(label);
+        // The label is decoration — a failed reverse geocode must not look like
+        // a denied permission now that we have real coordinates.
+        try {
+          const label = await reverseGeocodeLabel(c);
+          if (!cancelled) setLabel(label);
+        } catch (err) {
+          console.warn('reverse geocode failed:', err);
+        }
       } catch (err) {
         // Location services can throw (disabled, timeout) — treat it like a
         // refusal so the spinner doesn't hang forever.

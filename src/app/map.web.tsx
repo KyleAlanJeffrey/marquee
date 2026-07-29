@@ -15,7 +15,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { formatEventDate, formatTime } from '@/lib/format';
 import { useNearbyEvents } from '@/lib/hooks';
-import type { Coords, NearbyEvent } from '@/lib/types';
+import { parseCoords, parseRadius } from '@/lib/params';
+import type { NearbyEvent } from '@/lib/types';
 
 // Load Mapbox GL (JS + CSS) from the CDN once, on demand — keeps it out of the
 // bundle and off native (this file is web-only).
@@ -48,8 +49,8 @@ type VenueGroup = { key: string; lat: number; lng: number; name: string; events:
 export default function MapScreen() {
   const theme = useTheme();
   const { lat, lng, radius } = useLocalSearchParams<{ lat: string; lng: string; radius: string }>();
-  const coords: Coords | null = lat && lng ? { lat: Number(lat), lng: Number(lng) } : null;
-  const radiusMiles = Number(radius) || 50;
+  const coords = parseCoords(lat, lng);
+  const radiusMiles = parseRadius(radius);
 
   const events = useNearbyEvents(coords, radiusMiles);
   const { isFollowing } = useFollows();
@@ -115,8 +116,20 @@ export default function MapScreen() {
           map.resize();
           setReady(true);
         };
-        if (map.isStyleLoaded()) styleReady();
-        else map.once('style.load', styleReady);
+        let styled = false;
+        const styleReadyOnce = () => {
+          styled = true;
+          styleReady();
+        };
+        if (map.isStyleLoaded()) styleReadyOnce();
+        else map.once('style.load', styleReadyOnce);
+        // A bad token or an unreachable style fails asynchronously, long after
+        // loadMapbox() resolved. Only failures before the style lands are fatal
+        // — GL also emits 'error' for a single missing tile on a live map.
+        map.on('error', (e: { error?: Error }) => {
+          console.warn('mapbox error:', e?.error ?? e);
+          if (!cancelled && !styled) setLoadFailed(true);
+        });
         map.on('click', () => setSelectedKey(null));
       })
       .catch(() => {
@@ -170,13 +183,20 @@ export default function MapScreen() {
     mapRef.current?.resize();
   }, [width, height]);
 
-  // No token, or GL failed to load → the shared static-map + list fallback.
-  if (!MAPBOX_TOKEN || loadFailed) {
+  // No token, GL failed to load, or no usable location in the URL → the shared
+  // static-map + list fallback.
+  if (!MAPBOX_TOKEN || loadFailed || !coords) {
     return (
       <View style={{ flex: 1 }}>
         <PageMeta title="Concert map" description="Every upcoming concert near you, plotted on a map by venue." />
         <MeshBackground />
-        {coords && <EventMapList coords={coords} radius={radiusMiles} />}
+        {coords ? (
+          <EventMapList coords={coords} radius={radiusMiles} />
+        ) : (
+          <View style={styles.noCoords}>
+            <ThemedText themeColor="textSecondary">Pick a location on Browse to map the shows around it.</ThemedText>
+          </View>
+        )}
         <View style={styles.topBar}>
           <TopBar back title="Map" />
         </View>
@@ -230,6 +250,7 @@ export default function MapScreen() {
 
 const styles = StyleSheet.create({
   topBar: { position: 'absolute', top: 0, left: 0, right: 0 },
+  noCoords: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four },
   sheet: {
     position: 'absolute',
     left: Spacing.three,

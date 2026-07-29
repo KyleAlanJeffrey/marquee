@@ -4,7 +4,8 @@
 -- NOT for production — these are made-up shows, and the deployed site puts
 -- every event in its sitemap and social cards. `npm run db:apply` (remote)
 -- deliberately loads schema.sql only; `npm run db:apply:local` loads both.
--- If this ever lands in a real database, `npm run db:unseed` removes it.
+-- If this ever lands in a real database, `npm run db:unseed:remote` removes it
+-- (`npm run db:unseed` clears the local one).
 
 -- ---------------------------------------------------------------------------
 -- Dev seed: fictional artists, real venues, upcoming events (dates relative to
@@ -39,7 +40,12 @@ insert or ignore into venues (id, source, source_venue_id, name, city, region, c
   ('b0000000-0000-0000-0000-000000000011', 'seed', 'bowery-ballroom', 'Bowery Ballroom',           'New York',      'NY', 'US', 40.7204, -73.9934),
   ('b0000000-0000-0000-0000-000000000012', 'seed', 'msg',             'Madison Square Garden',     'New York',      'NY', 'US', 40.7505, -73.9934);
 
-insert or ignore into events (id, artist_id, venue_id, name, starts_at, ticket_url, price_from, source, source_event_id) values
+-- Dropped and rewritten on every run: the dates are relative to `now`, so
+-- re-seeding an existing database has to recompute them or the shows drift into
+-- the past and vanish from the feed.
+delete from events where source = 'seed';
+
+insert or replace into events (id, artist_id, venue_id, name, starts_at, ticket_url, price_from, source, source_event_id) values
   ('c0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'The Midnight Reels',       strftime('%Y-%m-%dT%H:%M:%SZ','now','+3 days','+20 hours'),  'https://example.com/tickets/mr-fillmore',  20,   'seed', 'evt-001'),
   ('c0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000003', 'Neon Harbor: Signal Tour', strftime('%Y-%m-%dT%H:%M:%SZ','now','+5 days','+21 hours'),  'https://example.com/tickets/nh-indy',      25,   'seed', 'evt-002'),
   ('c0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000002', 'Juniper & The Foxes',      strftime('%Y-%m-%dT%H:%M:%SZ','now','+8 days','+19 hours'),  'https://example.com/tickets/jf-gamh',      30,   'seed', 'evt-003'),

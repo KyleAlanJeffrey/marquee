@@ -16,24 +16,11 @@ import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { useInfiniteNearby } from '@/lib/hooks';
-import type { Coords, NearbyEvent } from '@/lib/types';
+import { parseCoords, parseRadius } from '@/lib/params';
+import type { NearbyEvent } from '@/lib/types';
 
 const ALL = 'All';
-const DEFAULT_RADIUS = 50;
 const ref = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_spotify_id });
-
-const scalar = (v: string | string[] | undefined): string | undefined => (Array.isArray(v) ? v[0] : v);
-
-function parseCoords(lat?: string | string[], lng?: string | string[]): Coords | null {
-  const la = Number(scalar(lat));
-  const ln = Number(scalar(lng));
-  return Number.isFinite(la) && Number.isFinite(ln) ? { lat: la, lng: ln } : null;
-}
-
-function parseRadius(radius?: string | string[]): number {
-  const r = Number(scalar(radius));
-  return Number.isFinite(r) && r > 0 ? r : DEFAULT_RADIUS;
-}
 
 export default function BrowseScreen() {
   const theme = useTheme();

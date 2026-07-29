@@ -57,7 +57,8 @@
     "db:apply:local": "wrangler d1 execute marquee --local --file=worker/schema.sql && wrangler d1 execute marquee --local --file=worker/seed.sql",
     "db:apply": "wrangler d1 execute marquee --remote --file=worker/schema.sql",
     "lint": "expo lint",
-    "db:unseed": "wrangler d1 execute marquee --remote --file=worker/unseed.sql"
+    "db:unseed": "wrangler d1 execute marquee --local --file=worker/unseed.sql",
+    "db:unseed:remote": "wrangler d1 execute marquee --remote --file=worker/unseed.sql"
   },
   "private": true
 }
