@@ -353,12 +353,22 @@ the name is the weak one, which sets the matcher's priorities.
   tight) and raise `CRAWL_BATCH` if there's headroom.
 
 ### Phase 4 — complement with location-capable sources
-- [ ] SeatGeek: free `client_id`, has `/2/events?lat=&lon=&range=` (403
-  unauthenticated when probed). A second *geographic* source next to TM.
-- [ ] Venue-calendar adapters for the DIY tier: most indie venues run WordPress
-  "The Events Calendar" (`/wp-json/tribe/events/v1/events`) or publish iCal. One
-  generic adapter plus a per-venue registry reaches shows neither TM nor BIT
-  lists. Respect robots/rate limits; per-venue kill switch.
+
+**Not started, and deliberately not started blind.** Both items need something
+this session couldn't supply:
+
+- [ ] SeatGeek — **needs a free `client_id`** from
+  [seatgeek.com/account/develop](https://seatgeek.com/account/develop); the API
+  403s unauthenticated, so an adapter written now couldn't be run against a single
+  real response. Writing an unverifiable adapter is how Bandsintown came to
+  contribute nothing for weeks, so this waits for the key. Its value is that
+  `/2/events?lat=&lon=&range=` is *geographic*, which is exactly what Bandsintown
+  can't do. Phases 2 and 3 already put the dedupe and the queue in place for it.
+- [ ] Venue-calendar adapters for the DIY tier (WordPress "The Events Calendar"
+  at `/wp-json/tribe/events/v1/events`, or iCal). Reaches shows neither TM nor
+  BIT lists, but it means fetching from venues' own sites: needs a per-venue
+  registry, robots/ToS review, rate limits and a kill switch. That's a subsystem
+  and a judgement call about scraping third parties, not an afternoon's adapter.
 - [ ] Keep the existing per-venue TM refresh for arena/club lineups.
 
 ### Phase 5 — observability and guardrails
