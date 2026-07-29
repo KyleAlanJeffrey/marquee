@@ -385,6 +385,20 @@ the name is the weak one, which sets the matcher's priorities.
   Support acts go to `lineup` (capped at 12 — Outside Lands bills 76) and become
   artist rows through the crawl's frontier expansion, at a rate D1's write quota
   can take, rather than 1,200 inserts inside one request.
+
+  Also skipped: `time_tbd` events. SeatGeek fills an unannounced set time with
+  03:30 local, and two San Francisco festival passes were stored "starting" at half
+  three in the morning before this was caught. Because SeatGeek co-owns `starts_at`
+  a placeholder could also overwrite a real Ticketmaster time. Letting these back
+  in properly needs a `time_unknown` column and a card that renders a date without
+  a clock — worth doing, not done here.
+
+  **A known cap, stated rather than implied:** a sweep takes 3 pages × 100 events,
+  soonest first, and a dense metro has ~600 concerts within 25 miles. So coverage
+  is complete for the near term and lags for the far future; the window slides
+  forward as earlier shows pass out of the `datetime_utc.gte=now` filter. Raising
+  `SG_MAX_PAGES` costs subrequests in the same invocation as the Ticketmaster pass,
+  so it should follow a look at real CPU/subrequest headroom, not a guess.
 - [ ] Venue-calendar adapters for the DIY tier (WordPress "The Events Calendar"
   at `/wp-json/tribe/events/v1/events`, or iCal). Reaches shows neither TM nor
   BIT lists, but it means fetching from venues' own sites: needs a per-venue

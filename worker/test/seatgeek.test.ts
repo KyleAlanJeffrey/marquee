@@ -71,8 +71,9 @@ describe('sgPerformers', () => {
 describe('sgToEventInputs', () => {
   const inputs = sgToEventInputs(fixture as unknown[], idFor);
 
-  it('maps every event in the payload', () => {
-    expect(inputs).toHaveLength(fixture.length);
+  it('maps every usable event in the payload', () => {
+    const usable = fixture.filter((e) => !e.date_tbd && !e.time_tbd);
+    expect(inputs).toHaveLength(usable.length);
     expect(inputs.every((i) => i.source === 'seatgeek')).toBe(true);
   });
 
@@ -121,6 +122,17 @@ describe('sgToEventInputs', () => {
 
   it('skips an event whose artist did not resolve, instead of a null id', () => {
     expect(sgToEventInputs(fixture as unknown[], () => undefined)).toEqual([]);
+  });
+
+  it('skips an unannounced set time rather than storing SeatGeek\'s 03:30', () => {
+    // The one time_tbd event in the recorded page is a three-day festival pass
+    // with a local start of 03:30 — a placeholder, not a doors time. Since
+    // SeatGeek co-owns starts_at, keeping it could also overwrite a real
+    // Ticketmaster time for the same show.
+    const tbd = fixture.find((e) => e.time_tbd === true);
+    expect(tbd, 'fixture should include a time_tbd event').toBeTruthy();
+    expect(tbd?.datetime_local).toContain('T03:30');
+    expect(inputs.some((i) => i.source_event_id === String(tbd?.id))).toBe(false);
   });
 
   it('skips events with no usable date', () => {

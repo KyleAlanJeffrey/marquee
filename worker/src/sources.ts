@@ -703,7 +703,13 @@ export function sgToEventInputs(
   artistIdFor: (foldedName: string) => string | undefined,
 ): EventInput[] {
   return sgEvents.flatMap((e: any) => {
-    if (!e?.id || e.date_tbd === true) return [];
+    // `time_tbd` means the set time isn't announced, and SeatGeek fills the slot
+    // with 03:30 local — the one such event in the recorded page is a three-day
+    // festival pass "starting" at half three in the morning. Keeping it would
+    // print that time on the card, and because SeatGeek co-owns `starts_at`, a
+    // placeholder could overwrite a real Ticketmaster time for the same show.
+    // Ticketmaster omits `dateTime` in the same situation and is skipped here too.
+    if (!e?.id || e.date_tbd === true || e.time_tbd === true) return [];
     const startsAt = sgUtc(e);
     if (!startsAt) return [];
     const performers = sgPerformers(e);
@@ -820,39 +826,64 @@ export async function discover(env: Env, lat: number, lng: number, radius: numbe
     return { skipped: true, reason: 'recently fetched', ingested: 0 };
   }
 
+  // Each source is isolated: one upstream being down must not discard what the
+  // other already ingested, in either direction.
+  const failed: string[] = [];
+  let attempted = 0;
+
   let tmScanned = 0;
   let tmIngested = 0;
   if (env.TICKETMASTER_API_KEY) {
+    attempted++;
     const run = await startRun(db, 'ticketmaster', 'discover');
-    const tmEvents = await tmEventsNear(env, lat, lng, radius);
-    const inputs: EventInput[] = [];
-    for (const e of tmEvents) {
-      const artistId = await upsertTmArtist(db, e._embedded?.attractions?.[0]);
-      if (!artistId) continue;
-      const input = tmToEventInput(e, artistId);
-      if (input) inputs.push(input);
+    try {
+      const tmEvents = await tmEventsNear(env, lat, lng, radius);
+      const inputs: EventInput[] = [];
+      for (const e of tmEvents) {
+        const artistId = await upsertTmArtist(db, e._embedded?.attractions?.[0]);
+        if (!artistId) continue;
+        const input = tmToEventInput(e, artistId);
+        if (input) inputs.push(input);
+      }
+      tmScanned = tmEvents.length;
+      tmIngested = (await persist(db, inputs)).length;
+      await finishRun(db, run, { scanned: tmScanned, inserted: tmIngested });
+    } catch (err) {
+      console.error('ticketmaster discover failed:', err);
+      await finishRun(db, run, { scanned: tmScanned, failed: 1, note: String(err).slice(0, 200) });
+      failed.push('ticketmaster');
     }
-    tmScanned = tmEvents.length;
-    tmIngested = (await persist(db, inputs)).length;
-    await finishRun(db, run, { scanned: tmScanned, inserted: tmIngested });
   }
 
-  // A SeatGeek failure must not lose the Ticketmaster pass that already
-  // succeeded, nor mark the cell unfetched and re-run the whole sweep.
   let sg = { scanned: 0, ingested: 0, artists_created: 0 } as Awaited<ReturnType<typeof ingestSeatGeek>>;
-  try {
-    sg = await ingestSeatGeek(env, lat, lng, radius);
-  } catch (err) {
-    console.error('seatgeek discover failed:', err);
+  if (env.SEATGEEK_CLIENT_ID) {
+    attempted++;
+    try {
+      sg = await ingestSeatGeek(env, lat, lng, radius);
+    } catch (err) {
+      console.error('seatgeek discover failed:', err);
+      failed.push('seatgeek');
+    }
   }
 
-  await db
-    .insert(discoveryLog)
-    .values({ cell, fetchedAt: nowIso() })
-    .onConflictDoUpdate({ target: discoveryLog.cell, set: { fetchedAt: sql`excluded.fetched_at` } });
+  // Every source down is an outage, not an empty area — surface it as an error so
+  // the caller can retry, rather than reporting a successful sweep of nothing.
+  if (attempted > 0 && failed.length === attempted) {
+    throw new Error(`discover failed for every source: ${failed.join(', ')}`);
+  }
+  // Only throttle the area when the whole sweep worked. A partial failure marked
+  // "fetched" would lock the missing source out for six hours; re-running the
+  // source that did succeed costs a request and inserts nothing.
+  if (failed.length === 0) {
+    await db
+      .insert(discoveryLog)
+      .values({ cell, fetchedAt: nowIso() })
+      .onConflictDoUpdate({ target: discoveryLog.cell, set: { fetchedAt: sql`excluded.fetched_at` } });
+  }
   return {
     ingested: tmIngested + sg.ingested,
     scanned: tmScanned + sg.scanned,
+    ...(failed.length ? { failed } : {}),
     by_source: {
       ticketmaster: { scanned: tmScanned, ingested: tmIngested },
       seatgeek: { scanned: sg.scanned, ingested: sg.ingested, artists_created: sg.artists_created },

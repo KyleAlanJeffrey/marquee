@@ -106,14 +106,24 @@ admin.post('/discover-seatgeek', async (c) => {
   if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
   if (!c.env.SEATGEEK_CLIENT_ID) return c.json({ error: 'SeatGeek not configured' }, 503);
   const url = new URL(c.req.url);
-  const num = (key: string, fallback: number) => {
-    const n = Number(url.searchParams.get(key));
-    return Number.isFinite(n) ? n : fallback;
+  // An absent parameter takes the default; one that was supplied and isn't a
+  // number is an error, not a default. `Number('')` is 0, so `?lat=` would
+  // otherwise sweep the Gulf of Guinea and report success.
+  const num = (key: string, fallback: number): number | null => {
+    const raw = url.searchParams.get(key);
+    if (raw === null) return fallback;
+    if (raw.trim() === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
   };
   const lat = num('lat', 37.7749);
   const lng = num('lng', -122.4194);
+  const rawRadius = num('radius', 25);
+  if (lat === null || lng === null || rawRadius === null) {
+    return c.json({ error: 'lat, lng and radius must be numbers' }, 400);
+  }
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return c.json({ error: 'lat/lng out of range' }, 400);
-  const radius = Math.min(Math.max(num('radius', 25), 1), 150);
+  const radius = Math.min(Math.max(rawRadius, 1), 150);
   try {
     return c.json(await ingestSeatGeek(c.env, lat, lng, radius));
   } catch (err) {
