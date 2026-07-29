@@ -104,7 +104,7 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/admin/crawl?limit=` | run one pass of the scheduled artist crawl by hand (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/crawl-queue` | enqueue every artist not on the crawl queue yet (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/discover-seatgeek?lat&lng&radius` | sweep one area with SeatGeek, ignoring the per-area throttle (needs `ADMIN_TOKEN`) |
-| `POST /api/admin/repair-duplicates` | cluster venues, collapse shows stored twice; idempotent (needs `ADMIN_TOKEN`) |
+| `POST /api/admin/repair-duplicates?after=` | cluster venues, collapse shows stored twice; idempotent. Resume with the `next_artist_id` it returns, or run [scripts/repair-duplicates.sh](scripts/repair-duplicates.sh) (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/backfill-bandsintown?limit&offset` | one-off Bandsintown sweep over known artists (needs `ADMIN_TOKEN`) |
 | `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (sitemap built live from D1) |
 
@@ -207,6 +207,30 @@ otherwise see an empty shell. Three layers fix that:
    rewrites the shell's `<head>` on the way out (title, description, canonical,
    social card, `noindex` for unknown ids) plus `MusicEvent` / `MusicGroup` /
    `MusicVenue` JSON-LD. It also serves `/robots.txt` and a live `/sitemap.xml`.
+
+### Venue identity, and why a coordinate isn't enough
+
+Two sources agree on *where* long before they agree on what a room is called, so
+location leads and names are the tiebreaker ([worker/src/dedupe.ts](worker/src/dedupe.ts)).
+The exception that cost real data: Ticketmaster returns a **city centroid** for
+venues it has no address for, and the same centroid for every one of them, so five
+unrelated San Francisco rooms arrived zero metres apart and merged into a single
+venue — after which the feed listed Interpol and Dimmu Borgir at Davies Symphony
+Hall. A shared coordinate therefore only merges when the names don't contradict
+each other; when they do, the centroid-stamped row falls through to the nested-name
+rule and finds its real room instead.
+
+Bandsintown has the mirror-image problem: its `venue.name` is sometimes the *tour*
+("Brunette World Tour"), on the venue's real coordinates. Those rows keep their
+location and lose their name — a tour title yields no name tokens, so it can
+neither agree nor conflict, and the row still merges into the room it is sitting
+on. A cluster's head is chosen preferring a real name over a tour title, because
+every event is repointed at the head and the head is what the venue page is called.
+
+Known residual: a town's own name still counts as a distinguishing word, so
+"Metro Chicago" and "Radius Chicago" can agree on "chicago" when they are close
+together. That accounts for most of the clusters still holding three or more real
+names.
 
 ### Venue links
 

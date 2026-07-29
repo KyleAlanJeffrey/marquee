@@ -10,6 +10,47 @@ Production: **https://marquee.rocks**.
 
 ---
 
+## Done — venue identity under placeholder coordinates (this pass)
+
+Found while checking that `repair-duplicates` had actually cleaned production: the
+San Francisco feed still showed 14 artist+day pairs twice, with wrong venue names
+(Interpol and Dimmu Borgir at Davies Symphony Hall). Ticketmaster's own API returns
+`Warfield` for that Interpol event — with Golden Gate Park's coordinates.
+
+- [x] **City-centroid over-merge.** Ticketmaster stamps venues it has no address
+  for with the city centroid, the same point for all of them; `sameVenue` joined
+  anything within 50m without reading the name. Five SF rooms (Warfield, Golden
+  Gate Park, Davies Symphony Hall, Golden Gate Theater, Rickshaw Stop) sat on
+  37.779499,-122.419502 and became one venue. The same-spot rule now declines on a
+  name conflict — both names carry a distinguishing word and share none. Measured
+  by re-clustering the live 3,491-row table offline: clusters holding 3+ distinct
+  real names **97 → 45**, and each SF row lands on its own room (Warfield → The
+  Warfield 900m away, via the nested-name rule that the bad merge was pre-empting).
+- [x] **Tour titles as venue names.** 653 Bandsintown rows are named after the tour
+  ("Brunette World Tour", "BILMURI presents: The KINDA HARD Tour"), but carry the
+  venue's real coordinates and usually sit right on the proper room. A tour title
+  now yields no name tokens, so it can't conflict and the row still merges. Not
+  discarded: that would strand the show with no location and drop it from "near me".
+- [x] **Cluster head named the cluster.** The head was the smallest id, so a tour
+  title could title a real arena's page — 129 clusters. The head now prefers a real
+  name, id order only breaking ties, preserving the total ordering that stops a
+  two-cycle. **129 → 7**, and those 7 have no real name available to promote.
+- [x] **Stale representative broke show matching.** `findExistingShows` compared
+  venue ids exactly, so a show stored against a row that *was* the representative
+  before the cluster grew never matched its twin. It now matches anywhere in the
+  cluster.
+- [x] **`repairDuplicates` could not resume.** The event scan capped at 5,000
+  ordered by (artist, venue, start) with no cursor, so "re-run to continue"
+  re-scanned the same rows forever. Production has 6,832 upcoming events and a
+  duplicated Tommy Newport pair ranked 1,370 and 5,542 — never in scope together.
+  Returns `next_artist_id` now, cutting pages at artist boundaries; `?after=` on
+  the route and `scripts/repair-duplicates.sh` to drive it to completion.
+- [x] Also confirmed Ticketmaster lists some shows under two event ids (a plain
+  listing and a TicketWeb one), which is why a same-source pair can duplicate.
+- [ ] **Residual:** a town's own name still counts as distinguishing, so "Metro
+  Chicago" / "Radius Chicago" can agree on "chicago". Accounts for most of the
+  remaining 45. Fix is to drop tokens matching the venue's city.
+
 ## Done — production domain (this pass)
 
 - [x] Bought `marquee.rocks`; the name stays Marquee, so there is no rebrand to
