@@ -2,8 +2,10 @@
 // database_id points at the existing "marquee" D1 (wrangler v3 requires it).
 // After the first deploy:
 //   1. load worker/schema.sql (D1 -> marquee -> Console, or `npm run db:apply`)
-//   2. set secrets on the Worker: TICKETMASTER_API_KEY, SPOTIFY_CLIENT_ID,
-//      SPOTIFY_CLIENT_SECRET (Worker -> Settings -> Variables and Secrets)
+//   2. set secrets on the Worker (Worker -> Settings -> Variables and Secrets):
+//      TICKETMASTER_API_KEY, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET,
+//      BANDSINTOWN_APP_ID, SEATGEEK_CLIENT_ID, ADMIN_TOKEN. EXPO_PUBLIC_* are
+//      build *variables*, not secrets — they are inlined into the web bundle.
 // Deploys automatically via Cloudflare Workers Builds (Git integration):
 //   build command: npm run build   (expo export -> ./dist)
 //   deploy command: npx wrangler deploy
@@ -11,6 +13,13 @@
   "name": "marquee",
   "main": "worker/src/index.ts",
   "compatibility_date": "2024-11-27",
+  // The production domain is marquee.rocks, attached as a Custom Domain in the
+  // dashboard. Declaring it here instead is equivalent and more reproducible —
+  // but `wrangler deploy` errors if the zone isn't active, and deploys run on
+  // every push, so an inactive zone would break the pipeline and not just the
+  // domain. Uncomment once `dig NS marquee.rocks` answers with Cloudflare's
+  // nameservers and the zone reads Active.
+  // "routes": [{ "pattern": "marquee.rocks", "custom_domain": true }],
   "assets": {
     // The Expo web export. The Worker runs first for every request and either
     // handles /api/* or hands off to ASSETS (SPA fallback for client routes).

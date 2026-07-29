@@ -110,11 +110,18 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 
 ## Deploying
 
-One Cloudflare Worker serves the web build **and** the API, and auto-deploys via
-**Cloudflare Workers Builds** (Git integration) — on each push it runs
-`npm run build` (Expo web export → `./dist`) then `npx wrangler deploy`, which
-uploads the Worker and the static assets together. The D1 database is
-auto-created by name on first deploy (no id pinned in `wrangler.jsonc`).
+Production is **https://marquee.rocks**. One Cloudflare Worker serves the web
+build **and** the API, and auto-deploys via **Cloudflare Workers Builds** (Git
+integration) — on each push it runs `npm run build` (Expo web export → `./dist`)
+then `npx wrangler deploy`, which uploads the Worker and the static assets
+together. `wrangler.jsonc` pins the D1 `database_id`, so a deploy always binds
+the existing database rather than creating one by name.
+
+Nothing in the code names the hostname: canonical URLs, `og:url`, `robots.txt`
+and `sitemap.xml` are all derived from the request's own origin
+([worker/src/seo.ts](worker/src/seo.ts)), so the Worker serves whatever domain is
+pointed at it — the `workers.dev` URL and `marquee.rocks` both answer correctly
+with no config change.
 
 After the first deploy, one time:
 
@@ -131,6 +138,19 @@ npx wrangler secret put SEATGEEK_CLIENT_ID
 npx wrangler secret put ADMIN_TOKEN
 ```
 
+### The custom domain
+
+`marquee.rocks` is attached to the Worker as a **Custom Domain** (Workers & Pages
+→ marquee → Settings → Domains & Routes → Add → Custom domain), which needs the
+zone on Cloudflare — check `dig NS marquee.rocks` shows `*.ns.cloudflare.com`
+before trying. Cloudflare creates the DNS record and issues the certificate
+itself; there is no origin to point at.
+
+The equivalent as config is a `routes` entry in `wrangler.jsonc` (staged there,
+commented out). It is deliberately not enabled: `wrangler deploy` fails if the
+zone isn't active yet, and because deploys run on push, that failure would take
+the whole pipeline down rather than just the domain.
+
 Schema changes after the baseline are numbered files in `worker/migrations/`
 (`npm run db:migrate` locally, `npm run db:migrate:remote` for production) —
 `schema.sql` is only the starting point for a fresh database.
@@ -138,9 +158,10 @@ Schema changes after the baseline are numbered files in `worker/migrations/`
 The web is served same-origin, so it needs no API URL. Deploy by hand with
 `npm run deploy` (after `npm run build`).
 
-**Native app:** build with EAS (`eas build`) and set `EXPO_PUBLIC_API_URL` to the
-deployed Worker origin (native can't use same-origin relative URLs).
-Push/reminders need a dev or store build on a physical device.
+**Native app:** build with EAS (`eas build`) with
+`EXPO_PUBLIC_API_URL=https://marquee.rocks` — native has no same origin to be
+relative to. It's inlined at **build** time, so changing it means a rebuild, not
+a restart. Push/reminders need a dev or store build on a physical device.
 
 ## API keys
 

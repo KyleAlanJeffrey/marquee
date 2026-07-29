@@ -3,11 +3,40 @@
 Local-first concert-discovery app. **Cloudflare stack:** Expo app → Cloudflare
 Worker (Hono) → D1 (SQLite). Ticketmaster for concert data, Spotify for search.
 Follows/prefs on-device (no account). Web → Pages; native → EAS.
+Production: **https://marquee.rocks**.
 
 ## Status legend
 - [ ] not started · [~] in progress · [x] done
 
 ---
+
+## Done — production domain (this pass)
+
+- [x] Bought `marquee.rocks`; the name stays Marquee, so there is no rebrand to
+  do — `app.json` (`name`/`slug`/`scheme`) and every string in the UI are
+  already right.
+- [x] Confirmed **no code change is needed** for the domain. `injectSeo` takes
+  `origin` from the request URL (`worker/src/seo.ts`), and `index.ts` passes
+  `new URL(c.req.url).origin` into `robotsTxt`/`sitemapXml`/`pageSeo`, so
+  canonical, `og:url`, `og:image`, robots and the sitemap all follow whichever
+  hostname served the request. Verified against the live workers.dev deploy: a
+  `/venue/:id` request came back with a canonical and `og:url` on that host, and
+  `robots.txt` advertised the sitemap on it too. `+html.tsx`'s relative
+  `og:url` placeholder is overwritten on every HTML response, because `pageSeo`
+  returns a `noindex` default rather than null for unknown paths.
+- [x] Docs and env point at the new origin: `.env.example`, README Deploying +
+  Native sections, `wrangler.jsonc` header.
+- [x] Custom-domain `routes` entry **staged commented-out** in `wrangler.jsonc`
+  rather than enabled. Registry RDAP shows the domain registered 2026-07-29 with
+  Cloudflare nameservers (`marge`/`clay.ns.cloudflare.com`) and those servers
+  answer authoritatively, but the `.rocks` TLD servers had not published the
+  delegation yet — and `wrangler deploy` errors on an inactive zone, which would
+  fail the whole push-triggered build rather than just the domain.
+- [ ] Attach the domain (dashboard or uncomment the route) once the zone reads
+  Active, then re-check `robots.txt` on `marquee.rocks`.
+- [ ] `database_name: "marquee"` stays as-is. It is not branding: `database_id`
+  is pinned next to it, and renaming without that pin would bind a fresh empty
+  database and orphan the stored events.
 
 ## Done — CodeRabbit audit pass (this pass)
 
