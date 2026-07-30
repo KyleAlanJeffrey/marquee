@@ -29,6 +29,29 @@ export const ldJson = (value: unknown) => JSON.stringify(value).replace(/</g, '\
 
 export const num = (n: number) => n.toLocaleString('en-US');
 
+/**
+ * What a search result will actually show of a description.
+ *
+ * Google and Bing cut the snippet around 160 characters, and Bing's site audit
+ * flags anything past it — a description that overflows is copy nobody reads.
+ * The templates are written to fit, but three of them interpolate names that
+ * arrive from ticket feeds, where production holds a 195-character event name
+ * and a 90-character venue name. So the budget is enforced in one place instead
+ * of trusted at every call site.
+ */
+export const DESC_MAX = 155;
+
+export function clampDesc(s: string): string {
+  const text = s.replace(/\s+/g, ' ').trim();
+  if (text.length <= DESC_MAX) return text;
+  // Cut back to a word boundary so the ellipsis doesn't land mid-name. A name with
+  // no space in its first 90 characters gets a hard cut rather than a stub.
+  const cut = text.slice(0, DESC_MAX - 1);
+  const space = cut.lastIndexOf(' ');
+  const kept = space > 90 ? cut.slice(0, space) : cut;
+  return kept.replace(/[\s,;:.—-]+$/, '') + '…';
+}
+
 export const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 /**
@@ -332,13 +355,14 @@ export type Shell = {
 /** A complete HTML document — the same head and chrome on every rendered page. */
 export function shell(s: Shell): string {
   const image = s.origin + OG_IMAGE;
+  const desc = clampDesc(s.description);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(s.title)}</title>
-<meta name="description" content="${esc(s.description)}">
+<meta name="description" content="${esc(desc)}">
 <link rel="canonical" href="${esc(s.canonical)}">
 <meta name="robots" content="${s.noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large'}">
 <meta name="author" content="Kyle Jeffrey">
@@ -348,7 +372,7 @@ export function shell(s: Shell): string {
 <meta property="og:site_name" content="${NAME}">
 <meta property="og:locale" content="en_US">
 <meta property="og:title" content="${esc(s.title)}">
-<meta property="og:description" content="${esc(s.description)}">
+<meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="${esc(s.canonical)}">
 <meta property="og:image" content="${esc(image)}">
 <meta property="og:image:width" content="1200">
@@ -356,7 +380,7 @@ export function shell(s: Shell): string {
 <meta property="og:image:alt" content="Marquee — find concerts near you">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(s.title)}">
-<meta name="twitter:description" content="${esc(s.description)}">
+<meta name="twitter:description" content="${esc(desc)}">
 <meta name="twitter:image" content="${esc(image)}">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.json">

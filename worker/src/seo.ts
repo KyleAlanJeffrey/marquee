@@ -7,6 +7,7 @@ import type { DB } from './db';
 import { getDb } from './db';
 import { artistBody, eventBody, usdFrom, venueBody } from './detail';
 import type { Env } from './env';
+import { clampDesc } from './page';
 import { artists, events, venues } from './schema';
 import { zoneFor } from './timezone';
 
@@ -35,7 +36,7 @@ const OG_IMAGE = '/og-image.png';
  * so that path never reaches the shell for its head to be rewritten. The app's feed
  * is `/explore`.
  */
-const STATIC_PAGES: Record<string, { title: string; description: string }> = {
+export const STATIC_PAGES: Record<string, { title: string; description: string }> = {
   '/explore': {
     title: `Concerts near you · ${NAME}`,
     description:
@@ -47,7 +48,8 @@ const STATIC_PAGES: Record<string, { title: string; description: string }> = {
   },
   '/map': {
     title: `Concert map · ${NAME}`,
-    description: 'Every upcoming concert near you, plotted on a map by venue.',
+    description:
+      'Every upcoming concert near you plotted on a map by venue — pan around to see what is on in any part of town.',
   },
   '/search': {
     title: `Find artists · ${NAME}`,
@@ -60,7 +62,8 @@ const STATIC_PAGES: Record<string, { title: string; description: string }> = {
   },
   '/settings': {
     title: `Profile · ${NAME}`,
-    description: 'Your Marquee search radius, reminders and notification settings.',
+    description:
+      'Set the point Marquee searches from, how far out to look for shows, and whether it reminds you before doors.',
   },
 };
 
@@ -406,9 +409,7 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
 
   return {
     title: `${title} · ${NAME}`,
-    description:
-      `${row.name} plays ${where || 'live'} on ${when}. ` +
-      'Tickets, lineup and what people are saying about the show.',
+    description: `${row.name} plays ${where || 'live'} on ${when}. Doors, tickets and the rest of the tour.`,
     // A show that has happened is a dead page: nothing to buy, nothing to attend,
     // and it will never be right again. Kept crawlable for its links, out of the
     // index for the same reason a newspaper doesn't reprint last week's listings.
@@ -504,7 +505,7 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
   return {
     title: `${row.name} tour dates & tickets · ${NAME}`,
     description:
-      `${row.name}${genres.length ? ` (${genres.join(', ')})` : ''} upcoming concerts, tour dates and tickets` +
+      `${row.name}${genres.length ? ` (${genres.slice(0, 2).join(', ')})` : ''} upcoming concerts, tour dates and tickets` +
       `${next ? ` — next up ${next.venueName ?? 'live'} on ${formatDate(next.startsAt)}` : ''}.`,
     // An artist with nothing booked is a page whose entire content is "no upcoming
     // shows". There are tens of thousands of those in the catalogue and indexing
@@ -595,7 +596,7 @@ async function venueSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     title: `${row.name}${where ? ` — ${where}` : ''} tickets & upcoming shows · ${NAME}`,
     description:
       `${n > 0 ? `${n} upcoming concert${n === 1 ? '' : 's'}` : 'Upcoming concerts'} at ${row.name}` +
-      `${where ? ` in ${where}` : ''} — full lineup, dates, prices and tickets.`,
+      `${where ? ` in ${where}` : ''} — full lineup, dates and tickets.`,
     // A room with nothing booked has nothing to say, and there are thousands of
     // them behind expired listings. Only the head carries it, though: `noindex`
     // and a canonical pointing elsewhere on the same URL are contradictory
@@ -669,20 +670,24 @@ export function injectSeo(res: Response, url: URL, seo: PageSeo): Response {
   const canonical = origin + (seo.canonicalPath ?? self);
   const custom = seo.image ? absolute(origin, seo.image) : null;
   const image = custom ?? absolute(origin, OG_IMAGE);
+  // Event, artist and venue descriptions all interpolate a name from a ticket feed,
+  // and those run to 195 characters. One clamp here covers every template rather
+  // than each one having to remember the budget.
+  const description = clampDesc(seo.description);
 
   // Some of these are written by the client (react-helmet, via <PageMeta />) and
   // some by src/app/+html.tsx, so rather than assume a tag is in the shell we
   // overwrite the ones we find and append whatever was missing before </head>.
   const tags = [
     { attr: 'name', key: 'robots', content: seo.noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large' },
-    { attr: 'name', key: 'description', content: seo.description },
+    { attr: 'name', key: 'description', content: description },
     { attr: 'property', key: 'og:title', content: seo.title },
-    { attr: 'property', key: 'og:description', content: seo.description },
+    { attr: 'property', key: 'og:description', content: description },
     { attr: 'property', key: 'og:url', content: canonical },
     { attr: 'property', key: 'og:image', content: image },
     { attr: 'property', key: 'og:image:alt', content: seo.title },
     { attr: 'name', key: 'twitter:title', content: seo.title },
-    { attr: 'name', key: 'twitter:description', content: seo.description },
+    { attr: 'name', key: 'twitter:description', content: description },
     { attr: 'name', key: 'twitter:image', content: image },
   ] as const;
 
