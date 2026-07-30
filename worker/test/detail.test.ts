@@ -80,6 +80,17 @@ describe('the event page a crawler sees', () => {
     expect(html).toContain('A &amp; B');
   });
 
+  it('prints a price only where the currency is known to be dollars', () => {
+    // `events.price_from` has no currency column beside it.
+    expect(eventBody(ev({ priceFrom: 42, country: 'United States' }))).toContain('$42');
+    expect(eventBody(ev({ priceFrom: 42, country: 'US' }))).toContain('$42');
+    for (const country of ['Canada', 'United Kingdom', 'Japan', null]) {
+      const html = eventBody(ev({ priceFrom: 42, country }));
+      expect(html).not.toContain('$42');
+      expect(html).not.toContain('<dt>From</dt>');
+    }
+  });
+
   it('leaves out what it does not know', () => {
     const html = eventBody(ev({ venueId: null, venueName: null, city: null, ticketUrl: null, priceFrom: null }));
     expect(html).not.toContain('href="/venue/');

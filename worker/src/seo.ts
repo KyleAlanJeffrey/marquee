@@ -5,7 +5,7 @@ import { allTowns } from './cities';
 import { clusterMemberIds } from './data';
 import type { DB } from './db';
 import { getDb } from './db';
-import { artistBody, eventBody, venueBody } from './detail';
+import { artistBody, eventBody, usdFrom, venueBody } from './detail';
 import type { Env } from './env';
 import { artists, events, venues } from './schema';
 import { zoneFor } from './timezone';
@@ -385,6 +385,7 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
 
   const where = row.venueName ? [row.venueName, place(row.venueCity, row.venueRegion)].filter(Boolean).join(', ') : '';
   const when = formatDate(row.startsAt);
+  const usd = usdFrom(row.priceFrom, row.venueCountry);
   const title = [`${row.name}${row.venueName ? ` at ${row.venueName}` : ''}`, when].filter(Boolean).join(' — ');
 
   const location = row.venueName
@@ -448,7 +449,9 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
               '@type': 'Offer',
               url: row.ticketUrl,
               availability: 'https://schema.org/InStock',
-              ...(row.priceFrom != null ? { price: row.priceFrom, priceCurrency: 'USD' } : null),
+              // Same rule as the page body: no currency column, so only claim USD
+              // where the feed's local currency is USD. See `usdFrom`.
+              ...(usd != null ? { price: usd, priceCurrency: 'USD' } : null),
             },
           }
         : null),
@@ -728,6 +731,8 @@ export function injectSeo(res: Response, url: URL, seo: PageSeo): Response {
 
   if (seo.body) {
     const body = seo.body;
+    /** One module script's text, reassembled across however many chunks it arrives in. */
+    let module = '';
     rewriter
       // The export prerendered a loading spinner into #root and set the hydrate flag
       // so React would adopt it. Replacing those children *and* hydrating is a
@@ -737,11 +742,27 @@ export function injectSeo(res: Response, url: URL, seo: PageSeo): Response {
       // which is exactly the handover we want, since all it discards is our markup
       // after it has been read. Nothing is lost: the thing being hydrated was a
       // spinner.
-      .on('script', {
+      //
+      // Buffered rather than tested chunk by chunk: HTMLRewriter splits a text node
+      // wherever it likes, and a flag straddling two chunks would be missed — which
+      // is the one failure that matters here, since it would leave a hydrating page
+      // with markup that doesn't match. Scoped to the module script (the only one
+      // the export writes it into) so the JSON-LD next to it is never rebuilt.
+      .on('script[type="module"]', {
+        element() {
+          module = '';
+        },
         text(chunk) {
-          if (chunk.text.includes('__EXPO_ROUTER_HYDRATE__')) {
-            chunk.replace(chunk.text.replace(/__EXPO_ROUTER_HYDRATE__\s*=\s*true/, '__EXPO_ROUTER_HYDRATE__=false'));
+          module += chunk.text;
+          if (!chunk.lastInTextNode) {
+            chunk.remove();
+            return;
           }
+          chunk.replace(
+            module.replace(/__EXPO_ROUTER_HYDRATE__\s*=\s*true/, '__EXPO_ROUTER_HYDRATE__=false'),
+            { html: true },
+          );
+          module = '';
         },
       })
       .on('#root', {

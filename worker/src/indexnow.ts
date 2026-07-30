@@ -100,7 +100,16 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
       keyLocation: `${origin}/${key}.txt`,
       urlList,
     }),
+    // This runs at the end of the cron invocation the crawl already spent most of.
+    // A ping nobody is waiting for must not be what runs it out of time.
+    signal: AbortSignal.timeout(10_000),
   });
+
+  // Non-fatal by design — but a rejected key or a malformed host is a silent
+  // "nothing was ever submitted", so it goes in the log as a warning, not a stat.
+  if (!res.ok) {
+    console.warn(`indexnow: ${res.status} ${res.statusText} for ${urlList.length} URLs`);
+  }
 
   return { submitted: urlList.length, events: rows.length, cities: cities.size, status: res.status };
 }

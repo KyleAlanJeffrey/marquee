@@ -81,6 +81,22 @@ function safeHref(url: string | null): string | null {
   return /^https?:\/\//i.test(raw) ? raw : null;
 }
 
+const US = new Set(['us', 'usa', 'united states', 'united states of america']);
+
+/**
+ * The price, but only where we know what currency it is in.
+ *
+ * `events.price_from` has no currency beside it, and the feeds that fill it quote
+ * their local one — so "$42" on a Toronto show is a number in the wrong money, and
+ * an `offers.priceCurrency: USD` that disagrees with the ticket page is worse than
+ * no offer at all. Seven upcoming shows are affected today; the honest answer for
+ * them is silence until the column exists.
+ */
+export function usdFrom(priceFrom: number | null, country: string | null): number | null {
+  if (priceFrom == null) return null;
+  return US.has((country ?? '').trim().toLowerCase()) ? priceFrom : null;
+}
+
 // --- event ------------------------------------------------------------------
 
 export type EventBody = {
@@ -124,12 +140,13 @@ export function eventBody(d: EventBody): string {
     : '';
 
   const tickets = safeHref(d.ticketUrl);
+  const usd = usdFrom(d.priceFrom, d.country);
   const facts = [
     fact('Date', esc([t.day, t.time].filter(Boolean).join(' · '))),
     fact('Venue', venue),
     fact('City', hubLink(d.city, d.region, d.country)),
     fact('Artist', `<a href="/artist/${esc(d.artistId)}">${esc(d.artistName)}</a>`),
-    fact('From', d.priceFrom != null ? `$${esc(String(d.priceFrom))}` : ''),
+    fact('From', usd != null ? `$${esc(String(usd))}` : ''),
   ].join('');
 
   const tour = d.alsoPlaying.length
