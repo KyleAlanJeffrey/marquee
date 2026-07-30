@@ -23,7 +23,7 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontFamily: Fonts.label, fontSize: 11, letterSpacing: 0.5 },
       }}>
       <Tabs.Screen
-        name="index"
+        name="explore"
         options={{
           title: 'Explore',
           tabBarIcon: ({ color, size, focused }) => (

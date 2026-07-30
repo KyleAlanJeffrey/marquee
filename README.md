@@ -17,7 +17,7 @@ Worker.
 
 ```
 src/
-  app/            expo-router screens (Near Me tab, Profile tab, search modal, artist + event detail)
+  app/            expo-router screens (Explore tab at /explore, Profile tab, search modal, artist + event detail)
   components/     UI building blocks (design system, cards, map, etc.)
   lib/            api client (Worker), TanStack Query hooks, local follows/prefs stores, reminders
 worker/
@@ -30,7 +30,7 @@ worker/
   src/seo.ts      robots.txt, sitemap index + children, per-page <head> + JSON-LD
   src/page.ts     shared chrome for the server-rendered pages (CSS, head, shell)
   src/detail.ts   the <body> for /event, /artist and /venue, injected into the shell
-  src/landing.ts  /concerts — the front door, rendered without JavaScript
+  src/landing.ts  / — the front door, rendered without JavaScript
   src/cities.ts   /concerts/:town — a page per town, and the town↔slug mapping
   src/indexnow.ts tells Bing et al. about the shows the crawl just wrote
   schema.sql      D1 baseline schema (DDL only — this is what production gets)
@@ -116,7 +116,8 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/admin/repair-duplicates?after=` | cluster venues, collapse shows stored twice; idempotent. Resume with the `next_artist_id` it returns, or run [scripts/repair-duplicates.sh](scripts/repair-duplicates.sh) (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/backfill-bandsintown?limit&offset` | one-off Bandsintown sweep over known artists (needs `ADMIN_TOKEN`) |
 | `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (a sitemap index; children at `/sitemap-pages.xml`, `/sitemap-events-N.xml`, …) |
-| `GET /concerts` | server-rendered landing page — real HTML, no JS, built live from D1 |
+| `GET /` | server-rendered landing page — real HTML, no JS, built live from D1 |
+| `GET /concerts` | 301 to `/`, where the landing page lives now |
 | `GET /concerts/:town` | one server-rendered page per town (`/concerts/austin-tx`); 301 for another spelling of one, 404 for a slug no town answers to |
 
 ## Deploying
@@ -235,12 +236,15 @@ otherwise see an empty shell. Five layers fix that:
    matches. Nothing is lost in the swap; what it discards is a spinner's worth of
    prerender. App routes keep hydration untouched.
 5. `worker/src/landing.ts` + `worker/src/cities.ts` — a crawler still needs a way
-   *in*, and a page per query people actually type. Everything under `/concerts` is
-   a document of its own rather than a rewritten shell: server-rendered HTML with no
-   JS and no images, built from D1 on the edge and sharing one stylesheet via
-   `page.ts`. `/concerts` is the front door (totals, the
-   next twelve shows one-per-city, thirty city links, the busiest venues, the
-   most-booked artists, an FAQ). `/concerts/:town` is one page per town with an
+   *in*, and a page per query people actually type. These are documents of their own
+   rather than rewritten shells: server-rendered HTML with no JS and no images, built
+   from D1 on the edge and sharing one stylesheet via `page.ts`. `/` is the front
+   door — totals, the next twelve shows one-per-city, thirty city links, the busiest
+   venues, the most-booked artists, an FAQ. It is at `/` on purpose: every inbound
+   link and every share arrives there, and for a month that address answered with
+   the app's loading spinner while this page earned its own way from nothing at
+   `/concerts` (which now 301s here). The app's feed moved to `/explore`.
+   `/concerts/:town` is one page per town with an
    upcoming show — ~1,700 of them — each listing that town's next 120 shows by
    date, its venues, its acts and the towns within 180 miles. Both carry a JSON-LD
    `@graph`. Edge-cached 30 minutes, stale-while-revalidate a day.

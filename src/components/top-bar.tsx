@@ -26,7 +26,7 @@ export function TopBar({ onSearchPress, transparent, back, title, action }: Prop
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
-  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/explore'));
 
   return (
     <View

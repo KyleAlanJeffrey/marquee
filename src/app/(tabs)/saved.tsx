@@ -118,7 +118,7 @@ export default function SavedScreen() {
           title="Nothing saved"
           message="Tap the bookmark on a show to put it aside and it will wait for you here."
           actionLabel="Find shows"
-          onAction={() => router.push('/')}
+          onAction={() => router.push('/explore')}
         />
       ) : (
         <FlatList

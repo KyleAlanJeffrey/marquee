@@ -89,7 +89,7 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
   // The listing pages changed too, and they're the ones that rank. Hubs first, so
   // that if the list has to be cut it loses the tail of a big batch of events
   // rather than the pages those events appear on.
-  const paths = ['/concerts', ...cities, ...rows.map((r) => `/event/${r.id}`)];
+  const paths = ['/', ...cities, ...rows.map((r) => `/event/${r.id}`)];
   const urlList = [...new Set(paths)].slice(0, MAX_URLS).map((p) => origin + p);
   const res = await fetch(ENDPOINT, {
     method: 'POST',

@@ -117,9 +117,20 @@ app.get('/:file{sitemap-[a-z0-9-]+\\.xml}', async (c) => {
  */
 const PAGE_CACHE = 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400';
 
-app.get('/concerts', async (c) =>
+/**
+ * The landing page, at the address that actually collects links.
+ *
+ * `/` used to be the app's feed: every inbound link, every share and every crawl
+ * arrived at a spinner and nine words of chrome, while the page with a thousand
+ * words of listings sat at `/concerts` earning its own way from nothing. So they
+ * swapped — the feed is `/explore` now, and this is the front door.
+ */
+app.get('/', async (c) =>
   c.html(await landingPage(c.env, siteOrigin(c)), 200, { 'Cache-Control': PAGE_CACHE }),
 );
+
+/** Where the landing page used to live. Its links and its indexing belong to `/`. */
+app.get('/concerts', (c) => c.redirect('/', 301));
 
 app.get('/concerts/:slug', async (c) => {
   const found = await cityPage(c.env, siteOrigin(c), c.req.param('slug'));

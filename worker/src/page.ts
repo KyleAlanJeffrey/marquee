@@ -1,7 +1,7 @@
 /**
  * The chrome shared by every page the Worker renders itself.
  *
- * Everything under `/concerts` is real HTML built on the edge rather than the
+ * The landing page and the city hubs are real HTML built on the edge rather than the
  * Expo shell (see landing.ts for why). Those pages want one look, one stylesheet
  * and one `<head>`, so the parts that aren't the content live here: the escaping,
  * the formatting, the CSS, and a `shell()` that assembles a complete document.
@@ -107,10 +107,10 @@ const LOGO = `<svg width="26" height="26" viewBox="0 0 26 26" role="img" aria-hi
 export const masthead = `<div class="top">
     <a class="brand" href="/" aria-label="Marquee home">${LOGO}Marquee</a>
     <nav aria-label="Marquee">
-      <a class="hide-sm" href="/concerts">Concerts</a>
+      <a class="hide-sm" href="/browse">Browse</a>
       <a class="hide-sm" href="/map">Map</a>
       <a class="hide-sm" href="/search">Artists</a>
-      <a class="cta" href="/">Open the app</a>
+      <a class="cta" href="/explore">Open the app</a>
     </nav>
   </div>`;
 
@@ -119,7 +119,7 @@ export function pageFooter(extra = ''): string {
   return `<footer class="wrap">
   <nav aria-label="Marquee pages">
     <a href="/">Concerts near you</a>
-    <a href="/concerts">All concerts</a>
+    <a href="/explore">Open the app</a>
     <a href="/browse">Browse every show</a>
     <a href="/map">Concert map</a>
     <a href="/search">Find an artist</a>

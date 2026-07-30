@@ -208,7 +208,7 @@ export function artistBody(d: ArtistBody): string {
     }. ${d.shows.length ? `${d.shows.length}${d.truncated ? '+' : ''} upcoming show${d.shows.length === 1 ? '' : 's'}, soonest first.` : ''}</p>
 <h2>Upcoming shows</h2>
 ${dates}
-<a class="cta" href="/">Open Marquee</a>`,
+<a class="cta" href="/explore">Open Marquee</a>`,
   );
 }
 

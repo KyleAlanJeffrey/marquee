@@ -28,9 +28,19 @@ const DEFAULT_DESCRIPTION =
   'Marquee is a live music radar: discover upcoming concerts near you, follow the artists you love, and get a reminder before their next nearby show.';
 const OG_IMAGE = '/og-image.png';
 
-/** Routes the Expo export prerenders. Everything else is a dynamic detail page. */
+/**
+ * Routes the Expo export prerenders. Everything else is a dynamic detail page.
+ *
+ * `/` is not one of them any more: the Worker renders the landing page there itself,
+ * so that path never reaches the shell for its head to be rewritten. The app's feed
+ * is `/explore`.
+ */
 const STATIC_PAGES: Record<string, { title: string; description: string }> = {
-  '/': { title: DEFAULT_TITLE, description: DEFAULT_DESCRIPTION },
+  '/explore': {
+    title: `Concerts near you · ${NAME}`,
+    description:
+      "The shows on near you in the next year — tonight's, this weekend's, and the ones worth planning around.",
+  },
   '/browse': {
     title: `Browse concerts near you · ${NAME}`,
     description: 'Every upcoming show inside your radius, filterable by genre — grid, list or map.',
@@ -214,10 +224,10 @@ async function pagesSitemap(env: Env, origin: string): Promise<string> {
   const db = getDb(env.DB);
   const today = new Date().toISOString().slice(0, 10);
   const urls: Url[] = [
+    // The landing page: server-rendered, and the hub that links to the city pages in
+    // plain <a> tags. `/concerts` is not listed — it redirects here now.
     { path: '/', lastmod: today, changefreq: 'daily', priority: '1.0' },
-    // Server-rendered, and the hub that links to the detail pages in plain <a>
-    // tags — worth as much as the app root to a crawler.
-    { path: '/concerts', lastmod: today, changefreq: 'daily', priority: '1.0' },
+    { path: '/explore', lastmod: today, changefreq: 'daily', priority: '0.9' },
     { path: '/browse', lastmod: today, changefreq: 'daily', priority: '0.9' },
     { path: '/map', lastmod: today, changefreq: 'daily', priority: '0.8' },
     { path: '/search', lastmod: today, changefreq: 'weekly', priority: '0.6' },

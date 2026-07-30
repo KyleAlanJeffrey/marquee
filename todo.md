@@ -673,6 +673,11 @@ instead of coverage.
   spinner's worth of prerender. Verified in the browser: flag `false`, `#mq-sr`
   gone after boot, one child under `#root`, no console errors. App routes are
   untouched and still hydrate.
+- [x] **The landing page is `/`.** It collects every inbound link and every share,
+  and it was answering with the app's spinner. The app's feed is `/explore` now
+  (`src/app/index.tsx` redirects, so native still launches into it), `/concerts`
+  301s to `/`, the tab bar and the PWA `start_url` point at `/explore`, and the
+  sitemap lists `/` at priority 1.0.
 - [x] **One page per town, with all of its shows.** Towns are spelled several ways
   in the venue rows ("Montréal"/"Montreal", "United Kingdom"/"GB"); the hub pages
   were picking one row and dropping the others' shows — 61 of Montréal's 126. The
@@ -680,10 +685,6 @@ instead of coverage.
 
 ## SEO follow-ups
 
-- [ ] **Move the landing page to `/`.** `/` collects every backlink and renders
-  nine words; `/concerts` renders a thousand and collects none. The usual shape is
-  marketing page at `/`, app at `/browse`. Cheap to do, but it changes the app's
-  root route, so it is the user's call.
 - [ ] **Search Console + Bing Webmaster verification.** Manual, one-time, not
   something the repo can do. Worth more than any further on-page work.
 - [ ] **Venue-name quality is title quality.** An event title reading

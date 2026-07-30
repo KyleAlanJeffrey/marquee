@@ -270,7 +270,8 @@ const FAQ: Faq[] = [
   },
 ];
 export function landingHtml(origin: string, d: LandingData): string {
-  const canonical = `${origin}/concerts`;
+  // The landing page is `/` now, so its own address is the site root.
+  const canonical = origin + '/';
   const hasData = d.totals.shows > 0;
 
   const graph: unknown[] = [
@@ -286,15 +287,14 @@ export function landingHtml(origin: string, d: LandingData): string {
       breadcrumb: {
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: NAME, item: origin },
-          { '@type': 'ListItem', position: 2, name: 'Concerts near you', item: canonical },
+          { '@type': 'ListItem', position: 1, name: NAME, item: canonical },
         ],
       },
     },
     {
       '@type': 'WebApplication',
       name: NAME,
-      url: origin,
+      url: origin + '/explore',
       applicationCategory: 'EntertainmentApplication',
       operatingSystem: 'Web, iOS, Android',
       description: DESCRIPTION,
@@ -379,7 +379,7 @@ export function landingHtml(origin: string, d: LandingData): string {
       <h1>Every concert<br>near you, <span class="lit">in one place.</span></h1>
       <p class="lede">Marquee pulls the listings from Ticketmaster, SeatGeek and Bandsintown, throws away the duplicates, and shows you what is actually on — tonight, this weekend, or any time in the next year.</p>
       <div class="buttons">
-        <a class="btn" href="/">Open the app</a>
+        <a class="btn" href="/explore">Open the app</a>
         <a class="btn ghost" href="/map">See the map</a>
       </div>
     </div>
