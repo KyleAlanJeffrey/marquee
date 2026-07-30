@@ -1,9 +1,10 @@
 import { and, gte, sql } from 'drizzle-orm';
 
 import { citySlug } from './cities';
+import type { DB } from './db';
 import { getDb } from './db';
 import type { Env } from './env';
-import { events, venues } from './schema';
+import { events, indexnowLog, venues } from './schema';
 
 /**
  * Tell the search engines about a show the moment we have it.
@@ -34,14 +35,58 @@ const MAX_URLS = 10_000;
 /** A key has to look like a key — this is also what the .txt route matches on. */
 export const KEY_SHAPE = /^[A-Za-z0-9-]{8,128}$/;
 
+/**
+ * How long a listing page counts as already announced.
+ *
+ * `/` and the city hubs do change whenever a show is added, which is most runs —
+ * but every run re-sending the same couple of hundred listing URLs is 96
+ * announcements a day per page, and IndexNow answers that with 429 "Too Many
+ * Requests (potential Spam)". It isn't a volume limit: a one-off POST of 200
+ * never-submitted event URLs from this host and key is accepted, while a cron
+ * payload of 263 that re-announced 111 hubs was refused seconds either side of it.
+ *
+ * Event URLs are exempt. Each is a page that did not exist an hour ago, which is
+ * the thing the protocol is for.
+ */
+const LISTING_TTL_HOURS = 24;
+
 export type IndexNowResult = {
   submitted: number;
   events: number;
   cities: number;
+  /** Listing pages held back because they were announced inside the TTL. */
+  skipped: number;
   status: number;
 };
 
 const nowIso = () => new Date().toISOString().slice(0, 19) + 'Z';
+const hoursAgoIso = (hours: number) =>
+  new Date(Date.now() - hours * 3_600_000).toISOString().slice(0, 19) + 'Z';
+
+/** The paths in `candidates` that aren't in the recently-announced set. */
+export function unannounced(candidates: string[], announced: Set<string>): string[] {
+  return candidates.filter((p) => !announced.has(p));
+}
+
+async function announcedSince(db: DB, cutoff: string): Promise<Set<string>> {
+  // The whole recent window in one read rather than asking about each path: D1 caps
+  // a statement at 100 bound parameters, and a busy run has more hubs than that.
+  const rows = await db
+    .select({ url: indexnowLog.url })
+    .from(indexnowLog)
+    .where(gte(indexnowLog.submittedAt, cutoff));
+  return new Set(rows.map((r) => r.url));
+}
+
+async function recordAnnounced(db: DB, paths: string[], at: string): Promise<void> {
+  // Two bound parameters a row, against D1's ceiling of 100.
+  for (let i = 0; i < paths.length; i += 40) {
+    await db
+      .insert(indexnowLog)
+      .values(paths.slice(i, i + 40).map((url) => ({ url, submittedAt: at })))
+      .onConflictDoUpdate({ target: indexnowLog.url, set: { submittedAt: at } });
+  }
+}
 
 /**
  * Announce everything written since `since`.
@@ -86,10 +131,13 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
     const slug = citySlug(r.city, r.region, r.country);
     if (slug) cities.add(`/concerts/${slug}`);
   }
-  // The listing pages changed too, and they're the ones that rank. Hubs first, so
-  // that if the list has to be cut it loses the tail of a big batch of events
-  // rather than the pages those events appear on.
-  const paths = ['/', ...cities, ...rows.map((r) => `/event/${r.id}`)];
+  // The listing pages changed too, and they're the ones that rank — but only the
+  // ones we haven't just announced. Hubs first, so that if the list has to be cut it
+  // loses the tail of a big batch of events rather than the pages those events
+  // appear on.
+  const listings = ['/', ...cities];
+  const fresh = unannounced(listings, await announcedSince(db, hoursAgoIso(LISTING_TTL_HOURS)));
+  const paths = [...fresh, ...rows.map((r) => `/event/${r.id}`)];
   const urlList = [...new Set(paths)].slice(0, MAX_URLS).map((p) => origin + p);
   const res = await fetch(ENDPOINT, {
     method: 'POST',
@@ -109,7 +157,17 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
   // "nothing was ever submitted", so it goes in the log as a warning, not a stat.
   if (!res.ok) {
     console.warn(`indexnow: ${res.status} ${res.statusText} for ${urlList.length} URLs`);
+  } else {
+    // Only on success. A refused submission hasn't reached anyone, and marking it
+    // announced would hide those pages for a day for no reason.
+    await recordAnnounced(db, fresh, nowIso());
   }
 
-  return { submitted: urlList.length, events: rows.length, cities: cities.size, status: res.status };
+  return {
+    submitted: urlList.length,
+    events: rows.length,
+    cities: cities.size,
+    skipped: listings.length - fresh.length,
+    status: res.status,
+  };
 }

@@ -134,3 +134,19 @@ export const discoveryLog = sqliteTable('discovery_log', {
   cell: text('cell').primaryKey(),
   fetchedAt: text('fetched_at').notNull(),
 });
+
+/**
+ * When each listing page was last announced to IndexNow — see migration 0007 and
+ * `submitFresh`. Only `/` and the city hubs are recorded, so the table is bounded
+ * by the number of towns with shows and a repeat submission updates in place.
+ */
+export const indexnowLog = sqliteTable(
+  'indexnow_log',
+  {
+    url: text('url').primaryKey(),
+    submittedAt: text('submitted_at').notNull(),
+  },
+  (t) => ({
+    submittedIdx: index('indexnow_log_submitted_idx').on(t.submittedAt),
+  }),
+);
