@@ -28,6 +28,7 @@ worker/
   src/dedupe.ts   cross-source venue/show identity · src/crawl.ts crawl scheduling
   src/timezone.ts venue-local → UTC (state/province zone + Intl, longitude fallback)
   src/seo.ts      robots.txt, sitemap.xml, per-page <head> + JSON-LD injection
+  src/landing.ts  /concerts — the one server-rendered page, for crawlers with no JS
   schema.sql      D1 baseline schema (DDL only — this is what production gets)
   migrations/     numbered D1 migrations applied after the baseline
   seed.sql        local-only dev seed (fictional shows) · unseed.sql removes it
@@ -111,6 +112,7 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/admin/repair-duplicates?after=` | cluster venues, collapse shows stored twice; idempotent. Resume with the `next_artist_id` it returns, or run [scripts/repair-duplicates.sh](scripts/repair-duplicates.sh) (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/backfill-bandsintown?limit&offset` | one-off Bandsintown sweep over known artists (needs `ADMIN_TOKEN`) |
 | `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (sitemap built live from D1) |
+| `GET /concerts` | server-rendered landing page — real HTML, no JS, built live from D1 |
 
 ## Deploying
 
@@ -121,11 +123,17 @@ then `npx wrangler deploy`, which uploads the Worker and the static assets
 together. `wrangler.jsonc` pins the D1 `database_id`, so a deploy always binds
 the existing database rather than creating one by name.
 
-Nothing in the code names the hostname: canonical URLs, `og:url`, `robots.txt`
-and `sitemap.xml` are all derived from the request's own origin
-([worker/src/seo.ts](worker/src/seo.ts)), so the Worker serves whatever domain is
-pointed at it — the `workers.dev` URL and `marquee.rocks` both answer correctly
-with no config change.
+The Worker answers on any domain pointed at it — the `workers.dev` deploy URL and
+`marquee.rocks` both work with no config change — but only one of them is allowed
+to *be* the site. `PRIMARY_HOST` in `wrangler.jsonc` names it, and every public
+URL (canonical, `og:url`, `sitemap.xml`, `robots.txt`) is written with that origin
+whichever host served the request. A request arriving on any other host gets
+`X-Robots-Tag: noindex, nofollow` on its HTML and a `robots.txt` that disallows
+everything, so the duplicate copy is unindexable rather than merely un-preferred.
+Deliberately not a redirect: the deploy URL is what
+[scripts/repair-duplicates.sh](scripts/repair-duplicates.sh) and native builds
+POST to, and a 301 drops the request body. Unset `PRIMARY_HOST` and the old
+behaviour returns (every origin self-canonical), which is what local dev wants.
 
 After the first deploy, one time:
 
@@ -199,7 +207,7 @@ face value).
 ## SEO
 
 The web build is a client-rendered SPA, so a crawler that doesn't run JS would
-otherwise see an empty shell. Three layers fix that:
+otherwise see an empty shell. Four layers fix that:
 
 1. `src/app/+html.tsx` — head defaults baked into every prerendered route
    (canonical, Open Graph/Twitter card, keywords, `WebSite` JSON-LD, manifest).
@@ -211,6 +219,15 @@ otherwise see an empty shell. Three layers fix that:
    rewrites the shell's `<head>` on the way out (title, description, canonical,
    social card, `noindex` for unknown ids) plus `MusicEvent` / `MusicGroup` /
    `MusicVenue` JSON-LD. It also serves `/robots.txt` and a live `/sitemap.xml`.
+4. `worker/src/landing.ts` — the first three layers only ever fix the `<head>`;
+   the `<body>` of every route still needs the bundle to boot before it says
+   anything. `/concerts` is the exception: server-rendered HTML with no JS and no
+   images, built from five D1 reads (totals, the next twelve shows one-per-city,
+   thirty cities, the busiest venues, the most-booked artists) plus an FAQ, and a
+   JSON-LD `@graph` of `WebPage` / `WebApplication` / `FAQPage` / `ItemList`. It
+   is the site's entry point for anything that reads HTML rather than runs it, and
+   every row on it links into the app. Edge-cached 30 minutes, stale-while-
+   revalidate a day.
 
 ### Venue identity, and why a coordinate isn't enough
 

@@ -641,6 +641,35 @@ instead of coverage.
 - [ ] Fan/artist galleries from real images; support acts from same-venue
   events; ticket price on the event Buy bar.
 
+## SEO follow-ups
+
+Ordered by how much each one moves the needle. `/concerts` proved the shape; the
+rest is applying it to the routes that actually have search demand.
+
+- [ ] **Server-render the body of `/event/:id`, `/artist/:id`, `/venue/:id`.**
+  `worker/src/seo.ts` already reads the row from D1 for these routes and rewrites
+  the `<head>` — the body is still an empty shell until the bundle boots. Same
+  `HTMLRewriter` pass could inject the show's date, venue, city and lineup into a
+  `<noscript>`-ish block the SPA replaces on hydration. This is the whole
+  long-tail: thousands of "artist + city + date" queries, one page each, currently
+  invisible to anything that doesn't run JS.
+- [ ] **City hub pages.** "concerts in austin" is the query people actually type,
+  and nothing on the site targets it. `/concerts/:city-slug` off the same
+  `landing.ts` machinery, one per town with upcoming shows, listed in the sitemap
+  and linked from `/concerts`. Needs stable slugs (`austin-tx`) stored per town,
+  not derived per request, so a URL doesn't move when the label changes.
+- [ ] **Keep index bloat out.** A venue or artist with no upcoming shows is a
+  thin page; a past event is a dead one. `noindex` them (the machinery for unknown
+  ids in `seo.ts` is already the right hook) and drop them from the sitemap.
+- [ ] **Split the sitemap.** `sitemapXml` caps at 5,000 URLs per type in one
+  document. Past ~14k shows that is already dropping URLs silently. Wants a
+  sitemap *index* plus paginated child sitemaps, and a `log` when a page is
+  truncated so the cap is never invisible again.
+- [ ] **Tell the engines when things change.** Nothing currently pings anyone. The
+  hourly crawl already knows what it wrote; an IndexNow POST for new event URLs is
+  a handful of lines and Bing/Yandex act on it in minutes. Search Console and Bing
+  Webmaster verification are manual one-time steps and not in the repo yet.
+
 ## Data-quality follow-ups
 
 - [ ] **Chained venue clusters.** "Three Links Deep Ellum" is clustered into "The
