@@ -290,14 +290,40 @@ Seznam and Naver — while `/<key>.txt` starts answering with the key so they ca
 verify it. Unset, nothing is submitted. Google doesn't participate in IndexNow,
 so this complements the sitemap rather than replacing it.
 
-What isn't obvious until it bites: submitting the *same* URL repeatedly is read as
-spam. The first version sent `/` and every affected city hub on every run, and
-IndexNow answered 429 "Too Many Requests (potential Spam)" every time — while a
-one-off POST of 200 never-submitted event URLs from the same host and key was
-accepted with 200. Volume was never the problem; announcing a couple of hundred
-listing pages 96 times a day was. `indexnow_log` now records when each listing page
-was last announced and holds it back for 24 hours. Event URLs are exempt, because
-each one is a page that did not exist an hour ago.
+**Every submission from the Worker is currently refused with 429**, and the cause is
+not anything in the payload. Measured against the live endpoint:
+
+| request | origin | result |
+| --- | --- | --- |
+| 20 never-announced event URLs | laptop | `200` |
+| 3 hubs announced ~96×/day for days | laptop | `200` |
+| `/` alone — the most re-announced URL we have | laptop | `200` |
+| 154 URLs: root + 50 hubs + 103 events, the cron's exact shape | laptop | `200` |
+| 71 / 100 / 153 / 263 URLs, every scheduled run | Worker | `429` |
+
+Content, size and repetition are all ruled out — the laptop request that succeeded
+was a reconstruction of the Worker request that failed minutes earlier. What is left
+is the origin, which points at a per-IP limit on Cloudflare's shared Worker egress
+addresses, plausibly because a great many Workers submit to IndexNow from them. No
+change to this code can fix it. The options are Bing's authenticated URL Submission
+API (needs Webmaster Tools verification and a key, and has a per-site quota rather
+than a per-IP one), submitting from somewhere with its own address, or leaning on the
+sitemap — which Bing does read.
+
+The 24-hour listing throttle stays regardless. `indexnow_log` records when `/` and
+each city hub was last announced and holds it for a day; event URLs are exempt, since
+each is a page that did not exist an hour ago. That is the right behaviour on its own
+merits — a crawler does not need telling 96 times a day that a page changed — it just
+isn't the fix it was originally written as.
+
+One trap worth knowing if you ever chase this: `console.log` is not a record.
+`wrangler tail` samples, and it dropped the cron invocation entirely at ~3,000 events
+in a window. Each run now writes an `ingest_runs` row instead:
+
+```sh
+npx wrangler d1 execute marquee --remote \
+  --command "select started_at, scanned, inserted, failed, note from ingest_runs where source='indexnow' order by started_at desc limit 10"
+```
 
 ### Venue identity, and why a coordinate isn't enough
 

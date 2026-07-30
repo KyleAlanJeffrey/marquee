@@ -661,14 +661,23 @@ instead of coverage.
   head.
 - [x] **IndexNow.** The hourly crawl announces what it wrote. Off unless
   `INDEXNOW_KEY` is set; never fails the crawl.
-- [x] **IndexNow was being refused, and said so quietly.** Every run came back 429
-  "Too Many Requests (potential Spam)" — 102 URLs on one, 263 on the next — so
-  nothing had ever reached Bing, Yandex, Seznam or Naver. Not volume: a one-off POST
-  of 200 never-submitted event URLs, same host and key, was accepted with 200, and a
-  single-URL POST seconds after a 429 with 202. The refused payloads re-sent `/` and
-  every affected hub, 96 times a day. `indexnow_log` (migration 0007) now holds a
-  listing page back for 24 hours after announcing it; event URLs are exempt because
-  they're new by construction.
+- [x] **IndexNow was being refused, and said so quietly.** Every run came back 429, so
+  nothing had ever reached Bing, Yandex, Seznam or Naver. Two real bugs found and fixed
+  on the way — a silent `null` when `INDEXNOW_KEY` was unbound (my own push unbound it:
+  it had been a dashboard plaintext var, and `wrangler deploy` replaces the vars block,
+  so it is a secret now), and a throttle that deadlocked by recording only successes
+  while being persistently refused. Each run now writes an `ingest_runs` row, because
+  `wrangler tail` samples and dropped the invocation twice.
+- [ ] **The 429 itself is not ours to fix in this file.** I assumed re-announcing
+  listing pages read as spam, wrote that into the code and the README, and it is wrong.
+  Measured: from a laptop, `/` alone, three hubs announced ~96×/day for days, and a
+  reconstruction of the cron's exact 154-URL payload all returned 200 — minutes after
+  the Worker's own 153-URL payload was refused. Every CLI request succeeded, every
+  Worker request failed, which leaves the request origin: a per-IP limit on Cloudflare's
+  shared Worker egress addresses. Next: Bing Webmaster Tools verification plus their
+  authenticated URL Submission API (per-site quota, not per-IP), or accept that Bing
+  discovery comes via the sitemap. The 24h listing throttle stays either way — it is
+  correct behaviour, just not a remedy for this.
 - [x] **Meta descriptions inside what a search result shows.** Bing's audit flagged
   one instance; production had six — `/` at 190 characters and every city hub over
   (Austin 169, Toronto 170, New York 171, LA 174, London 181). The event and venue

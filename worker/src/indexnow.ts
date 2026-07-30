@@ -38,15 +38,22 @@ export const KEY_SHAPE = /^[A-Za-z0-9-]{8,128}$/;
 /**
  * How long a listing page counts as already announced.
  *
- * `/` and the city hubs do change whenever a show is added, which is most runs —
- * but every run re-sending the same couple of hundred listing URLs is 96
- * announcements a day per page, and IndexNow answers that with 429 "Too Many
- * Requests (potential Spam)". It isn't a volume limit: a one-off POST of 200
- * never-submitted event URLs from this host and key is accepted, while a cron
- * payload of 263 that re-announced 111 hubs was refused seconds either side of it.
+ * `/` and the city hubs do change whenever a show is added, which is most runs, but
+ * a crawler does not need telling 96 times a day. Holding them for a day is politeness
+ * and less pointless traffic. Event URLs are exempt: each is a page that did not exist
+ * an hour ago, which is the thing the protocol is for.
  *
- * Event URLs are exempt. Each is a page that did not exist an hour ago, which is
- * the thing the protocol is for.
+ * This is NOT the fix for the 429s, though it was written believing it was. Measured
+ * against the live endpoint, payload composition turned out to be irrelevant — from a
+ * home IP, `/` alone, three hubs that had been announced ~96 times a day for days, and
+ * a reconstructed 154-URL cron payload (root + 50 hubs + 103 events) all returned 200,
+ * while the Worker's own 153-URL payload was refused minutes earlier. Every
+ * CLI-originated request succeeded; every Worker-originated one failed. What is left
+ * after content, size and repetition are ruled out is the origin of the request, which
+ * points at a per-IP limit on Cloudflare's shared Worker egress addresses — plausibly
+ * because a great many Workers submit to IndexNow from them.
+ *
+ * Nothing in this file can fix that. See README for what actually can.
  */
 const LISTING_TTL_HOURS = 24;
 
@@ -96,11 +103,13 @@ export function unannounced(candidates: string[], announced: Set<string>): strin
 /**
  * Whether a response status means "consider these announced".
  *
- * Success, obviously. And 429 — which is the case that matters, because recording
- * only successes deadlocks: the throttle exists to stop re-announcing listing pages,
- * so a host being refused *for* re-announcing them never builds up a log, never
- * skips anything, and gets refused again forever. Observed in production as
- * `skipped: 0, status: 429` on consecutive runs.
+ * Success, obviously. And 429, because recording only successes deadlocks: while the
+ * endpoint is refusing us, nothing is ever written, so nothing is ever skipped, so
+ * every run resends the same listing pages forever. Observed in production as
+ * `skipped: 0, status: 429` on consecutive runs, then `skipped: 27` once fixed.
+ *
+ * That the 429 has a different cause entirely (see `LISTING_TTL_HOURS`) does not change
+ * this: a persistent refusal must not be able to pin the log empty.
  *
  * Anything else (403 on a rejected key, 422 on a host mismatch) is a different fault
  * and should be retried rather than backed off from.
@@ -218,17 +227,10 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
     console.warn(`indexnow: ${res.status} ${res.statusText} for ${urlList.length} URLs`);
   }
 
-  // Recorded on 429 as well as on success, which is the opposite of what this did
-  // first — and the first version deadlocked. The whole point of the throttle is to
-  // stop re-announcing listing pages, but "only record what was accepted" means a
-  // host that is being refused *for* re-announcing never builds up the log, so the
-  // throttle it needs can never engage: every run resends the same hubs, gets 429,
-  // records nothing, repeat. Observed exactly that — `skipped: 0, status: 429`.
-  //
-  // 429 is "you have told me too often". Whether those URLs were queued or dropped,
-  // the correct response to it is to back off, and backing off is what writing the
-  // row does. Other failures (403 on a bad key, 422 on a bad host) are a different
-  // problem and are left to retry next run.
+  // Recorded on 429 as well as on success — the opposite of what this did first, which
+  // deadlocked: while the endpoint refuses us nothing is written, so nothing is skipped,
+  // so the same listings go out every run forever. Observed as `skipped: 0, status: 429`
+  // on consecutive runs, and `skipped: 27` after the fix.
   //
   // Written after the POST rather than claimed before it. Two invocations overlapping
   // — a crawl that runs past its 15-minute slot — could then both pick the same hub

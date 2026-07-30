@@ -18,9 +18,9 @@ describe('the key a crawler fetches back', () => {
 });
 
 describe('holding back listing pages we just announced', () => {
-  // IndexNow refused every cron run with 429 "potential Spam" while accepting a
-  // one-off POST of 200 never-submitted URLs from the same host and key. The
-  // difference was that each run re-sent `/` and every affected hub.
+  // Kept because a crawler does not need telling 96 times a day that a page changed —
+  // not because it fixes the 429s, which measurement traced to the request's origin
+  // rather than its contents. See the note on `LISTING_TTL_HOURS`.
   it('drops the ones inside the TTL and keeps the rest', () => {
     const candidates = ['/', '/concerts/austin-tx', '/concerts/london-united-kingdom'];
     const announced = new Set(['/', '/concerts/austin-tx']);
@@ -38,9 +38,10 @@ describe('holding back listing pages we just announced', () => {
   });
 
   it('backs off on 429, or the throttle can never engage', () => {
-    // The deadlock this replaces: recording only successes meant a host refused *for*
-    // re-announcing never built up a log, so it re-announced forever. Production
-    // showed it as `skipped: 0, status: 429` on consecutive runs.
+    // The deadlock this replaces: recording only successes meant that while the endpoint
+    // refused us, nothing was written, nothing was skipped, and the same listings went
+    // out every run. Production showed `skipped: 0, status: 429` on consecutive runs,
+    // then `skipped: 27` once fixed.
     expect(recordsOn(429)).toBe(true);
     // Bing returns 202 for "accepted, key validation pending" — not in its own table.
     for (const ok of [200, 202, 204]) expect(recordsOn(ok), String(ok)).toBe(true);
