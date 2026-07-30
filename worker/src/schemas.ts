@@ -47,11 +47,14 @@ export const eventIdsBody = z.object({
 export const followingBody = z
   .object({
     artistIds: z.array(entityId).max(FOLLOWING_IDS_MAX).optional().default([]),
+    // An artist followed from search has only a Spotify id until a show of theirs
+    // turns up in our catalog, so both identities have to be askable.
+    spotifyIds: z.array(entityId).max(FOLLOWING_IDS_MAX).optional().default([]),
     venueIds: z.array(entityId).max(FOLLOWING_IDS_MAX).optional().default([]),
     lat: latitude.nullish(),
     lng: longitude.nullish(),
   })
-  .refine((b) => b.artistIds.length > 0 || b.venueIds.length > 0, {
+  .refine((b) => b.artistIds.length + b.spotifyIds.length + b.venueIds.length > 0, {
     message: 'follow at least one artist or venue',
   });
 

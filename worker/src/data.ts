@@ -223,8 +223,12 @@ export async function nearbyVenues(
       and(
         gte(events.startsAt, nowIso()),
         lte(events.startsAt, isoInDays(120)),
-        between(canon.lat, lat - latDelta, lat + latDelta),
-        between(canon.lng, lng - lngDelta, lng + lngDelta),
+        // Boxed on the row the event points at, not on the cluster head: `canon` is
+        // only reachable through a coalesce, so filtering there gives up
+        // venues_latlng_idx and scans every upcoming show. The head still supplies
+        // the name and the coordinates that get displayed.
+        between(venues.lat, lat - latDelta, lat + latDelta),
+        between(venues.lng, lng - lngDelta, lng + lngDelta),
         sql`${canon.name} is not null and trim(${canon.name}) <> ''`,
       ),
     )
@@ -348,20 +352,38 @@ const FOLLOWING_EVENT_LIMIT = 300;
  *  because a followed artist announcing a date in five months is the whole point. */
 const FOLLOWING_HORIZON_DAYS = 365;
 
-/** Every venue id in the same room as any of `ids`, by head or by member id. */
+/**
+ * Every venue id in the same room as any of `ids`, for heads and member ids alike.
+ *
+ * Two hops, exactly like `clusterVenueIds`: a member id only knows its head, so
+ * asking one question gets you `{the id, its head}` and none of its siblings. The
+ * device stores whichever id was canonical when the user followed, and the repair
+ * pass is allowed to pick a different head later, so the stored id is regularly a
+ * member rather than the head.
+ *
+ * Each statement binds one chunk, and only one: `or(inArray(a), inArray(b))` over
+ * the same chunk binds it twice, which puts 90 ids over D1's 100-parameter ceiling.
+ */
 async function clusterMemberIds(db: DB, ids: string[]): Promise<string[]> {
   const out = new Set<string>(ids);
+  const heads = new Set<string>();
+  // Hop one: by primary key.
   for (let i = 0; i < ids.length; i += EVENT_LOOKUP_CHUNK) {
-    const chunk = ids.slice(i, i + EVENT_LOOKUP_CHUNK);
-    // Both arms are indexed: canonical_venue_id by venues_canonical_idx, id by key.
     const rows = await db
-      .select({ id: venues.id, canonicalVenueId: venues.canonicalVenueId })
+      .select({ head: sql<string>`coalesce(${venues.canonicalVenueId}, ${venues.id})` })
       .from(venues)
-      .where(or(inArray(venues.canonicalVenueId, chunk), inArray(venues.id, chunk)));
-    for (const r of rows) {
-      out.add(r.id);
-      if (r.canonicalVenueId) out.add(r.canonicalVenueId);
-    }
+      .where(inArray(venues.id, ids.slice(i, i + EVENT_LOOKUP_CHUNK)));
+    for (const r of rows) if (r.head) heads.add(r.head);
+  }
+  for (const h of heads) out.add(h);
+  // Hop two: by venues_canonical_idx.
+  const headIds = [...heads];
+  for (let i = 0; i < headIds.length; i += EVENT_LOOKUP_CHUNK) {
+    const rows = await db
+      .select({ id: venues.id })
+      .from(venues)
+      .where(inArray(venues.canonicalVenueId, headIds.slice(i, i + EVENT_LOOKUP_CHUNK)));
+    for (const r of rows) out.add(r.id);
   }
   return [...out];
 }
@@ -380,7 +402,13 @@ async function clusterMemberIds(db: DB, ids: string[]): Promise<string[]> {
  */
 export async function followingEvents(
   db: DB,
-  opts: { artistIds?: string[]; venueIds?: string[]; lat?: number | null; lng?: number | null },
+  opts: {
+    artistIds?: string[];
+    spotifyIds?: string[];
+    venueIds?: string[];
+    lat?: number | null;
+    lng?: number | null;
+  },
 ) {
   const clean = (ids: string[] | undefined) =>
     [...new Set((ids ?? []).filter((v) => typeof v === 'string' && v !== ''))].slice(
@@ -388,8 +416,12 @@ export async function followingEvents(
       FOLLOWING_IDS_MAX,
     );
   const artistIds = clean(opts.artistIds);
+  // An artist followed from search has no catalog id yet, only a Spotify one, and
+  // nothing backfills it — so asking by catalog id alone misses those follows
+  // entirely. spotify_id is unique, so this arm is indexed too.
+  const spotifyIds = clean(opts.spotifyIds);
   const venueIds = clean(opts.venueIds);
-  if (artistIds.length === 0 && venueIds.length === 0) return [];
+  if (artistIds.length === 0 && spotifyIds.length === 0 && venueIds.length === 0) return [];
 
   const canon = alias(venues, 'canon');
   const horizon = isoInDays(FOLLOWING_HORIZON_DAYS);
@@ -425,19 +457,41 @@ export async function followingEvents(
       .limit(FOLLOWING_EVENT_LIMIT);
 
   type Row = Awaited<ReturnType<typeof from>>[number];
-  const rows: Row[] = [];
+  // Which half of the question each row answers. The screen shows artists and
+  // venues on separate tabs, and it can't work this out for itself: rows come back
+  // under the *canonical* venue id, which is not necessarily the id the device
+  // stored, so re-deriving membership on the client drops correct shows.
+  const byId = new Map<string, Row & { matched_artist: boolean; matched_venue: boolean }>();
+  const collect = (rows: Row[], side: 'matched_artist' | 'matched_venue') => {
+    for (const r of rows) {
+      const existing = byId.get(r.event_id);
+      // A show by a followed artist at a followed venue belongs to both tabs.
+      if (existing) existing[side] = true;
+      else byId.set(r.event_id, { ...r, matched_artist: false, matched_venue: false, [side]: true });
+    }
+  };
+
   for (let i = 0; i < artistIds.length; i += EVENT_LOOKUP_CHUNK) {
-    rows.push(...(await from(inArray(events.artistId, artistIds.slice(i, i + EVENT_LOOKUP_CHUNK)))));
+    collect(
+      await from(inArray(events.artistId, artistIds.slice(i, i + EVENT_LOOKUP_CHUNK))),
+      'matched_artist',
+    );
+  }
+  for (let i = 0; i < spotifyIds.length; i += EVENT_LOOKUP_CHUNK) {
+    collect(
+      await from(inArray(artists.spotifyId, spotifyIds.slice(i, i + EVENT_LOOKUP_CHUNK))),
+      'matched_artist',
+    );
   }
   // A followed venue is a *room*, so every source's row for it counts.
   const memberIds = venueIds.length ? await clusterMemberIds(db, venueIds) : [];
   for (let i = 0; i < memberIds.length; i += EVENT_LOOKUP_CHUNK) {
-    rows.push(...(await from(inArray(events.venueId, memberIds.slice(i, i + EVENT_LOOKUP_CHUNK)))));
+    collect(
+      await from(inArray(events.venueId, memberIds.slice(i, i + EVENT_LOOKUP_CHUNK))),
+      'matched_venue',
+    );
   }
 
-  // A show by a followed artist at a followed venue comes back from both passes.
-  const byId = new Map<string, Row>();
-  for (const r of rows) byId.set(r.event_id, r);
   const hasPoint = typeof opts.lat === 'number' && typeof opts.lng === 'number';
   return [...byId.values()]
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
@@ -667,8 +721,15 @@ async function clusterVenueIds(db: DB, id: string): Promise<string[]> {
  * ones filed against this exact row, and by any of its ids.
  */
 export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
-  const clusterIds = await clusterVenueIds(db, id);
-  if (clusterIds.length === 0) return { items: [], nextCursor: null };
+  const all = await clusterVenueIds(db, id);
+  if (all.length === 0) return { items: [], nextCursor: null };
+  // One statement, so the ids have to fit under D1's parameter ceiling. The head is
+  // first, and a room with this many rows filed against it is a clustering bug
+  // rather than a real venue — say so rather than 500 the page.
+  const clusterIds = all.slice(0, EVENT_LOOKUP_CHUNK);
+  if (all.length > clusterIds.length) {
+    console.warn(`venue ${id}: cluster of ${all.length} rows, reading the first ${clusterIds.length}`);
+  }
   const rows = await db
     .select({
       event_id: events.id,
@@ -1436,8 +1497,17 @@ async function canonicalizeVenues(
     // Everything here that is the same physical room, plus wherever those rows
     // already point.
     const cluster = candidates.filter((c) => c.id !== t.id && sameVenue(target, c));
+    // An existing head keeps the job. Ranking here only ever sees one batch, while
+    // repairDuplicates ranks from the whole table, so re-picking on ingest makes a
+    // room's public id churn between passes — and that id is what a device stores
+    // when someone follows the venue. Ingest attaches rows to the cluster; choosing
+    // a better head is the repair pass's call.
+    const self = candidates.find((c) => c.id === t.id)?.canonicalVenueId ?? null;
+    const existing = [...new Set([self, ...cluster.map((c) => c.canonicalVenueId)].filter(Boolean))];
     const resolved = representative(
-      [t.id, ...cluster.map((c) => c.id), ...cluster.map((c) => c.canonicalVenueId)],
+      existing.length > 0
+        ? existing
+        : [t.id, ...cluster.map((c) => c.id), ...cluster.map((c) => c.canonicalVenueId)],
       nameOf,
       (id) => placeholderIds.has(id),
     );

@@ -18,8 +18,15 @@ feed.get('/nearby', zValidator('query', nearbyQuery), async (c) => {
 // Read: upcoming shows for the artists and venues held on the device. POST because
 // somebody's whole follow list has no business sitting in a request log.
 feed.post('/following', zValidator('json', followingBody), async (c) => {
-  const { artistIds, venueIds, lat, lng } = c.req.valid('json');
-  return c.json({ items: await followingEvents(getDb(c.env.DB), { artistIds, venueIds, lat, lng }) });
+  const { artistIds, spotifyIds, venueIds, lat, lng } = c.req.valid('json');
+  const items = await followingEvents(getDb(c.env.DB), {
+    artistIds,
+    spotifyIds,
+    venueIds,
+    lat,
+    lng,
+  });
+  return c.json({ items });
 });
 
 // Client-driven ingestion: pull fresh shows for an area (server-throttled).

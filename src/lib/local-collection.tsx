@@ -83,37 +83,67 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
     const hydrated = useRef(false);
     const dropped = useRef<Ref[]>([]);
     const touched = useRef(false);
+    // A read that produced a list. Until then every removal goes into `dropped`,
+    // because a later read still has to be merged in without undoing it.
+    const readOk = useRef(false);
+    const rereading = useRef(false);
+
+    /** One read attempt. Resolves to whether it produced a list. */
+    const readStored = useCallback(async () => {
+      try {
+        const raw = await AsyncStorage.getItem(storageKey);
+        // No key yet is a perfectly good answer: there is nothing to lose.
+        const stored = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(stored)) {
+          console.warn(`stored ${label} was not a list; leaving it alone`);
+          return false;
+        }
+        setItems((current) => mergeStored(current, stored, dropped.current, isValid, matches));
+        readOk.current = true;
+        setWritable(true);
+        return true;
+      } catch (err) {
+        console.warn(`failed to load ${label}:`, err);
+        return false;
+      }
+    }, []);
+
+    /**
+     * Try the read once more before unlocking writes.
+     *
+     * The list is empty because we couldn't read it, not because it is empty, so
+     * writing now would delete whatever is on disk — and a user who follows and then
+     * unfollows one artist would write `[]` over the fifty they had. If this read
+     * fails too, the session stays in memory: losing a change is recoverable, and
+     * silently emptying someone's follow list is not.
+     */
+    const reread = useCallback(async () => {
+      if (readOk.current || rereading.current) return;
+      rereading.current = true;
+      try {
+        if (!(await readStored())) {
+          console.warn(`still can't read ${label}; this session stays in memory only`);
+        }
+      } finally {
+        rereading.current = false;
+      }
+    }, [readStored]);
 
     // Hydrate once, merging rather than overwriting whatever happened while the
     // read was in flight.
     useEffect(() => {
       (async () => {
-        let read = false;
-        try {
-          const raw = await AsyncStorage.getItem(storageKey);
-          // No key yet is a perfectly good answer: there is nothing to lose.
-          const stored = raw ? JSON.parse(raw) : [];
-          if (Array.isArray(stored)) {
-            read = true;
-            setItems((current) => mergeStored(current, stored, dropped.current, isValid, matches));
-          } else {
-            console.warn(`stored ${label} was not a list; leaving it alone`);
-          }
-        } catch (err) {
-          // Unreadable or unparseable. Render empty, but treat the key as somebody
-          // else's until the user changes something: a transient read failure must
-          // not be how a follow list gets deleted.
-          console.warn(`failed to load ${label}:`, err);
-        } finally {
-          hydrated.current = true;
-          setReady(true);
-          if (read || touched.current) setWritable(true);
-        }
+        await readStored();
+        hydrated.current = true;
+        setReady(true);
+        // A change made during the read still wants saving, but only once we know
+        // what we would be overwriting.
+        if (!readOk.current && touched.current) void reread();
       })();
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount; both callbacks are stable
     }, []);
 
-    // Persist once we know the disk state, or once the user has made a change that
-    // deserves to stick even though we don't.
+    // Persist once we know the disk state.
     useEffect(() => {
       if (!ready || !writable) return;
       AsyncStorage.setItem(storageKey, JSON.stringify(items)).catch((err) =>
@@ -123,11 +153,10 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
 
     const has = useCallback((ref: Ref) => items.some((i) => matches(i, ref)), [items]);
 
-    // A deliberate change outranks a read we couldn't make sense of.
     const markTouched = useCallback(() => {
       touched.current = true;
-      if (hydrated.current) setWritable(true);
-    }, []);
+      if (hydrated.current) void reread();
+    }, [reread]);
 
     const add = useCallback(
       (item: T) => {
@@ -140,7 +169,7 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
     const remove = useCallback(
       (ref: Ref) => {
         markTouched();
-        if (!hydrated.current) dropped.current.push(ref);
+        if (!readOk.current) dropped.current.push(ref);
         setItems((prev) => prev.filter((i) => !matches(i, ref)));
       },
       [markTouched],
@@ -153,7 +182,7 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
           // Recorded in here because only `prev` says whether this is a removal.
           // A repeat entry (StrictMode replays updaters) is harmless: `dropped`
           // is only ever read with `.some`.
-          if (!hydrated.current) dropped.current.push(item);
+          if (!readOk.current) dropped.current.push(item);
           return prev.filter((i) => !matches(i, item));
         }
         return [item, ...prev];

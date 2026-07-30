@@ -10,6 +10,7 @@ import type {
   EventBuzz,
   EventDetail,
   EventLineup,
+  FollowingEvent,
   NearbyEvent,
   NearbyVenue,
   Page,
@@ -148,25 +149,29 @@ export function useSavedShowDetails(eventIds: string[]) {
  * town over never appeared at all. `coords` only fills in distances.
  */
 export function useFollowingEvents(
-  artistIds: string[],
-  venueIds: string[],
+  ids: { artistIds: string[]; spotifyIds: string[]; venueIds: string[] },
   coords: Coords | null,
 ) {
-  const clean = (ids: string[]) =>
-    [...new Set(ids.filter(Boolean))].sort().slice(0, FOLLOWING_IDS_MAX);
-  const artists = clean(artistIds);
-  const rooms = clean(venueIds);
-  // Rounded into the key: distance labels don't need to survive every GPS twitch,
-  // and a raw point would refetch the whole list each time it moved a metre.
+  // Caller order is kept — the stores hold the newest follow first — so a list over
+  // the cap loses its oldest entries rather than whichever ids happen to sort last.
+  const clean = (list: string[]) => [...new Set(list.filter(Boolean))].slice(0, FOLLOWING_IDS_MAX);
+  const artistIds = clean(ids.artistIds);
+  const spotifyIds = clean(ids.spotifyIds);
+  const venueIds = clean(ids.venueIds);
+  // Sorted only for the key, so the same set in a new order isn't a new query.
+  const key = [artistIds, spotifyIds, venueIds].map((l) => [...l].sort());
+  // Rounded into the key too: distance labels don't need to survive every GPS
+  // twitch, and a raw point would refetch the whole list each time it moved a metre.
   const near = coords ? `${coords.lat.toFixed(2)},${coords.lng.toFixed(2)}` : null;
   return useQuery({
-    queryKey: ['following-events', artists, rooms, near],
-    enabled: artists.length > 0 || rooms.length > 0,
+    queryKey: ['following-events', ...key, near],
+    enabled: artistIds.length + spotifyIds.length + venueIds.length > 0,
     placeholderData: (prev) => prev,
-    queryFn: async (): Promise<NearbyEvent[]> => {
-      const data = await apiPost<{ items: NearbyEvent[] }>('/following', {
-        artistIds: artists,
-        venueIds: rooms,
+    queryFn: async (): Promise<FollowingEvent[]> => {
+      const data = await apiPost<{ items: FollowingEvent[] }>('/following', {
+        artistIds,
+        spotifyIds,
+        venueIds,
         lat: coords?.lat ?? null,
         lng: coords?.lng ?? null,
       });

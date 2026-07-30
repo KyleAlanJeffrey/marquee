@@ -23,6 +23,16 @@ export type NearbyEvent = {
   distance_miles: number | null;
 };
 
+/**
+ * A show on the Following screen, tagged with which half of the question it
+ * answers. The server decides: rows come back under the canonical venue id, which
+ * isn't necessarily the id the device stored, so the client can't tell.
+ */
+export type FollowingEvent = NearbyEvent & {
+  matched_artist: boolean;
+  matched_venue: boolean;
+};
+
 export type ArtistEvent = {
   event_id: string;
   event_name: string;

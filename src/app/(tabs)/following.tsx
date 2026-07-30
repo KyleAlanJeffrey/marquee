@@ -28,19 +28,25 @@ type Tab = 'artists' | 'venues';
 
 export default function FollowingScreen() {
   const theme = useTheme();
-  const { follows, isFollowing, ready: followsReady } = useFollows();
+  const { follows, ready: followsReady } = useFollows();
   const { venues, isFollowingVenue, toggleVenue, ready: venuesReady } = useFollowedVenues();
 
   const [tab, setTab] = useState<Tab>('artists');
   const [coords, setCoords] = useState<Coords | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const artistIds = useMemo(
-    () => follows.map((f) => f.artistId).filter((id): id is string => !!id),
-    [follows],
+  // Both identities: an artist followed from search has only a Spotify id, and
+  // nothing backfills a catalog id later, so asking by one alone loses those.
+  const ids = useMemo(
+    () => ({
+      artistIds: follows.map((f) => f.artistId).filter((id): id is string => !!id),
+      spotifyIds: follows.map((f) => f.spotifyId).filter((id): id is string => !!id),
+      venueIds: venues.map((v) => v.venueId),
+    }),
+    [follows, venues],
   );
-  const venueIds = useMemo(() => venues.map((v) => v.venueId), [venues]);
-  const events = useFollowingEvents(artistIds, venueIds, coords);
+  const askable = ids.artistIds.length + ids.spotifyIds.length + ids.venueIds.length > 0;
+  const events = useFollowingEvents(ids, coords);
 
   // Location is a nicety here, not a gate: it labels each card with a distance.
   // Without it the shows still load, they just don't say how far away they are.
@@ -59,20 +65,15 @@ export default function FollowingScreen() {
     };
   }, []);
 
-  // One request covers both tabs; each tab shows the half it asked about. A show by
-  // a followed artist at a followed venue belongs under both, and appears in both.
-  const followingEvents = useMemo(
-    () =>
-      (events.data ?? []).filter((e) =>
-        isFollowing({ artistId: e.artist_id, spotifyId: e.artist_spotify_id }),
-      ),
-    [events.data, isFollowing],
+  // One request covers both tabs, and the server says which half each row answers.
+  // Re-deriving it here would drop correct shows: rows carry the canonical venue id,
+  // which isn't always the id on the device. A show by a followed artist at a
+  // followed venue is tagged both ways and appears under both.
+  const artistShows = useMemo(
+    () => (events.data ?? []).filter((e) => e.matched_artist),
+    [events.data],
   );
-
-  const venueEvents = useMemo(
-    () => (events.data ?? []).filter((e) => isFollowingVenue({ venueId: e.venue_id })),
-    [events.data, isFollowingVenue],
-  );
+  const venueShows = useMemo(() => (events.data ?? []).filter((e) => e.matched_venue), [events.data]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -88,8 +89,10 @@ export default function FollowingScreen() {
   // the disk read hasn't landed yet, and the empty state would flash over real data.
   const storesReady = followsReady && venuesReady;
   const nothingFollowed = storesReady && follows.length === 0 && venues.length === 0;
-  const loading = !storesReady || events.isLoading || events.isPending;
-  const shows = tab === 'artists' ? followingEvents : venueEvents;
+  // `askable` guards the spinner: a disabled query stays `pending` forever, so
+  // waiting on it alone would spin for good if there were no ids worth sending.
+  const loading = !storesReady || (askable && events.isPending);
+  const shows = tab === 'artists' ? artistShows : venueShows;
   const followedHere = tab === 'artists' ? follows.length : venues.length;
 
   const refresh = (

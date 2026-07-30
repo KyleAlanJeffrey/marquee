@@ -135,6 +135,8 @@ export default function SavedScreen() {
               <View style={styles.subRow}>
                 <ThemedText type="small" themeColor="textSecondary">
                   {saved.length} {saved.length === 1 ? 'show' : 'shows'} put aside
+                  {/* Say it rather than quietly showing stale times for the rest. */}
+                  {saved.length > ids.length ? ` · live times for the first ${ids.length}` : ''}
                 </ThemedText>
                 {details.isFetching && !refreshing ? (
                   <ActivityIndicator size="small" color={theme.textTertiary} />
