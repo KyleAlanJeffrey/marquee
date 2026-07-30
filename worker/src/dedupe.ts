@@ -135,6 +135,65 @@ export function venueNamesConflict(a: string, b: string): boolean {
 }
 
 /**
+ * How many unrelated rooms have to share one exact coordinate before we stop
+ * believing the coordinate. Two is too low: a complex genuinely files its rooms at
+ * one point ("The Salt Shed Indoors", "The Salt Shed Outdoors"), and those names
+ * agree with each other so they group into one. Three *mutually unrelated* names is
+ * not a building, it is a default.
+ */
+export const PLACEHOLDER_POINT_GROUPS = 3;
+
+/**
+ * Is this exact coordinate a source's fallback for "somewhere in this city"?
+ *
+ * Ticketmaster answers with one point per town for every venue it has no address
+ * for — verified live: it gives 37.779499,-122.419502 for both Golden Gate Park and
+ * Rickshaw Stop, which are 4km and 300m from there respectively. A point like that
+ * carries no information about where anything is, so a row sitting on it is a bad
+ * choice to *name and place* a cluster even when it is a fine member of one.
+ *
+ * The test is how many unrelated rooms are filed at the point: names are grouped by
+ * shared distinguishing words, so a venue's own variants collapse together and only
+ * genuinely different places count. Tour titles have no tokens and are ignored —
+ * they say nothing either way.
+ */
+export function isPlaceholderPoint(namesAtPoint: string[]): boolean {
+  const groups: Set<string>[] = [];
+  for (const name of namesAtPoint) {
+    const tokens = venueNameTokens(name);
+    if (tokens.size === 0) continue;
+    // Every group this name touches is folded into one, not just the first: a
+    // name can be the word that shows two earlier groups were the same room.
+    const touched: Set<string>[] = [];
+    for (const g of groups) {
+      for (const t of tokens) {
+        if (g.has(t)) {
+          touched.push(g);
+          break;
+        }
+      }
+    }
+    if (touched.length === 0) {
+      groups.push(new Set(tokens));
+      continue;
+    }
+    const merged = touched[0];
+    for (const t of tokens) merged.add(t);
+    for (const g of touched.slice(1)) {
+      for (const t of g) merged.add(t);
+      groups.splice(groups.indexOf(g), 1);
+    }
+  }
+  return groups.length >= PLACEHOLDER_POINT_GROUPS;
+}
+
+/** Key for "the same exact coordinate", for grouping rows by point. */
+export function pointKey(lat: number | null | undefined, lng: number | null | undefined): string | null {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+  return `${lat},${lng}`;
+}
+
+/**
  * One name contains the other, once the generic words are gone: "The Eastern" vs
  * "The Eastern-GA", "Agora Theatre" vs "Agora Theater & Ballroom". Two genuinely
  * different rooms rarely nest like this ("Brooklyn Bowl" and "Brooklyn Steel"

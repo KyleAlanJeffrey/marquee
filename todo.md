@@ -10,6 +10,45 @@ Production: **https://marquee.rocks**.
 
 ---
 
+## Done — a placeholder coordinate no longer places a venue (this pass)
+
+- [x] Repair run on production: 1,067 venues clustered, 60 duplicate shows merged.
+  The Chicago pile-up split correctly — The Salt Shed + The Salt Shed Outdoors are
+  one venue, while Constellation, Huntington Bank Pavilion at Northerly Island and
+  a festival title are each their own again.
+- [x] The 16 remaining same-artist-same-day pairs in the SF feed are **not**
+  clustering failures: each is two sources placing one show at different named
+  venues kilometres apart (Dimmu Borgir at both The Warfield and Davies Symphony
+  Hall). `sameVenue` is right to refuse those. Confirmed against Ticketmaster's
+  live API that they answer with one point per town for any venue they have no
+  address for — `37.779499,-122.419502` for *both* Golden Gate Park and Rickshaw
+  Stop, which are 4 km and 300 m away from it.
+- [x] **Head selection now weighs coordinates, not just names.** Every event in a
+  cluster is repointed at the head, so the head's name is what the feed shows and
+  its coordinates are the distance and the map pin — and nothing stopped a row
+  sitting on a town's fallback point from winning. `isPlaceholderPoint` calls a
+  coordinate untrustworthy when three *mutually unrelated* rooms are filed at it;
+  names are grouped by shared distinguishing words first, so a complex that files
+  its rooms at one point ("Salt Shed Indoors/Outdoors") stays one group, and tour
+  titles are ignored because they vouch for nothing.
+- [x] Measured on the live table (3,786 venues, 2,694 clusters): 51 rows sit on a
+  genuine placeholder point, 31 clusters were headed by one, and the fix moves 2 of
+  them — Golden Gate Park from Civic Center to the actual park, Showbox SoDo from a
+  downtown default to its address. The other 29 are single-row clusters with no
+  better member to pick; correcting those needs a geocoder, not a better choice.
+  (An earlier count of 134 was a SQL overestimate — it counted tour titles and a
+  venue's own name variants as unrelated rooms.)
+
+### Known residuals
+
+- An event filed against the wrong venue row before the matcher was fixed stays
+  wrong: re-clustering repoints events at a cluster *head*, it never re-decides
+  which venue an event belongs to. Three Outside Lands dates still sit on the
+  Davies Symphony Hall row. A Ticketmaster re-sweep of those areas is what fixes
+  them, not another repair pass.
+- 29 venues are pinned at a source's town-wide default because that is the only
+  row we have for them. Needs geocoding to fix.
+
 ## Done — follows for venues, saved shows (this pass)
 
 - [x] **One on-device store, three collections.** `src/lib/local-collection.tsx`

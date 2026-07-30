@@ -6,7 +6,10 @@ import { zoneFor } from './timezone';
 import {
   bestVenueMatch,
   hoursApart,
+  isPlaceholderPoint,
   looksLikeTourName,
+  PLACEHOLDER_POINT_GROUPS,
+  pointKey,
   sameVenue,
   mergeField,
   parseSources,
@@ -950,10 +953,10 @@ export async function repairDuplicates(
   }
 
   // The loop above hands each cluster to whichever member it reached first, which
-  // is the smallest id and takes no account of what the row is called. Re-pick the
-  // head so a row named after a tour never gets to name a real room — every event
-  // in the cluster is repointed at the head, so its name is the one the feed and the
-  // venue page show.
+  // is the smallest id and takes no account of what the row is called or whether we
+  // believe where it says it is. Re-pick the head: every event in the cluster is
+  // repointed at it, so its name is what the feed and the venue page show, and its
+  // coordinates are the distance and the map pin.
   const clusterMembers = new Map<string, string[]>();
   for (const [id, canonical] of canonicalOf) {
     const group = clusterMembers.get(canonical) ?? [];
@@ -961,9 +964,14 @@ export async function repairDuplicates(
     clusterMembers.set(canonical, group);
   }
   const nameById = new Map(all.map((v) => [v.id, v.name]));
+  const placeholderIds = placeholderPointIds(all);
   for (const [head, ids] of clusterMembers) {
     if (ids.length < 2) continue;
-    const better = representative(ids, (id) => nameById.get(id));
+    const better = representative(
+      ids,
+      (id) => nameById.get(id),
+      (id) => placeholderIds.has(id),
+    );
     if (better !== head) for (const id of ids) canonicalOf.set(id, better);
   }
 
@@ -1150,12 +1158,43 @@ async function inBatches(db: DB, stmts: any[], size = 50): Promise<void> {
  * order they are processed in. `nameOf` is optional and an unknown name counts as
  * real, which leaves callers that don't have names behaving exactly as before.
  */
+/**
+ * Which of these rows sit on a coordinate that is really a source's "somewhere in
+ * this city" default. Grouped by exact point, so this only ever costs one pass over
+ * the rows the caller already has.
+ */
+export function placeholderPointIds(
+  rows: { id: string; name: string; lat: number | null; lng: number | null }[],
+): Set<string> {
+  const byPoint = new Map<string, { id: string; name: string }[]>();
+  for (const r of rows) {
+    const key = pointKey(r.lat, r.lng);
+    if (!key) continue;
+    const at = byPoint.get(key);
+    if (at) at.push(r);
+    else byPoint.set(key, [r]);
+  }
+  const ids = new Set<string>();
+  for (const at of byPoint.values()) {
+    if (at.length < PLACEHOLDER_POINT_GROUPS) continue;
+    if (!isPlaceholderPoint(at.map((r) => r.name))) continue;
+    for (const r of at) ids.add(r.id);
+  }
+  return ids;
+}
+
 export function representative(
   ids: (string | null | undefined)[],
   nameOf?: (id: string) => string | null | undefined,
+  onPlaceholderPoint?: (id: string) => boolean,
 ): string {
   const real = [...new Set(ids.filter((v): v is string => typeof v === 'string' && v !== ''))];
-  const rank = (id: string) => (looksLikeTourName(nameOf?.(id) ?? '') ? 1 : 0);
+  // A tour title costs the venue its name; a placeholder coordinate costs it its
+  // position. Both are worth avoiding, and a real name outranks good coordinates
+  // because the name is the venue's identity — the offset is at worst a few km
+  // inside the right town. Either way this stays a total order over the cluster.
+  const rank = (id: string) =>
+    (looksLikeTourName(nameOf?.(id) ?? '') ? 2 : 0) + (onPlaceholderPoint?.(id) ? 1 : 0);
   return real.reduce((best, id) => {
     const rankedBest = rank(best);
     const rankedId = rank(id);
@@ -1231,6 +1270,19 @@ async function canonicalizeVenues(
   for (const list of res) for (const c of list ?? []) nameById.set(c.id, c.name);
   const nameOf = (id: string) => nameById.get(id);
 
+  // Same for coordinates: a row on a town-wide placeholder point shouldn't get to
+  // place the cluster. Only the rows this batch can see are considered, so a point
+  // that looks fine here can still be caught by the next pass or by the repair,
+  // which sees the whole table.
+  const seenRows = new Map<string, { id: string; name: string; lat: number | null; lng: number | null }>();
+  for (const t of targets) {
+    seenRows.set(t.id, { id: t.id, name: t.row.name, lat: t.row.lat, lng: t.row.lng });
+  }
+  for (const list of res) {
+    for (const c of list ?? []) seenRows.set(c.id, { id: c.id, name: c.name, lat: c.lat, lng: c.lng });
+  }
+  const placeholderIds = placeholderPointIds([...seenRows.values()]);
+
   const writes = new Map<string, string>();
   locatable.forEach((t, idx) => {
     const target = { id: t.id, name: t.row.name, lat: t.row.lat, lng: t.row.lng, city: t.row.city };
@@ -1245,6 +1297,7 @@ async function canonicalizeVenues(
     const resolved = representative(
       [t.id, ...cluster.map((c) => c.id), ...cluster.map((c) => c.canonicalVenueId)],
       nameOf,
+      (id) => placeholderIds.has(id),
     );
     canonical.set(t.key, resolved);
 

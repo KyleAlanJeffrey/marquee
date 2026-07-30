@@ -4,6 +4,7 @@ import { representative } from '../src/data';
 import {
   bestVenueMatch,
   guessUtcOffsetHours,
+  isPlaceholderPoint,
   looksLikeTourName,
   mergeField,
   metersBetween,
@@ -303,5 +304,77 @@ describe('cluster representative', () => {
     const ids = ['b', 'c', 'a'];
     const first = representative(ids);
     expect(representative([...ids, first])).toBe(first);
+  });
+});
+
+describe('isPlaceholderPoint', () => {
+  it('accepts a complex that files its rooms at one point', () => {
+    // Three names, one room: they agree with each other, so they are one group.
+    expect(
+      isPlaceholderPoint([
+        'The Salt Shed Indoors (Shed)',
+        'The Salt Shed Outdoors (Fairgrounds)',
+        'Three Top Lounge at The Salt Shed',
+      ]),
+    ).toBe(false);
+  });
+
+  it("flags a town's fallback coordinate", () => {
+    // Ticketmaster's real answer for San Francisco: unrelated rooms, one point.
+    expect(
+      isPlaceholderPoint(['Golden Gate Park', 'Rickshaw Stop', 'Davies Symphony Hall']),
+    ).toBe(true);
+  });
+
+  it('ignores tour titles, which vouch for nothing either way', () => {
+    expect(
+      isPlaceholderPoint(['Brunette World Tour', 'The Forever Now Tour', 'Warped Tour Montreal']),
+    ).toBe(false);
+    expect(isPlaceholderPoint(['The Van Buren', 'BILMURI presents: The KINDA HARD Tour'])).toBe(
+      false,
+    );
+  });
+
+  it('merges every group a name touches, not just the first', () => {
+    // "Fox Oakland" ties the first two together, leaving two groups, not three.
+    expect(isPlaceholderPoint(['Fox Theater', 'Oakland Arena', 'Fox Oakland', 'Great American'])).toBe(
+      false,
+    );
+  });
+
+  it('needs three unrelated names, not two', () => {
+    expect(isPlaceholderPoint(['Golden Gate Park', 'Rickshaw Stop'])).toBe(false);
+  });
+});
+
+describe('representative', () => {
+  const ids = ['aaa', 'bbb', 'ccc'];
+
+  it('prefers a real name over a tour title, whatever the ids', () => {
+    const names: Record<string, string> = {
+      aaa: 'Brunette World Tour',
+      bbb: 'The Warfield',
+      ccc: 'Another Tour',
+    };
+    expect(representative(ids, (id) => names[id])).toBe('bbb');
+  });
+
+  it('prefers trustworthy coordinates when the names are equally good', () => {
+    const names: Record<string, string> = { aaa: 'Golden Gate Park', bbb: 'Golden Gate Park' };
+    expect(representative(['aaa', 'bbb'], (id) => names[id], (id) => id === 'aaa')).toBe('bbb');
+  });
+
+  it('still takes a real name on a placeholder point over a tour title', () => {
+    const names: Record<string, string> = { aaa: 'The Warfield', bbb: 'Brunette World Tour' };
+    expect(representative(['aaa', 'bbb'], (id) => names[id], (id) => id === 'aaa')).toBe('aaa');
+  });
+
+  it('is a total order: every member picks the same winner', () => {
+    const names: Record<string, string> = { aaa: 'Some Tour', bbb: 'The Fillmore', ccc: 'The Fillmore' };
+    const placeholder = (id: string) => id === 'bbb';
+    const orders = [ids, [...ids].reverse(), ['bbb', 'aaa', 'ccc']];
+    const winners = orders.map((o) => representative(o, (id) => names[id], placeholder));
+    expect(new Set(winners).size).toBe(1);
+    expect(winners[0]).toBe('ccc');
   });
 });
