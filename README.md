@@ -27,8 +27,11 @@ worker/
   src/sources.ts  external APIs (Ticketmaster, Bandsintown, SeatGeek, Spotify, Bluesky)
   src/dedupe.ts   cross-source venue/show identity · src/crawl.ts crawl scheduling
   src/timezone.ts venue-local → UTC (state/province zone + Intl, longitude fallback)
-  src/seo.ts      robots.txt, sitemap.xml, per-page <head> + JSON-LD injection
-  src/landing.ts  /concerts — the one server-rendered page, for crawlers with no JS
+  src/seo.ts      robots.txt, sitemap index + children, per-page <head> + JSON-LD
+  src/page.ts     shared chrome for the server-rendered pages (CSS, head, shell)
+  src/landing.ts  /concerts — the front door, rendered without JavaScript
+  src/cities.ts   /concerts/:town — a page per town, and the town↔slug mapping
+  src/indexnow.ts tells Bing et al. about the shows the crawl just wrote
   schema.sql      D1 baseline schema (DDL only — this is what production gets)
   migrations/     numbered D1 migrations applied after the baseline
   seed.sql        local-only dev seed (fictional shows) · unseed.sql removes it
@@ -111,8 +114,9 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/admin/discover-seatgeek?lat&lng&radius` | sweep one area with SeatGeek, ignoring the per-area throttle (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/repair-duplicates?after=` | cluster venues, collapse shows stored twice; idempotent. Resume with the `next_artist_id` it returns, or run [scripts/repair-duplicates.sh](scripts/repair-duplicates.sh) (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/backfill-bandsintown?limit&offset` | one-off Bandsintown sweep over known artists (needs `ADMIN_TOKEN`) |
-| `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (sitemap built live from D1) |
+| `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (a sitemap index; children at `/sitemap-pages.xml`, `/sitemap-events-N.xml`, …) |
 | `GET /concerts` | server-rendered landing page — real HTML, no JS, built live from D1 |
+| `GET /concerts/:town` | one server-rendered page per town (`/concerts/austin-tx`); 404 for a slug no town answers to |
 
 ## Deploying
 
@@ -219,15 +223,42 @@ otherwise see an empty shell. Four layers fix that:
    rewrites the shell's `<head>` on the way out (title, description, canonical,
    social card, `noindex` for unknown ids) plus `MusicEvent` / `MusicGroup` /
    `MusicVenue` JSON-LD. It also serves `/robots.txt` and a live `/sitemap.xml`.
-4. `worker/src/landing.ts` — the first three layers only ever fix the `<head>`;
-   the `<body>` of every route still needs the bundle to boot before it says
-   anything. `/concerts` is the exception: server-rendered HTML with no JS and no
-   images, built from five D1 reads (totals, the next twelve shows one-per-city,
-   thirty cities, the busiest venues, the most-booked artists) plus an FAQ, and a
-   JSON-LD `@graph` of `WebPage` / `WebApplication` / `FAQPage` / `ItemList`. It
-   is the site's entry point for anything that reads HTML rather than runs it, and
-   every row on it links into the app. Edge-cached 30 minutes, stale-while-
-   revalidate a day.
+4. `worker/src/landing.ts` + `worker/src/cities.ts` — the first three layers only
+   ever fix the `<head>`; the `<body>` of every app route still needs the bundle to
+   boot before it says anything. Everything under `/concerts` is the exception:
+   server-rendered HTML with no JS and no images, built from D1 on the edge and
+   sharing one stylesheet via `page.ts`. `/concerts` is the front door (totals, the
+   next twelve shows one-per-city, thirty city links, the busiest venues, the
+   most-booked artists, an FAQ). `/concerts/:town` is one page per town with an
+   upcoming show — ~1,700 of them — each listing that town's next 120 shows by
+   date, its venues, its acts and the towns within 180 miles. Both carry a JSON-LD
+   `@graph`. Edge-cached 30 minutes, stale-while-revalidate a day.
+
+### Index hygiene
+
+Being crawlable is not the same as being worth indexing, so the Worker also says
+what *not* to keep. Past events, artists with nothing booked and rooms with
+nothing booked are `noindex` — thousands of thin pages are how a site teaches
+Google it is mostly empty. A venue id that is a cluster member canonicals to its
+cluster head instead of competing with it. And `/sitemap.xml` is a sitemap
+*index*: the single document it replaced capped at 5,000 URLs per type and was
+quietly omitting two thirds of the catalogue, so the paginated version logs
+whenever it has to drop anything.
+
+### Getting indexed sooner
+
+Shows go on sale weeks ahead and the crawl runs hourly, so waiting to be
+discovered costs the whole interesting window. Set `INDEXNOW_KEY` to any 8–128
+characters of `[A-Za-z0-9-]`:
+
+```sh
+npx wrangler secret put INDEXNOW_KEY
+```
+
+and each crawl POSTs the URLs it just created to IndexNow — read by Bing, Yandex,
+Seznam and Naver — while `/<key>.txt` starts answering with the key so they can
+verify it. Unset, nothing is submitted. Google doesn't participate in IndexNow,
+so this complements the sitemap rather than replacing it.
 
 ### Venue identity, and why a coordinate isn't enough
 

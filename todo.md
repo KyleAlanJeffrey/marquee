@@ -641,34 +641,52 @@ instead of coverage.
 - [ ] Fan/artist galleries from real images; support acts from same-venue
   events; ticket price on the event Buy bar.
 
+## Done — SEO pass (this pass)
+
+- [x] `/concerts` — server-rendered landing page, ~1,040 words, no JS, no images.
+- [x] `PRIMARY_HOST`: one canonical origin for every public URL; the workers.dev
+  copy answers `X-Robots-Tag: noindex` and a `Disallow: /` robots.txt.
+- [x] **City hub pages.** `/concerts/:town`, ~1,700 of them, one per town with an
+  upcoming show. Each lists that town's next 120 shows by date (month rules, local
+  door times), its venues, its acts, the towns within 180 miles, and an FAQ built
+  from its own numbers. Slugs are `city-region` (`austin-tx`, `london-united-kingdom`)
+  and resolved by generating slugs rather than parsing them, because a slug can't
+  be split back into its parts reliably and slugifying is lossy about punctuation.
+- [x] **Sitemap index.** Was one document capped at 5,000 per type, silently
+  omitting 9,142 of 14,142 shows; now an index over paginated children — 21,590
+  URLs. Venues listed by canonical id (drops 154 URLs that duplicated another by
+  construction). Truncation is logged.
+- [x] **Index hygiene.** Past events, artists with nothing booked and rooms with
+  nothing booked are `noindex`. A non-head venue cluster member canonicals to its
+  head.
+- [x] **IndexNow.** The hourly crawl announces what it wrote. Off unless
+  `INDEXNOW_KEY` is set; never fails the crawl.
+
 ## SEO follow-ups
 
-Ordered by how much each one moves the needle. `/concerts` proved the shape; the
-rest is applying it to the routes that actually have search demand.
-
 - [ ] **Server-render the body of `/event/:id`, `/artist/:id`, `/venue/:id`.**
-  `worker/src/seo.ts` already reads the row from D1 for these routes and rewrites
-  the `<head>` — the body is still an empty shell until the bundle boots. Same
-  `HTMLRewriter` pass could inject the show's date, venue, city and lineup into a
-  `<noscript>`-ish block the SPA replaces on hydration. This is the whole
-  long-tail: thousands of "artist + city + date" queries, one page each, currently
-  invisible to anything that doesn't run JS.
-- [ ] **City hub pages.** "concerts in austin" is the query people actually type,
-  and nothing on the site targets it. `/concerts/:city-slug` off the same
-  `landing.ts` machinery, one per town with upcoming shows, listed in the sitemap
-  and linked from `/concerts`. Needs stable slugs (`austin-tx`) stored per town,
-  not derived per request, so a URL doesn't move when the label changes.
-- [ ] **Keep index bloat out.** A venue or artist with no upcoming shows is a
-  thin page; a past event is a dead one. `noindex` them (the machinery for unknown
-  ids in `seo.ts` is already the right hook) and drop them from the sitemap.
-- [ ] **Split the sitemap.** `sitemapXml` caps at 5,000 URLs per type in one
-  document. Past ~14k shows that is already dropping URLs silently. Wants a
-  sitemap *index* plus paginated child sitemaps, and a `log` when a page is
-  truncated so the cap is never invisible again.
-- [ ] **Tell the engines when things change.** Nothing currently pings anyone. The
-  hourly crawl already knows what it wrote; an IndexNow POST for new event URLs is
-  a handful of lines and Bing/Yandex act on it in minutes. Search Console and Bing
-  Webmaster verification are manual one-time steps and not in the repo yet.
+  The biggest remaining lever and the only one that needs an architectural
+  decision. These routes have excellent heads — real titles, complete
+  `MusicEvent` JSON-LD with `offers`, `PostalAddress` and `geo` — and a body of
+  **nine words**: "Marquee FINDING SHOWS AROUND YOU… Explore Following Saved
+  Profile". That is the whole long tail (thousands of "artist + city + date"
+  queries) invisible to anything that doesn't run JS.
+  Injecting content into `#root` is *not* the fix: the Expo export sets
+  `__EXPO_ROUTER_HYDRATE__ = true`, so React hydrates the prerendered shell and
+  extra markup is a hydration mismatch. The real options are (a) Expo's server
+  output mode, (b) a `page.ts`-rendered document per entity with the app route
+  canonicalling to it, or (c) accepting the mismatch. Wants a decision, not a
+  patch.
+- [ ] **Move the landing page to `/`.** `/` collects every backlink and renders
+  nine words; `/concerts` renders a thousand and collects none. The usual shape is
+  marketing page at `/`, app at `/browse`. Cheap to do, but it changes the app's
+  root route, so it is the user's call.
+- [ ] **Search Console + Bing Webmaster verification.** Manual, one-time, not
+  something the repo can do. Worth more than any further on-page work.
+- [ ] **Venue-name quality is title quality.** An event title reading
+  "Davies Symphony Hall at Golden Gate Park" is two different places, and Google
+  rewrites titles it judges inaccurate — losing the keyword. The two data-quality
+  follow-ups below are SEO work now, not just correctness work.
 
 ## Data-quality follow-ups
 
