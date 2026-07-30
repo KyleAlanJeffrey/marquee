@@ -17,6 +17,7 @@ import { TopBar } from '@/components/top-bar';
 import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
+import { useSavedShows } from '@/lib/saved-shows-store';
 import { openUrl } from '@/lib/open-url';
 import { useEvent, useEventBuzz, useEventLineup } from '@/lib/hooks';
 import { formatEventDate, formatTime, formatVenue, formatZoneLabel } from '@/lib/format';
@@ -61,6 +62,7 @@ export default function EventScreen() {
   const buzzPosts = useEventBuzz(id);
   const lineup = useEventLineup(id);
   const { isFollowing, toggle } = useFollows();
+  const { isSaved, toggleSaved } = useSavedShows();
 
   if (event.isLoading) {
     return (
@@ -88,6 +90,7 @@ export default function EventScreen() {
   }
 
   const following = isFollowing({ artistId: e.artist.id, spotifyId: e.artist.spotify_id });
+  const saved = isSaved({ eventId: e.id });
   const hasTickets = !!e.ticket_url;
   const sources = ticketSources(e);
   const primaryUrl = e.ticket_url ?? sources[sources.length - 1].url;
@@ -390,9 +393,43 @@ export default function EventScreen() {
         <GalleryStrip imageUrl={e.artist.image_url} />
       </Animated.ScrollView>
 
-      {/* Floating top bar with back */}
+      {/* Floating top bar with back, and save-for-later in the right slot: the
+          buy bar below has no room left for it at phone width. */}
       <View style={styles.topBarAbs}>
-        <TopBar transparent back title="Event" />
+        <TopBar
+          transparent
+          back
+          title="Event"
+          action={
+            <PressableScale
+              haptic
+              accessibilityRole="button"
+              accessibilityState={{ selected: saved }}
+              accessibilityLabel={saved ? `Remove ${e.name} from saved` : `Save ${e.name} for later`}
+              onPress={() =>
+                toggleSaved({
+                  eventId: e.id,
+                  name: e.name,
+                  startsAt: e.starts_at,
+                  artistId: e.artist.id,
+                  artistName: e.artist.name,
+                  artistImageUrl: e.artist.image_url,
+                  venueId: e.venue?.id ?? null,
+                  venueName: e.venue?.name ?? null,
+                  venueCity: e.venue?.city ?? null,
+                  venueTimezone: tz,
+                  priceFrom: e.price_from,
+                })
+              }
+              style={styles.saveTop}>
+              <Ionicons
+                name={saved ? 'bookmark' : 'bookmark-outline'}
+                size={22}
+                color={theme.cyan}
+              />
+            </PressableScale>
+          }
+        />
       </View>
 
       {/* Sticky buy bar */}
@@ -549,6 +586,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   topBarAbs: { position: 'absolute', top: 0, left: 0, right: 0 },
+  // Sits over the hero, so it gets its own dark disc to stay legible.
+  saveTop: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
   buyBar: {
     position: 'absolute',
     bottom: 0,

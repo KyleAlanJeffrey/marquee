@@ -11,6 +11,7 @@ import type {
   EventDetail,
   EventLineup,
   NearbyEvent,
+  NearbyVenue,
   Page,
   Town,
   VenueDetail,
@@ -90,6 +91,42 @@ export function useEventLineup(eventId: string) {
     queryKey: ['event-lineup', eventId],
     staleTime: 60 * 60 * 1000,
     queryFn: (): Promise<EventLineup> => apiGet(`/events/${eventId}/lineup`),
+  });
+}
+
+/** Venues with upcoming shows near a point, busiest first. */
+export function useNearbyVenues(coords: Coords | null, radiusMiles: number, limit = 12) {
+  return useQuery({
+    queryKey: ['nearby-venues', coords, radiusMiles, limit],
+    enabled: coords != null,
+    queryFn: async (): Promise<NearbyVenue[]> => {
+      const data = await apiGet<{ items: NearbyVenue[] }>(
+        `/venues/nearby?lat=${coords!.lat}&lng=${coords!.lng}&radius=${radiusMiles}&limit=${limit}`,
+      );
+      return data.items ?? [];
+    },
+  });
+}
+
+/**
+ * Current rows for the saved list held on the device.
+ *
+ * The Saved screen renders its stored snapshots first and prefers these once they
+ * arrive: doors move and shows get pulled, and a saved show is where a stale time
+ * actually costs somebody their evening. The response holds only shows still to
+ * come, soonest first — an id missing from it has either passed or been pulled, and
+ * the server's clock is the one that decides which side of that line a show is on.
+ */
+export function useSavedShowDetails(eventIds: string[]) {
+  // Sorted so the key doesn't change when the same set arrives in a new order.
+  const ids = [...new Set(eventIds)].sort();
+  return useQuery({
+    queryKey: ['saved-show-details', ids],
+    enabled: ids.length > 0,
+    queryFn: async (): Promise<NearbyEvent[]> => {
+      const data = await apiPost<{ items: NearbyEvent[] }>('/events/by-ids', { ids });
+      return data.items ?? [];
+    },
   });
 }
 

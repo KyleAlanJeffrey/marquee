@@ -15,12 +15,13 @@ import { SecondaryEventCard } from '@/components/secondary-event-card';
 import { SectionTitle } from '@/components/section-title';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
+import { VenueTile } from '@/components/venue-card';
 import { VenueMap, type MapPin } from '@/components/venue-map';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { discoverEvents, refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
-import { useNearbyEvents } from '@/lib/hooks';
+import { useNearbyEvents, useNearbyVenues } from '@/lib/hooks';
 import { getCurrentCoords, reverseGeocodeLabel } from '@/lib/location';
 import { RADIUS_OPTIONS, usePrefs } from '@/lib/prefs-store';
 import { syncConcertReminders } from '@/lib/reminders';
@@ -40,6 +41,7 @@ export default function ExploreScreen() {
   const [genre, setGenre] = useState<string>(ALL);
 
   const events = useNearbyEvents(coords, radiusMiles);
+  const venues = useNearbyVenues(coords, radiusMiles);
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const refreshedFollows = useRef(false);
@@ -280,7 +282,7 @@ export default function ExploreScreen() {
                     <View style={styles.venuesTitle}>
                       <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
                       <View>
-                        <ThemedText type="title">Nearby Venues</ThemedText>
+                        <ThemedText type="title">Around You</ThemedText>
                         <ThemedText type="small" themeColor="textSecondary">
                           {shown.length} live {shown.length === 1 ? 'show' : 'shows'} nearby
                         </ThemedText>
@@ -294,6 +296,24 @@ export default function ExploreScreen() {
                     </Pressable>
                   </View>
                   <VenueMap pins={pins} locationLabel={cityLabel} withinMiles={nearestMiles} onExplore={goBrowse} />
+                </>
+              )}
+
+              {/* Venues in your area, busiest first — a way in by room rather
+                  than by act, for anyone who trusts a booker over an algorithm. */}
+              {(venues.data?.length ?? 0) > 0 && (
+                <>
+                  <SectionTitle title="Venues Near You" accent />
+                  <FlatList
+                    horizontal
+                    data={venues.data}
+                    keyExtractor={(v) => v.id}
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.venueRow}
+                    renderItem={({ item }) => (
+                      <VenueTile venue={item} onPress={() => router.push(`/venue/${item.id}`)} />
+                    )}
+                  />
                 </>
               )}
 
@@ -384,4 +404,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   comingUpRow: { paddingHorizontal: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.three },
+  venueRow: { paddingHorizontal: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.three },
 });

@@ -10,6 +10,39 @@ Production: **https://marquee.rocks**.
 
 ---
 
+## Done — follows for venues, saved shows (this pass)
+
+- [x] **One on-device store, three collections.** `src/lib/local-collection.tsx`
+  holds the hydrate-merge, the validate-on-read and the "don't resurrect what was
+  removed before hydration" guard once; `follows-store`, `followed-venues-store`
+  and `saved-shows-store` are thin wrappers over it with their own key, validator
+  and match function. Validators are unit-tested (`src/lib/stores.test.ts`).
+- [x] **Follow a venue** from its page; **save a show** from the top-right of the
+  event page. The save control went there rather than in the sticky buy bar: at
+  375 pt the bar already holds the artist line, the follow heart and the buy
+  button, and a second mini button squeezed the artist name to "John…".
+- [x] **Following** has an Artists/Venues switch (`src/components/segmented.tsx`).
+  Artists keeps the avatar rail; Venues lists followed rooms with an unfollow
+  heart. Both show "NEAR YOU" — shows in range by followed artist or followed
+  venue.
+- [x] **Saved** is its own tab. Stored snapshots render instantly, then the
+  server's rows replace them: `POST /api/events/by-ids` returns only shows still
+  to come, soonest first, so nothing on the client has to decide what time it is.
+  Anything the response omits has passed or been pulled, and is listed dimmed
+  under "PAST OR NO LONGER LISTED" rather than silently dropped.
+- [x] **Venues Near You** on the home page, from the new `/api/venues/nearby`
+  (busiest first, one entry per canonical venue). The pin map above it is a map
+  of *shows*, so it is now titled "Around You" instead of "Nearby Venues".
+- [x] **One venue identity across the app.** A followed venue is only useful if
+  the id on a feed card is the id on the venue page, so `nearbyEvents`,
+  `eventsByIds` and `venueById` all report the canonical row, and
+  `venueEvents` lists every show in the cluster — resolving through the head
+  first, so a member id works as well as the head's.
+- [x] Two nested-pressable bugs found in the browser and fixed: a button inside a
+  button is invalid DOM on web and one of the two taps stops working
+  (`VenueRow`, `SecondaryEventCard`). The follow button's glow also needed the
+  pill radius, or web draws a square shadow behind a round button.
+
 ## Done — venue identity under placeholder coordinates (this pass)
 
 Found while checking that `repair-duplicates` had actually cleaned production: the

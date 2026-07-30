@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { EVENTS_BY_IDS_MAX } from './data';
+
 /** Shared zod schemas for request validation (query params + JSON bodies). */
 
 const artistRef = z.object({
@@ -16,6 +18,18 @@ export const nearbyQuery = z.object({
   radius: z.coerce.number().positive().max(1000).optional().default(50),
   limit: z.coerce.number().int().positive().max(400).optional().default(400),
   offset: z.coerce.number().int().min(0).optional().default(0),
+});
+
+export const nearbyVenuesQuery = z.object({
+  lat: z.coerce.number(),
+  lng: z.coerce.number(),
+  radius: z.coerce.number().positive().max(1000).optional().default(50),
+  limit: z.coerce.number().int().positive().max(50).optional().default(12),
+});
+
+/** The saved list a client wants current rows for. */
+export const eventIdsBody = z.object({
+  ids: z.array(z.string().trim().min(1)).min(1).max(EVENTS_BY_IDS_MAX),
 });
 
 export const pageQuery = z.object({

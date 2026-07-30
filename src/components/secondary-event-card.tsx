@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
+import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
@@ -14,22 +15,27 @@ export function SecondaryEventCard({
   event,
   following,
   onPress,
+  action,
 }: {
   event: NearbyEvent;
   following: boolean;
   onPress: () => void;
+  /** Control pinned to the right edge, e.g. remove-from-saved. */
+  action?: ReactNode;
 }) {
   const theme = useTheme();
   const genre = event.artist_genres?.[0];
   const distance = formatDistance(event.distance_miles);
 
   return (
-    <PressableScale
-      onPress={onPress}
+    // Card body and action are siblings: nesting a button inside a button is
+    // invalid DOM on web, and one of the two taps stops working.
+    <View
       style={[
         styles.card,
         { backgroundColor: theme.backgroundElevated, borderColor: following ? 'rgba(0,219,233,0.35)' : theme.border },
       ]}>
+      <PressableScale onPress={onPress} style={styles.main}>
       <Image
         source={event.artist_image_url ? { uri: event.artist_image_url } : undefined}
         style={[styles.img, { backgroundColor: theme.backgroundHigh }]}
@@ -77,20 +83,24 @@ export function SecondaryEventCard({
           </View>
         )}
       </View>
-    </PressableScale>
+      </PressableScale>
+      {action ? <View style={styles.action}>{action}</View> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    gap: Spacing.three,
+    alignItems: 'center',
+    gap: Spacing.two,
     padding: Spacing.two + 2,
     borderRadius: Radius.md,
     borderWidth: 1,
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.two + 2,
   },
+  main: { flex: 1, flexDirection: 'row', gap: Spacing.three },
   img: { width: 92, height: 92, borderRadius: Radius.sm },
   body: { flex: 1, justifyContent: 'center', gap: 3 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
@@ -106,4 +116,5 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xs,
   },
   details: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  action: { justifyContent: 'center' },
 });

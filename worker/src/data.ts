@@ -1,4 +1,5 @@
 import { and, between, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 
 import { getDb, type DB } from './db';
 import { zoneFor } from './timezone';
@@ -108,6 +109,7 @@ export async function nearbyEvents(
 
   // Bounding-box prefilter on the indexed lat/lng; the exact radius check is the
   // haversine below (SQLite has no spherical distance).
+  const canon = alias(venues, 'canon');
   const rows = await db
     .select({
       event_id: events.id,
@@ -120,16 +122,21 @@ export async function nearbyEvents(
       artist_image_url: artists.imageUrl,
       artist_spotify_id: artists.spotifyId,
       artist_genres: artists.genres,
-      venue_name: venues.name,
-      venue_city: venues.city,
-      venue_region: venues.region,
-      venue_country: venues.country,
+      // Identity and naming come from the canonical row, so a card and the venue
+      // page it opens agree on which room this is. The coordinates stay on the
+      // row the bounding box below actually filtered.
+      venue_id: canon.id,
+      venue_name: canon.name,
+      venue_city: canon.city,
+      venue_region: canon.region,
+      venue_country: canon.country,
       venue_lat: venues.lat,
       venue_lng: venues.lng,
     })
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))
     .innerJoin(venues, eq(venues.id, events.venueId))
+    .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
     .where(
       and(
         gte(events.startsAt, nowIso()),
@@ -160,6 +167,169 @@ export async function nearbyEvents(
   // page loses a few corner-of-the-bbox rows to the radius filter.
   const nextCursor = rows.length === limit ? offset + limit : null;
   return { items, nextCursor };
+}
+
+/**
+ * How many grouped venue rows one nearby-venues query will consider. The bounding
+ * box already limits this to one radius around one point, so this is a ceiling
+ * against a dense city rather than a page size — the exact radius filter and the
+ * ordering both happen after, on the rows we have.
+ */
+const NEARBY_VENUE_SCAN = 200;
+
+/**
+ * Venues with upcoming shows near a point, busiest first.
+ *
+ * Grouped by *canonical* venue, joining through `canonical_venue_id`, so a room
+ * three sources name differently is one entry holding all of its shows rather
+ * than three thin ones. Busiest-first rather than nearest-first: the nearest
+ * venues to any given point are largely a function of where the user is standing,
+ * whereas the rooms with the most on are the ones worth a tap.
+ */
+export async function nearbyVenues(
+  db: DB,
+  lat: number,
+  lng: number,
+  radiusMiles: number,
+  limit = 12,
+) {
+  const latDelta = radiusMiles / 69;
+  const lngDelta = radiusMiles / (69 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
+  const canon = alias(venues, 'canon');
+  const upcoming = sql<number>`count(distinct ${events.id})`;
+
+  const rows = await db
+    .select({
+      id: canon.id,
+      name: canon.name,
+      city: canon.city,
+      region: canon.region,
+      country: canon.country,
+      lat: canon.lat,
+      lng: canon.lng,
+      upcoming,
+      next_at: sql<string>`min(${events.startsAt})`,
+    })
+    .from(events)
+    .innerJoin(venues, eq(venues.id, events.venueId))
+    .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
+    .where(
+      and(
+        gte(events.startsAt, nowIso()),
+        lte(events.startsAt, isoInDays(120)),
+        between(canon.lat, lat - latDelta, lat + latDelta),
+        between(canon.lng, lng - lngDelta, lng + lngDelta),
+        sql`${canon.name} is not null and trim(${canon.name}) <> ''`,
+      ),
+    )
+    .groupBy(canon.id)
+    .orderBy(sql`count(distinct ${events.id}) desc`)
+    .limit(NEARBY_VENUE_SCAN);
+
+  return rows
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      city: blankToNull(r.city),
+      region: blankToNull(r.region),
+      country: blankToNull(r.country),
+      lat: r.lat,
+      lng: r.lng,
+      timezone: zoneFor(r.region, r.country),
+      upcoming: r.upcoming,
+      next_at: r.next_at,
+      distance_miles:
+        r.lat != null && r.lng != null ? haversineMiles(lat, lng, r.lat, r.lng) : null,
+    }))
+    // The box is square and the radius is round, so its corners reach ~1.4x.
+    .filter((r) => r.distance_miles == null || r.distance_miles <= radiusMiles)
+    .sort((a, b) => b.upcoming - a.upcoming || (a.distance_miles ?? 0) - (b.distance_miles ?? 0))
+    .slice(0, limit);
+}
+
+/** Ids per `in (...)` lookup, under D1's 100-bound-parameter ceiling. */
+const EVENT_LOOKUP_CHUNK = 90;
+/** A saved list longer than this is not a reading list, it's a scrape. */
+export const EVENTS_BY_IDS_MAX = 200;
+
+/**
+ * The current rows for a set of event ids, in the same shape as the nearby feed.
+ *
+ * This is what keeps the Saved screen honest: it renders instantly from the
+ * snapshot stored on the device, then replaces it with this. Doors get moved and
+ * shows get pulled, and a saved show is exactly the case where a stale time costs
+ * somebody their evening. Ids that no longer exist are simply absent, which is
+ * how the screen knows to mark them gone.
+ */
+export async function eventsByIds(db: DB, ids: string[]) {
+  const unique = [...new Set(ids.filter((id) => typeof id === 'string' && id !== ''))].slice(
+    0,
+    EVENTS_BY_IDS_MAX,
+  );
+  if (unique.length === 0) return [];
+
+  const canon = alias(venues, 'canon');
+  const rows: {
+    event_id: string;
+    event_name: string;
+    starts_at: string;
+    ticket_url: string | null;
+    price_from: number | null;
+    artist_id: string;
+    artist_name: string;
+    artist_image_url: string | null;
+    artist_spotify_id: string | null;
+    artist_genres: string | null;
+    venue_id: string | null;
+    venue_name: string | null;
+    venue_city: string | null;
+    venue_region: string | null;
+    venue_country: string | null;
+    venue_lat: number | null;
+    venue_lng: number | null;
+  }[] = [];
+
+  for (let i = 0; i < unique.length; i += EVENT_LOOKUP_CHUNK) {
+    const chunk = await db
+      .select({
+        event_id: events.id,
+        event_name: events.name,
+        starts_at: events.startsAt,
+        ticket_url: events.ticketUrl,
+        price_from: events.priceFrom,
+        artist_id: artists.id,
+        artist_name: artists.name,
+        artist_image_url: artists.imageUrl,
+        artist_spotify_id: artists.spotifyId,
+        artist_genres: artists.genres,
+        venue_id: canon.id,
+        venue_name: canon.name,
+        venue_city: canon.city,
+        venue_region: canon.region,
+        venue_country: canon.country,
+        venue_lat: canon.lat,
+        venue_lng: canon.lng,
+      })
+      .from(events)
+      .innerJoin(artists, eq(artists.id, events.artistId))
+      .leftJoin(venues, eq(venues.id, events.venueId))
+      .leftJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
+      .where(
+        and(
+          inArray(events.id, unique.slice(i, i + EVENT_LOOKUP_CHUNK)),
+          gte(events.startsAt, nowIso()),
+        ),
+      );
+    rows.push(...chunk);
+  }
+
+  rows.sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  return rows.map((r) => ({
+    ...r,
+    artist_genres: parseGenres(r.artist_genres),
+    venue_timezone: zoneFor(r.venue_region, r.venue_country),
+    distance_miles: null as number | null,
+  }));
 }
 
 export async function artistById(db: DB, id: string) {
@@ -312,24 +482,37 @@ export async function searchTowns(db: DB, q: string, limit = 12) {
 }
 
 /** Venue metadata. */
+/**
+ * A venue, by any of its ids.
+ *
+ * Sources name the same room differently, so several rows can point at one
+ * canonical venue; whichever member id the caller arrived with, they get the
+ * canonical identity back. One room, one page, one id to follow.
+ */
 export async function venueById(db: DB, id: string) {
+  const canon = alias(venues, 'canon');
   const r = await db
     .select({
-      id: venues.id,
-      name: venues.name,
-      city: venues.city,
-      region: venues.region,
-      country: venues.country,
-      lat: venues.lat,
-      lng: venues.lng,
+      id: canon.id,
+      name: canon.name,
+      city: canon.city,
+      region: canon.region,
+      country: canon.country,
+      lat: canon.lat,
+      lng: canon.lng,
     })
     .from(venues)
+    .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
     .where(eq(venues.id, id))
     .get();
   return r ? { ...r, timezone: zoneFor(r.region, r.country) } : null;
 }
 
-/** A page of a venue's upcoming shows. */
+/**
+ * A page of a venue's upcoming shows — every show in its cluster, not just the
+ * ones filed against this exact row, and again by any of its ids: resolve to the
+ * cluster head first, then take every member's shows.
+ */
 export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
   const rows = await db
     .select({
@@ -345,7 +528,17 @@ export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
     })
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))
-    .where(and(eq(events.venueId, id), gte(events.startsAt, nowIso())))
+    .where(
+      and(
+        sql`${events.venueId} in (
+          select id from ${venues}
+          where coalesce(canonical_venue_id, id) = (
+            select coalesce(canonical_venue_id, id) from ${venues} where id = ${id}
+          )
+        )`,
+        gte(events.startsAt, nowIso()),
+      ),
+    )
     .orderBy(events.startsAt)
     .limit(limit)
     .offset(offset);

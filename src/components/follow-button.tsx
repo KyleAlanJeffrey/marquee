@@ -14,14 +14,31 @@ import { ThemedText } from '@/components/themed-text';
 import { Glow, Radius, Spacing, Spring } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+type OnOff = { on: string; off: string };
+
 type Props = {
   following: boolean;
   onToggle: () => void;
   compact?: boolean;
+  /** Defaults to the artist wording and the heart it has always used. */
+  icon?: OnOff;
+  label?: OnOff;
+  /** What the control acts on ("The Warfield"), for screen readers. */
+  subject?: string;
 };
 
+const HEART: OnOff = { on: 'heart', off: 'heart-outline' };
+const FOLLOW: OnOff = { on: 'Following', off: 'Follow' };
+
 /** Ghost border when unfollowed → solid electric purple + neon glow when following. */
-export function FollowButton({ following, onToggle, compact = false }: Props) {
+export function FollowButton({
+  following,
+  onToggle,
+  compact = false,
+  icon = HEART,
+  label = FOLLOW,
+  subject,
+}: Props) {
   const theme = useTheme();
   const pop = useSharedValue(1);
 
@@ -32,9 +49,15 @@ export function FollowButton({ following, onToggle, compact = false }: Props) {
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
 
   return (
-    <Animated.View style={[animatedStyle, following && Glow.purple]}>
+    // The glow wrapper has to carry the pill radius too, or on web the shadow is
+    // drawn as a square behind a round button.
+    <Animated.View style={[styles.glowWrap, animatedStyle, following && Glow.purple]}>
       <PressableScale
         haptic={false}
+        accessibilityRole="button"
+        accessibilityState={{ selected: following }}
+        // Compact hides the text, so without this it reads as an unlabelled button.
+        accessibilityLabel={`${following ? label.on : label.off}${subject ? ` ${subject}` : ''}`}
         onPress={() => {
           if (Platform.OS !== 'web') {
             Haptics.impactAsync(
@@ -51,7 +74,7 @@ export function FollowButton({ following, onToggle, compact = false }: Props) {
             : { backgroundColor: 'transparent', borderColor: theme.primary },
         ]}>
         <Ionicons
-          name={following ? 'heart' : 'heart-outline'}
+          name={(following ? icon.on : icon.off) as never}
           size={16}
           color={following ? theme.onPrimary : theme.primary}
         />
@@ -59,7 +82,7 @@ export function FollowButton({ following, onToggle, compact = false }: Props) {
           <ThemedText
             type="label"
             style={[styles.label, { color: following ? theme.onPrimary : theme.primary }]}>
-            {following ? 'Following' : 'Follow'}
+            {following ? label.on : label.off}
           </ThemedText>
         )}
       </PressableScale>
@@ -68,6 +91,7 @@ export function FollowButton({ following, onToggle, compact = false }: Props) {
 }
 
 const styles = StyleSheet.create({
+  glowWrap: { borderRadius: Radius.pill },
   button: {
     flexDirection: 'row',
     alignItems: 'center',

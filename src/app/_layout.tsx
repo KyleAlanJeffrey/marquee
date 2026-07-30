@@ -18,9 +18,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KyleBadge } from '@/components/kyle-badge';
 import { PageMeta } from '@/components/page-meta';
 import { Colors, Fonts } from '@/constants/theme';
+import { FollowedVenuesProvider } from '@/lib/followed-venues-store';
 import { FollowsProvider } from '@/lib/follows-store';
 import { useNotificationObserver } from '@/lib/notifications';
 import { PrefsProvider } from '@/lib/prefs-store';
+import { SavedShowsProvider } from '@/lib/saved-shows-store';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 60 * 1000 } },
@@ -40,6 +42,22 @@ const navTheme = {
   },
 };
 
+/**
+ * Everything the user owns lives on the device, so there are four of these and
+ * they nest. Composed here rather than inline to keep the tree below readable.
+ */
+function LocalStores({ children }: { children: React.ReactNode }) {
+  return (
+    <FollowsProvider>
+      <FollowedVenuesProvider>
+        <SavedShowsProvider>
+          <PrefsProvider>{children}</PrefsProvider>
+        </SavedShowsProvider>
+      </FollowedVenuesProvider>
+    </FollowsProvider>
+  );
+}
+
 export default function RootLayout() {
   useNotificationObserver();
   const [fontsLoaded] = useFonts({
@@ -56,8 +74,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.background }}>
       <QueryClientProvider client={queryClient}>
-        <FollowsProvider>
-          <PrefsProvider>
+        <LocalStores>
             <ThemeProvider value={navTheme}>
               <StatusBar style="light" />
               {/* Default document metadata; screens override it with their own. */}
@@ -91,8 +108,7 @@ export default function RootLayout() {
               {!fontsLoaded && <View style={{ flex: 1, backgroundColor: theme.background }} />}
               <KyleBadge />
             </ThemeProvider>
-          </PrefsProvider>
-        </FollowsProvider>
+        </LocalStores>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

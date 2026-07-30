@@ -1,13 +1,19 @@
 import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
 
-import { venueById, venueEvents } from '../data';
+import { nearbyVenues, venueById, venueEvents } from '../data';
 import { getDb } from '../db';
 import type { AppEnv } from '../env';
-import { pageQuery } from '../schemas';
+import { nearbyVenuesQuery, pageQuery } from '../schemas';
 import { refreshVenue } from '../sources';
 
 export const venues = new Hono<AppEnv>();
+
+// Registered before `/:id`, which would otherwise match "nearby" as a venue id.
+venues.get('/nearby', zValidator('query', nearbyVenuesQuery), async (c) => {
+  const { lat, lng, radius, limit } = c.req.valid('query');
+  return c.json({ items: await nearbyVenues(getDb(c.env.DB), lat, lng, radius, limit) });
+});
 
 venues.get('/:id', async (c) => {
   const venue = await venueById(getDb(c.env.DB), c.req.param('id'));

@@ -8,6 +8,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { DateBlock } from '@/components/date-block';
 import { ErrorState } from '@/components/error-state';
+import { FollowButton } from '@/components/follow-button';
 import { MeshBackground } from '@/components/mesh-background';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
@@ -17,6 +18,7 @@ import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshVenueEvents } from '@/lib/discovery';
+import { useFollowedVenues } from '@/lib/followed-venues-store';
 import { formatPrice, formatTime } from '@/lib/format';
 import { useInfiniteVenueEvents, useVenue } from '@/lib/hooks';
 import { venueLinks } from '@/lib/venue-links';
@@ -28,6 +30,7 @@ export default function VenueScreen() {
   const venue = useVenue(id);
   const shows = useInfiniteVenueEvents(id);
   const queryClient = useQueryClient();
+  const { isFollowingVenue, toggleVenue } = useFollowedVenues();
 
   const events = shows.data?.pages.flatMap((p) => p.items) ?? [];
 
@@ -109,6 +112,22 @@ export default function VenueScreen() {
                   </ThemedText>
                 </View>
               ) : null}
+              <View style={styles.followRow}>
+                <FollowButton
+                  following={isFollowingVenue({ venueId: v.id })}
+                  subject={v.name}
+                  onToggle={() =>
+                    toggleVenue({
+                      venueId: v.id,
+                      name: v.name,
+                      city: v.city,
+                      region: v.region,
+                      lat: v.lat,
+                      lng: v.lng,
+                    })
+                  }
+                />
+              </View>
               <View style={styles.linkRow}>
                 {venueLinks(v).map((link) => (
                   <PressableScale
@@ -189,6 +208,7 @@ const styles = StyleSheet.create({
   header: { padding: Spacing.three, gap: Spacing.one + 2 },
   name: { color: '#fff' },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  followRow: { flexDirection: 'row', marginTop: Spacing.two },
   // Wraps, because four chips don't fit one line on a narrow phone and a
   // horizontally scrolling row hides whichever link falls off the edge.
   linkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, marginTop: Spacing.two },

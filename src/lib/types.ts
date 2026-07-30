@@ -10,6 +10,8 @@ export type NearbyEvent = {
   artist_image_url: string | null;
   artist_spotify_id: string | null;
   artist_genres: string[];
+  /** Our canonical venue id, so a followed venue can be matched against a show. */
+  venue_id: string | null;
   venue_name: string | null;
   venue_city: string | null;
   venue_region: string | null;
@@ -70,6 +72,24 @@ export type VenueEvent = {
   artist_name: string;
   artist_image_url: string | null;
   artist_genres: string[];
+};
+
+/**
+ * A venue near a point, with how much is on there. One entry per *canonical*
+ * venue, so a room several sources name differently appears once.
+ */
+export type NearbyVenue = {
+  id: string;
+  name: string;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  lat: number | null;
+  lng: number | null;
+  timezone: string | null;
+  upcoming: number;
+  next_at: string;
+  distance_miles: number | null;
 };
 
 export type VenueDetail = {

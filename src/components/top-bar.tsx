@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,10 +17,12 @@ type Props = {
   back?: boolean;
   /** Contextual page label shown in place of the MARQUEE wordmark. */
   title?: string;
+  /** Page-level control for the right slot, in place of the search icon. */
+  action?: ReactNode;
 };
 
 /** The signature glass top bar with the neon MARQUEE wordmark. */
-export function TopBar({ onSearchPress, transparent, back, title }: Props) {
+export function TopBar({ onSearchPress, transparent, back, title, action }: Props) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -56,11 +59,12 @@ export function TopBar({ onSearchPress, transparent, back, title }: Props) {
         </View>
       )}
       <View style={[styles.side, styles.right]}>
-        {onSearchPress && (
-          <Pressable onPress={onSearchPress} hitSlop={10}>
-            <Ionicons name="search" size={22} color={theme.primary} />
-          </Pressable>
-        )}
+        {action ??
+          (onSearchPress && (
+            <Pressable onPress={onSearchPress} hitSlop={10}>
+              <Ionicons name="search" size={22} color={theme.primary} />
+            </Pressable>
+          ))}
       </View>
     </View>
   );
