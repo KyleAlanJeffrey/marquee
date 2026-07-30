@@ -95,6 +95,7 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `GET /api/nearby?lat&lng&radius` | upcoming shows near a point (bbox + haversine) |
 | `GET /api/artists/:id` · `GET /api/artists/:id/events` | artist + their upcoming shows |
 | `GET /api/events/:id` | event detail |
+| `POST /api/following` | upcoming shows for the on-device follow lists — a year ahead, no radius, one row per show (POST so the follow list stays out of request logs) |
 | `POST /api/events/by-ids` | the saved list, revalidated — upcoming shows only, soonest first (POST so a saved list stays out of request logs) |
 | `GET /api/venues/nearby?lat&lng&radius&limit` | venues with upcoming shows near a point, busiest first, one row per canonical venue |
 | `GET /api/venues/:id` · `GET /api/venues/:id/events` | venue + its upcoming shows; any member id of a cluster resolves to the canonical venue |

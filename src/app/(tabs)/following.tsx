@@ -20,39 +20,38 @@ import { useTheme } from '@/hooks/use-theme';
 import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollowedVenues } from '@/lib/followed-venues-store';
 import { useFollows } from '@/lib/follows-store';
-import { useNearbyEvents } from '@/lib/hooks';
+import { useFollowingEvents } from '@/lib/hooks';
 import { getCurrentCoords } from '@/lib/location';
-import { usePrefs } from '@/lib/prefs-store';
-import type { Coords, NearbyEvent } from '@/lib/types';
+import type { Coords } from '@/lib/types';
 
 type Tab = 'artists' | 'venues';
 
-const eventRef = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_spotify_id });
-
 export default function FollowingScreen() {
   const theme = useTheme();
-  const { follows, isFollowing } = useFollows();
-  const { venues, isFollowingVenue, toggleVenue } = useFollowedVenues();
-  const { radiusMiles } = usePrefs();
+  const { follows, isFollowing, ready: followsReady } = useFollows();
+  const { venues, isFollowingVenue, toggleVenue, ready: venuesReady } = useFollowedVenues();
 
   const [tab, setTab] = useState<Tab>('artists');
   const [coords, setCoords] = useState<Coords | null>(null);
-  const [denied, setDenied] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const events = useNearbyEvents(coords, radiusMiles);
+  const artistIds = useMemo(
+    () => follows.map((f) => f.artistId).filter((id): id is string => !!id),
+    [follows],
+  );
+  const venueIds = useMemo(() => venues.map((v) => v.venueId), [venues]);
+  const events = useFollowingEvents(artistIds, venueIds, coords);
 
+  // Location is a nicety here, not a gate: it labels each card with a distance.
+  // Without it the shows still load, they just don't say how far away they are.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const c = await getCurrentCoords();
-        if (cancelled) return;
-        if (c) setCoords(c);
-        else setDenied(true);
+        if (c && !cancelled) setCoords(c);
       } catch (err) {
         console.warn('location lookup failed:', err);
-        if (!cancelled) setDenied(true);
       }
     })();
     return () => {
@@ -60,8 +59,13 @@ export default function FollowingScreen() {
     };
   }, []);
 
+  // One request covers both tabs; each tab shows the half it asked about. A show by
+  // a followed artist at a followed venue belongs under both, and appears in both.
   const followingEvents = useMemo(
-    () => (events.data ?? []).filter((e) => isFollowing(eventRef(e))),
+    () =>
+      (events.data ?? []).filter((e) =>
+        isFollowing({ artistId: e.artist_id, spotifyId: e.artist_spotify_id }),
+      ),
     [events.data, isFollowing],
   );
 
@@ -80,8 +84,11 @@ export default function FollowingScreen() {
     }
   }
 
-  const nothingFollowed = follows.length === 0 && venues.length === 0;
-  const loading = !denied && (!coords || events.isLoading);
+  // Wait for the stored lists before saying someone follows nothing: on a cold start
+  // the disk read hasn't landed yet, and the empty state would flash over real data.
+  const storesReady = followsReady && venuesReady;
+  const nothingFollowed = storesReady && follows.length === 0 && venues.length === 0;
+  const loading = !storesReady || events.isLoading || events.isPending;
   const shows = tab === 'artists' ? followingEvents : venueEvents;
   const followedHere = tab === 'artists' ? follows.length : venues.length;
 
@@ -127,17 +134,11 @@ export default function FollowingScreen() {
               title={tab === 'artists' ? 'No artists followed' : 'No venues followed'}
               message={
                 tab === 'artists'
-                  ? 'Follow an artist and their shows near you will collect here.'
-                  : 'Follow a venue from its page and its shows near you will collect here.'
+                  ? 'Follow an artist and their next show will collect here.'
+                  : 'Follow a venue from its page and everything on there will collect here.'
               }
               actionLabel="Search"
               onAction={() => router.push('/search')}
-            />
-          ) : denied ? (
-            <EmptyState
-              icon="location-outline"
-              title="Location needed"
-              message="Allow location access in system settings so we can find shows near you."
             />
           ) : loading ? (
             <View style={styles.center}>
@@ -204,18 +205,18 @@ export default function FollowingScreen() {
                     </View>
                   )}
                   <ThemedText type="label" style={[styles.sectionLabel, { color: theme.primary }]}>
-                    NEAR YOU
+                    COMING UP
                   </ThemedText>
                 </View>
               }
               ListEmptyComponent={
                 <EmptyState
                   icon="calendar-outline"
-                  title="Nothing nearby yet"
+                  title="Nothing announced yet"
                   message={
                     tab === 'artists'
-                      ? `None of the artists you follow have a show within ${radiusMiles} mi. Pull to refresh or widen your radius in Profile.`
-                      : `Nothing on at the venues you follow within ${radiusMiles} mi. Open a venue to see its full lineup.`
+                      ? 'None of the artists you follow have a date on sale anywhere. Pull to refresh once they announce.'
+                      : 'Nothing listed at the venues you follow. Pull to refresh, or open a venue for its own page.'
                   }
                 />
               }

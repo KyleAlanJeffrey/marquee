@@ -1,4 +1,4 @@
-import { and, between, eq, gte, inArray, lte, or, sql } from 'drizzle-orm';
+import { and, between, eq, gte, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
 import { getDb, type DB } from './db';
@@ -125,16 +125,19 @@ export async function nearbyEvents(
       artist_image_url: artists.imageUrl,
       artist_spotify_id: artists.spotifyId,
       artist_genres: artists.genres,
-      // Identity and naming come from the canonical row, so a card and the venue
-      // page it opens agree on which room this is. The coordinates stay on the
-      // row the bounding box below actually filtered.
+      // Everything the client sees comes from the canonical row, so a card, the
+      // venue page it opens and /venues/nearby agree on which room this is and
+      // where it is. The bounding box below still filters on the row the event is
+      // actually attached to, because that is the indexed one; the two only differ
+      // for events written before a cluster was re-headed, and for those the
+      // canonical position is the one we believe.
       venue_id: canon.id,
       venue_name: canon.name,
       venue_city: canon.city,
       venue_region: canon.region,
       venue_country: canon.country,
-      venue_lat: venues.lat,
-      venue_lng: venues.lng,
+      venue_lat: canon.lat,
+      venue_lng: canon.lng,
     })
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))
@@ -226,7 +229,9 @@ export async function nearbyVenues(
       ),
     )
     .groupBy(canon.id)
-    .orderBy(sql`count(distinct ${events.id}) desc`)
+    // Tie-broken by id: without it the rows at the count boundary swap places
+    // between identical requests and the tail of the rail moves on every refresh.
+    .orderBy(sql`count(distinct ${events.id}) desc`, canon.id)
     .limit(NEARBY_VENUE_SCAN);
 
   return rows
@@ -335,6 +340,119 @@ export async function eventsByIds(db: DB, ids: string[]) {
   }));
 }
 
+/** Ids accepted per list by `followingEvents` (the on-device follow lists). */
+export const FOLLOWING_IDS_MAX = 100;
+/** Shows returned per request; a year of one person's follows fits well inside. */
+const FOLLOWING_EVENT_LIMIT = 300;
+/** How far ahead the Following screen looks — further than the location feed,
+ *  because a followed artist announcing a date in five months is the whole point. */
+const FOLLOWING_HORIZON_DAYS = 365;
+
+/** Every venue id in the same room as any of `ids`, by head or by member id. */
+async function clusterMemberIds(db: DB, ids: string[]): Promise<string[]> {
+  const out = new Set<string>(ids);
+  for (let i = 0; i < ids.length; i += EVENT_LOOKUP_CHUNK) {
+    const chunk = ids.slice(i, i + EVENT_LOOKUP_CHUNK);
+    // Both arms are indexed: canonical_venue_id by venues_canonical_idx, id by key.
+    const rows = await db
+      .select({ id: venues.id, canonicalVenueId: venues.canonicalVenueId })
+      .from(venues)
+      .where(or(inArray(venues.canonicalVenueId, chunk), inArray(venues.id, chunk)));
+    for (const r of rows) {
+      out.add(r.id);
+      if (r.canonicalVenueId) out.add(r.canonicalVenueId);
+    }
+  }
+  return [...out];
+}
+
+/**
+ * Upcoming shows for the artists and venues someone follows.
+ *
+ * Deliberately *not* a filter over the location feed. That feed is one bounded page
+ * of whatever is nearest in time inside a radius — around San Francisco it hit its
+ * 400-row ceiling at nine weeks out, so a followed artist playing in October simply
+ * wasn't in it and the screen said nobody you follow is playing. A follow is a
+ * standing question about a specific artist or room, so it gets asked as one.
+ *
+ * `lat`/`lng` are optional and only fill in `distance_miles` for the cards; they
+ * never filter, because a followed venue two towns over is still followed.
+ */
+export async function followingEvents(
+  db: DB,
+  opts: { artistIds?: string[]; venueIds?: string[]; lat?: number | null; lng?: number | null },
+) {
+  const clean = (ids: string[] | undefined) =>
+    [...new Set((ids ?? []).filter((v) => typeof v === 'string' && v !== ''))].slice(
+      0,
+      FOLLOWING_IDS_MAX,
+    );
+  const artistIds = clean(opts.artistIds);
+  const venueIds = clean(opts.venueIds);
+  if (artistIds.length === 0 && venueIds.length === 0) return [];
+
+  const canon = alias(venues, 'canon');
+  const horizon = isoInDays(FOLLOWING_HORIZON_DAYS);
+  const now = nowIso();
+  const columns = {
+    event_id: events.id,
+    event_name: events.name,
+    starts_at: events.startsAt,
+    ticket_url: events.ticketUrl,
+    price_from: events.priceFrom,
+    artist_id: artists.id,
+    artist_name: artists.name,
+    artist_image_url: artists.imageUrl,
+    artist_spotify_id: artists.spotifyId,
+    artist_genres: artists.genres,
+    venue_id: canon.id,
+    venue_name: canon.name,
+    venue_city: canon.city,
+    venue_region: canon.region,
+    venue_country: canon.country,
+    venue_lat: canon.lat,
+    venue_lng: canon.lng,
+  };
+  const from = (where: SQL | undefined) =>
+    db
+      .select(columns)
+      .from(events)
+      .innerJoin(artists, eq(artists.id, events.artistId))
+      .leftJoin(venues, eq(venues.id, events.venueId))
+      .leftJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
+      .where(and(gte(events.startsAt, now), lte(events.startsAt, horizon), where))
+      .orderBy(events.startsAt)
+      .limit(FOLLOWING_EVENT_LIMIT);
+
+  type Row = Awaited<ReturnType<typeof from>>[number];
+  const rows: Row[] = [];
+  for (let i = 0; i < artistIds.length; i += EVENT_LOOKUP_CHUNK) {
+    rows.push(...(await from(inArray(events.artistId, artistIds.slice(i, i + EVENT_LOOKUP_CHUNK)))));
+  }
+  // A followed venue is a *room*, so every source's row for it counts.
+  const memberIds = venueIds.length ? await clusterMemberIds(db, venueIds) : [];
+  for (let i = 0; i < memberIds.length; i += EVENT_LOOKUP_CHUNK) {
+    rows.push(...(await from(inArray(events.venueId, memberIds.slice(i, i + EVENT_LOOKUP_CHUNK)))));
+  }
+
+  // A show by a followed artist at a followed venue comes back from both passes.
+  const byId = new Map<string, Row>();
+  for (const r of rows) byId.set(r.event_id, r);
+  const hasPoint = typeof opts.lat === 'number' && typeof opts.lng === 'number';
+  return [...byId.values()]
+    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+    .slice(0, FOLLOWING_EVENT_LIMIT)
+    .map((r) => ({
+      ...r,
+      artist_genres: parseGenres(r.artist_genres),
+      venue_timezone: zoneFor(r.venue_region, r.venue_country),
+      distance_miles:
+        hasPoint && r.venue_lat != null && r.venue_lng != null
+          ? haversineMiles(opts.lat!, opts.lng!, r.venue_lat, r.venue_lng)
+          : null,
+    }));
+}
+
 export async function artistById(db: DB, id: string) {
   const r = await db
     .select({
@@ -373,6 +491,7 @@ export async function artistEvents(db: DB, id: string) {
 }
 
 export async function eventById(db: DB, id: string) {
+  const canon = alias(venues, 'canon');
   const r = await db
     .select({
       id: events.id,
@@ -386,17 +505,21 @@ export async function eventById(db: DB, id: string) {
       a_spotify: artists.spotifyId,
       a_image: artists.imageUrl,
       a_genres: artists.genres,
-      v_id: venues.id,
-      v_name: venues.name,
-      v_city: venues.city,
-      v_region: venues.region,
-      v_country: venues.country,
-      v_lat: venues.lat,
-      v_lng: venues.lng,
+      // Canonical, like the feed and /venues/:id: a card that says "The Warfield"
+      // must not open a page titled after somebody's tour, and the save button on
+      // this screen stores whatever id it is handed.
+      v_id: canon.id,
+      v_name: canon.name,
+      v_city: canon.city,
+      v_region: canon.region,
+      v_country: canon.country,
+      v_lat: canon.lat,
+      v_lng: canon.lng,
     })
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))
     .leftJoin(venues, eq(venues.id, events.venueId))
+    .leftJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
     .where(eq(events.id, id))
     .get();
   if (!r) return null;
@@ -512,11 +635,40 @@ export async function venueById(db: DB, id: string) {
 }
 
 /**
+ * Every venue id that belongs to the same room as `id` — the cluster head, and
+ * everything pointing at it — for either a head or a member id.
+ *
+ * Written as two indexed lookups rather than one `coalesce(canonical_venue_id, id)
+ * = ?` subquery: the coalesce isn't sargable, so that form scans the whole venues
+ * table, once per request and once per page of an infinite scroll.
+ */
+async function clusterVenueIds(db: DB, id: string): Promise<string[]> {
+  const head =
+    (
+      await db
+        .select({ head: sql<string>`coalesce(${venues.canonicalVenueId}, ${venues.id})` })
+        .from(venues)
+        .where(eq(venues.id, id))
+        .get()
+    )?.head ?? null;
+  if (!head) return [];
+  // canonical_venue_id is indexed (venues_canonical_idx); the head itself is found
+  // by primary key. A row inserted before its cluster was computed has a null
+  // canonical and is only reachable as the head.
+  const members = await db
+    .select({ id: venues.id })
+    .from(venues)
+    .where(eq(venues.canonicalVenueId, head));
+  return [...new Set([head, ...members.map((m) => m.id)])];
+}
+
+/**
  * A page of a venue's upcoming shows — every show in its cluster, not just the
- * ones filed against this exact row, and again by any of its ids: resolve to the
- * cluster head first, then take every member's shows.
+ * ones filed against this exact row, and by any of its ids.
  */
 export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
+  const clusterIds = await clusterVenueIds(db, id);
+  if (clusterIds.length === 0) return { items: [], nextCursor: null };
   const rows = await db
     .select({
       event_id: events.id,
@@ -531,17 +683,7 @@ export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
     })
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))
-    .where(
-      and(
-        sql`${events.venueId} in (
-          select id from ${venues}
-          where coalesce(canonical_venue_id, id) = (
-            select coalesce(canonical_venue_id, id) from ${venues} where id = ${id}
-          )
-        )`,
-        gte(events.startsAt, nowIso()),
-      ),
-    )
+    .where(and(inArray(events.venueId, clusterIds), gte(events.startsAt, nowIso())))
     .orderBy(events.startsAt)
     .limit(limit)
     .offset(offset);
@@ -1307,7 +1449,11 @@ async function canonicalizeVenues(
     const currentOf = new Map<string, string | null>(
       candidates.map((c) => [c.id, c.canonicalVenueId] as const),
     );
-    for (const id of [t.id, ...cluster.map((c) => c.id)]) {
+    // `resolved` can come from a candidate's `canonical_venue_id` — a row this
+    // batch never looked at directly — so it is flattened explicitly. Without it a
+    // head could still point somewhere else, and `coalesce()` resolves one hop:
+    // half the room's events would answer with one id and half with another.
+    for (const id of [t.id, resolved, ...cluster.map((c) => c.id)]) {
       // Untouched rows already point at themselves (migration 0002 seeded
       // canonical_venue_id = id), so only a change is worth a write.
       if (currentOf.get(id) !== resolved) writes.set(id, resolved);

@@ -18,6 +18,11 @@ import type {
   VenueEvent,
 } from '@/lib/types';
 
+/** Mirrors the Worker's own caps — see EVENTS_BY_IDS_MAX and FOLLOWING_IDS_MAX in
+ *  worker/src/data.ts. Sending more is a 400, not a truncation. */
+export const EVENTS_BY_IDS_MAX = 200;
+const FOLLOWING_IDS_MAX = 100;
+
 /** Upcoming shows near a point (curated set for the Explore dashboard). */
 export function useNearbyEvents(coords: Coords | null, radiusMiles: number) {
   return useQuery({
@@ -118,13 +123,53 @@ export function useNearbyVenues(coords: Coords | null, radiusMiles: number, limi
  * the server's clock is the one that decides which side of that line a show is on.
  */
 export function useSavedShowDetails(eventIds: string[]) {
-  // Sorted so the key doesn't change when the same set arrives in a new order.
-  const ids = [...new Set(eventIds)].sort();
+  // Sorted so the key doesn't change when the same set arrives in a new order, and
+  // capped because the Worker rejects a longer list outright — better to show the
+  // first EVENTS_BY_IDS_MAX live than to 400 the whole screen.
+  const ids = [...new Set(eventIds)].sort().slice(0, EVENTS_BY_IDS_MAX);
   return useQuery({
     queryKey: ['saved-show-details', ids],
     enabled: ids.length > 0,
+    // Unsaving a show rewrites the key; without this the list empties for a beat.
+    placeholderData: (prev) => prev,
     queryFn: async (): Promise<NearbyEvent[]> => {
       const data = await apiPost<{ items: NearbyEvent[] }>('/events/by-ids', { ids });
+      return data.items ?? [];
+    },
+  });
+}
+
+/**
+ * Upcoming shows for the artists and venues held on the device.
+ *
+ * Asked as its own question rather than filtered out of `useNearbyEvents`: that
+ * feed is one bounded page of what's nearest in time inside a radius, so a followed
+ * artist playing past the end of it was invisible, and a followed venue in the next
+ * town over never appeared at all. `coords` only fills in distances.
+ */
+export function useFollowingEvents(
+  artistIds: string[],
+  venueIds: string[],
+  coords: Coords | null,
+) {
+  const clean = (ids: string[]) =>
+    [...new Set(ids.filter(Boolean))].sort().slice(0, FOLLOWING_IDS_MAX);
+  const artists = clean(artistIds);
+  const rooms = clean(venueIds);
+  // Rounded into the key: distance labels don't need to survive every GPS twitch,
+  // and a raw point would refetch the whole list each time it moved a metre.
+  const near = coords ? `${coords.lat.toFixed(2)},${coords.lng.toFixed(2)}` : null;
+  return useQuery({
+    queryKey: ['following-events', artists, rooms, near],
+    enabled: artists.length > 0 || rooms.length > 0,
+    placeholderData: (prev) => prev,
+    queryFn: async (): Promise<NearbyEvent[]> => {
+      const data = await apiPost<{ items: NearbyEvent[] }>('/following', {
+        artistIds: artists,
+        venueIds: rooms,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
+      });
       return data.items ?? [];
     },
   });

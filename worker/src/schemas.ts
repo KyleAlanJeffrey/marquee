@@ -1,8 +1,15 @@
 import { z } from 'zod';
 
-import { EVENTS_BY_IDS_MAX } from './data';
+import { EVENTS_BY_IDS_MAX, FOLLOWING_IDS_MAX } from './data';
 
 /** Shared zod schemas for request validation (query params + JSON bodies). */
+
+/** Real coordinates. Unbounded latitude sends `Math.cos` negative in the delta
+ *  maths, and the clamp then widens the bounding box to a fifth of the planet. */
+const latitude = z.coerce.number().min(-90).max(90);
+const longitude = z.coerce.number().min(-180).max(180);
+/** Our ids are UUIDs; a length cap keeps an unbounded body off the query planner. */
+const entityId = z.string().trim().min(1).max(64);
 
 const artistRef = z.object({
   artistId: z.string().nullish(),
@@ -13,24 +20,40 @@ const artistRef = z.object({
 });
 
 export const nearbyQuery = z.object({
-  lat: z.coerce.number(),
-  lng: z.coerce.number(),
+  lat: latitude,
+  lng: longitude,
   radius: z.coerce.number().positive().max(1000).optional().default(50),
   limit: z.coerce.number().int().positive().max(400).optional().default(400),
   offset: z.coerce.number().int().min(0).optional().default(0),
 });
 
 export const nearbyVenuesQuery = z.object({
-  lat: z.coerce.number(),
-  lng: z.coerce.number(),
+  lat: latitude,
+  lng: longitude,
   radius: z.coerce.number().positive().max(1000).optional().default(50),
   limit: z.coerce.number().int().positive().max(50).optional().default(12),
 });
 
 /** The saved list a client wants current rows for. */
 export const eventIdsBody = z.object({
-  ids: z.array(z.string().trim().min(1)).min(1).max(EVENTS_BY_IDS_MAX),
+  ids: z.array(entityId).min(1).max(EVENTS_BY_IDS_MAX),
 });
+
+/**
+ * The on-device follow lists, asked as a question about those artists and rooms.
+ * Either list may be empty (you can follow only venues), but not both. The point
+ * is optional and only fills in distances.
+ */
+export const followingBody = z
+  .object({
+    artistIds: z.array(entityId).max(FOLLOWING_IDS_MAX).optional().default([]),
+    venueIds: z.array(entityId).max(FOLLOWING_IDS_MAX).optional().default([]),
+    lat: latitude.nullish(),
+    lng: longitude.nullish(),
+  })
+  .refine((b) => b.artistIds.length > 0 || b.venueIds.length > 0, {
+    message: 'follow at least one artist or venue',
+  });
 
 export const pageQuery = z.object({
   limit: z.coerce.number().int().positive().max(50).optional().default(20),

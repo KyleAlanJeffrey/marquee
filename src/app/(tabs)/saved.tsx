@@ -13,7 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useSavedShowDetails } from '@/lib/hooks';
+import { EVENTS_BY_IDS_MAX, useSavedShowDetails } from '@/lib/hooks';
 import { useSavedShows, type SavedShow } from '@/lib/saved-shows-store';
 import type { NearbyEvent } from '@/lib/types';
 
@@ -47,10 +47,19 @@ function snapshotAsEvent(s: SavedShow): NearbyEvent {
 
 export default function SavedScreen() {
   const theme = useTheme();
-  const { saved, unsave } = useSavedShows();
+  const { saved, unsave, isSaved, ready } = useSavedShows();
   const [refreshing, setRefreshing] = useState(false);
 
-  const ids = useMemo(() => saved.map((s) => s.eventId), [saved]);
+  // Soonest first before the cap, so the shows that get live prices and door times
+  // are the ones about to happen rather than whichever ids sort first.
+  const ids = useMemo(
+    () =>
+      [...saved]
+        .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+        .map((s) => s.eventId)
+        .slice(0, EVENTS_BY_IDS_MAX),
+    [saved],
+  );
   const details = useSavedShowDetails(ids);
 
   // Snapshots carry the list until the server answers, then the server's rows
@@ -61,10 +70,12 @@ export default function SavedScreen() {
       .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
       .map(snapshotAsEvent);
     if (!details.isSuccess) return { upcoming: snapshots, gone: [] as NearbyEvent[] };
-    const live = details.data;
+    // The response is kept across an unsave (so the list doesn't blink), which means
+    // it can still hold a show that is no longer saved.
+    const live = details.data.filter((e) => isSaved({ eventId: e.event_id }));
     const found = new Set(live.map((e) => e.event_id));
     return { upcoming: live, gone: snapshots.filter((e) => !found.has(e.event_id)) };
-  }, [saved, details.data, details.isSuccess]);
+  }, [saved, details.data, details.isSuccess, isSaved]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -95,7 +106,13 @@ export default function SavedScreen() {
       <MeshBackground />
       <TopBar onSearchPress={() => router.push('/search')} />
 
-      {saved.length === 0 ? (
+      {!ready ? (
+        // The disk read hasn't landed; "nothing saved" here would be a lie that
+        // flashes over a full list every cold start.
+        <View style={styles.center}>
+          <ActivityIndicator color={theme.primary} />
+        </View>
+      ) : saved.length === 0 ? (
         <EmptyState
           icon="bookmark-outline"
           title="Nothing saved"
@@ -123,6 +140,23 @@ export default function SavedScreen() {
                   <ActivityIndicator size="small" color={theme.textTertiary} />
                 ) : null}
               </View>
+              {/* A failed refresh doesn't hide the list — the snapshots below are
+                  still the user's shows. It just says so, and offers another go. */}
+              {details.isError && !details.isFetching ? (
+                <View style={styles.errorRow}>
+                  <ThemedText type="labelSm" style={{ color: theme.textTertiary, flex: 1 }}>
+                    COULDN&rsquo;T CHECK FOR CHANGES &mdash; SHOWING WHAT YOU SAVED
+                  </ThemedText>
+                  <PressableScale
+                    accessibilityRole="button"
+                    accessibilityLabel="Try refreshing saved shows again"
+                    onPress={() => details.refetch()}>
+                    <ThemedText type="labelSm" style={{ color: theme.primary }}>
+                      TRY AGAIN
+                    </ThemedText>
+                  </PressableScale>
+                </View>
+              ) : null}
             </View>
           }
           ListEmptyComponent={
@@ -168,6 +202,8 @@ export default function SavedScreen() {
 }
 
 const styles = StyleSheet.create({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.three },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingTop: Spacing.two },
   content: { paddingBottom: Spacing.six + Spacing.four },
   head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, paddingBottom: Spacing.three, gap: 2 },
   subRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },

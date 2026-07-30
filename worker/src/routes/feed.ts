@@ -1,10 +1,10 @@
 import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
 
-import { nearbyEvents } from '../data';
+import { followingEvents, nearbyEvents } from '../data';
 import { getDb } from '../db';
 import type { AppEnv } from '../env';
-import { discoverBody, nearbyQuery, refreshArtistsBody } from '../schemas';
+import { discoverBody, followingBody, nearbyQuery, refreshArtistsBody } from '../schemas';
 import { discover, refreshArtists } from '../sources';
 
 export const feed = new Hono<AppEnv>();
@@ -13,6 +13,13 @@ export const feed = new Hono<AppEnv>();
 feed.get('/nearby', zValidator('query', nearbyQuery), async (c) => {
   const { lat, lng, radius, limit, offset } = c.req.valid('query');
   return c.json(await nearbyEvents(getDb(c.env.DB), lat, lng, radius, limit, offset));
+});
+
+// Read: upcoming shows for the artists and venues held on the device. POST because
+// somebody's whole follow list has no business sitting in a request log.
+feed.post('/following', zValidator('json', followingBody), async (c) => {
+  const { artistIds, venueIds, lat, lng } = c.req.valid('json');
+  return c.json({ items: await followingEvents(getDb(c.env.DB), { artistIds, venueIds, lat, lng }) });
 });
 
 // Client-driven ingestion: pull fresh shows for an area (server-throttled).
