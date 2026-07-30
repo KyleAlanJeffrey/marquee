@@ -46,7 +46,11 @@ export function clampDesc(s: string): string {
   if (text.length <= DESC_MAX) return text;
   // Cut back to a word boundary so the ellipsis doesn't land mid-name. A name with
   // no space in its first 90 characters gets a hard cut rather than a stub.
-  const cut = text.slice(0, DESC_MAX - 1);
+  let cut = text.slice(0, DESC_MAX - 1);
+  // …and never through the middle of a surrogate pair. Production holds an event
+  // named entirely in mathematical bold ("𝟐𝟎𝟐𝟔 𝐓𝐖𝐒 𝐓𝐎𝐔𝐑…"), where every character is
+  // two UTF-16 units; half of one is a lone surrogate in an HTML attribute.
+  if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
   const space = cut.lastIndexOf(' ');
   const kept = space > 90 ? cut.slice(0, space) : cut;
   return kept.replace(/[\s,;:.—-]+$/, '') + '…';

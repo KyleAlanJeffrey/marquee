@@ -138,7 +138,14 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
   const listings = ['/', ...cities];
   const fresh = unannounced(listings, await announcedSince(db, hoursAgoIso(LISTING_TTL_HOURS)));
   const paths = [...fresh, ...rows.map((r) => `/event/${r.id}`)];
-  const urlList = [...new Set(paths)].slice(0, MAX_URLS).map((p) => origin + p);
+  const sent = [...new Set(paths)].slice(0, MAX_URLS);
+  const urlList = sent.map((p) => origin + p);
+  // What to write to the log is derived from what actually went in the payload, not
+  // from what we hoped to send. Listings come first and there are only ever ~1,700
+  // of them, so the cap should never reach one — but recording a path the slice
+  // dropped would hide that page for a day without anyone having been told.
+  const announced = new Set(sent);
+  const recorded = fresh.filter((p) => announced.has(p));
   const res = await fetch(ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=utf-8' },
@@ -158,9 +165,14 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
   if (!res.ok) {
     console.warn(`indexnow: ${res.status} ${res.statusText} for ${urlList.length} URLs`);
   } else {
-    // Only on success. A refused submission hasn't reached anyone, and marking it
-    // announced would hide those pages for a day for no reason.
-    await recordAnnounced(db, fresh, nowIso());
+    // Only on success, and deliberately after the POST rather than claimed before
+    // it. Two invocations overlapping — a crawl that runs past its 15-minute slot —
+    // could then both pick the same hub and announce it twice. That is one duplicate
+    // against the 96-a-day this replaces, and the alternative costs more than it
+    // saves: a claim taken up front has to be released when the submission fails,
+    // and an isolate that dies mid-flight would leave the page unannounced for a day
+    // with nothing to show why.
+    await recordAnnounced(db, recorded, nowIso());
   }
 
   return {

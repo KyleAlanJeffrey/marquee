@@ -73,6 +73,18 @@ describe('clampDesc', () => {
     expect(out.endsWith('…')).toBe(true);
   });
 
+  it('does not cut through a surrogate pair', () => {
+    // A real production event name, in mathematical bold: every character is two
+    // UTF-16 units, so a naive slice at an odd offset leaves a lone surrogate.
+    const bold = '𝟐𝟎𝟐𝟔 𝐓𝐖𝐒 𝐓𝐎𝐔𝐑 ‘𝟐𝟒/𝟕:𝐅𝐎𝐑:𝐘𝐎𝐔’ 𝐈𝐍 𝐒𝐈𝐍𝐆𝐀𝐏𝐎𝐑𝐄';
+    const out = clampDesc(`${bold} ${bold} ${bold} plays live on Sat, Aug 1, 2026.`);
+    expect(out.length).toBeLessThanOrEqual(DESC_MAX);
+    expect(out).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+    expect(out).not.toMatch(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+    // Round-tripping through the encoder a Response body uses must not lose anything.
+    expect(new TextDecoder().decode(new TextEncoder().encode(out))).toBe(out);
+  });
+
   it('collapses the newlines a multi-line template literal leaves behind', () => {
     expect(clampDesc('Concerts in Austin,\n  TX  tonight.')).toBe('Concerts in Austin, TX tonight.');
   });
