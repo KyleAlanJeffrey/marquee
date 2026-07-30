@@ -24,7 +24,9 @@ while :; do
   url="$BASE/api/admin/repair-duplicates"
   [ -n "$after" ] && url="$url?after=$after"
 
-  response=$(curl -sS --max-time 120 -X POST -H "x-admin-token: $ADMIN_TOKEN" -w $'\n%{http_code}' "$url")
+  # `Authorization: Bearer …` is what the Worker checks — see `authorized()` in
+  # worker/src/routes/admin.ts. Any other header reads as no token at all.
+  response=$(curl -sS --max-time 120 -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -w $'\n%{http_code}' "$url")
   status="${response##*$'\n'}"
   body="${response%$'\n'*}"
 
