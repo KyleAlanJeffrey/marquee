@@ -102,6 +102,11 @@ export function robotsTxt(origin: string): string {
   ].join('\n');
 }
 
+/** For any host that isn't the canonical one — see `PRIMARY_HOST` in env.ts. */
+export function robotsTxtOffBrand(): string {
+  return ['User-agent: *', 'Disallow: /', ''].join('\n');
+}
+
 // --- sitemap.xml ------------------------------------------------------------
 
 /** Static routes plus every upcoming event and the artists/venues behind them. */
@@ -141,6 +146,9 @@ export async function sitemapXml(env: Env, origin: string): Promise<string> {
     );
 
   add('/', today, 'daily', '1.0');
+  // The only server-rendered page, and the hub that links to the detail pages
+  // below in plain <a> tags — worth as much as the app root to a crawler.
+  add('/concerts', today, 'daily', '1.0');
   add('/browse', today, 'daily', '0.9');
   add('/map', today, 'daily', '0.8');
   add('/search', today, 'weekly', '0.6');
