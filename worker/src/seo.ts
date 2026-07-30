@@ -1,5 +1,8 @@
-import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 
+import { allTowns } from './cities';
+import { clusterMemberIds } from './data';
+import type { DB } from './db';
 import { getDb } from './db';
 import type { Env } from './env';
 import { artists, events, venues } from './schema';
@@ -57,6 +60,11 @@ export type PageSeo = {
   jsonLd?: unknown;
   /** Detail pages we couldn't resolve shouldn't be indexed. */
   noindex?: boolean;
+  /**
+   * A different URL to declare canonical — set when this path is a second address
+   * for a page that already has one (a venue cluster member). Root-relative.
+   */
+  canonicalPath?: string;
 };
 
 // --- helpers ----------------------------------------------------------------
@@ -107,62 +115,202 @@ export function robotsTxtOffBrand(): string {
   return ['User-agent: *', 'Disallow: /', ''].join('\n');
 }
 
-// --- sitemap.xml ------------------------------------------------------------
+// --- sitemap ----------------------------------------------------------------
 
-/** Static routes plus every upcoming event and the artists/venues behind them. */
-export async function sitemapXml(env: Env, origin: string): Promise<string> {
-  const db = getDb(env.DB);
+/**
+ * URLs per child sitemap. The protocol allows 50,000, but a smaller document is
+ * quicker to build inside a Worker's budget and cheaper for a crawler to refetch
+ * when one show in it changes.
+ */
+const SITEMAP_PAGE = 5000;
+
+/**
+ * A ceiling, so a runaway table can't ask the Worker to enumerate a million rows.
+ * Crossing it is logged rather than silently obeyed — the single-document sitemap
+ * this replaced dropped two thirds of the catalogue for months without a word.
+ */
+const SITEMAP_MAX_PAGES = 40;
+
+type Kind = 'events' | 'artists' | 'venues';
+
+const canonicalVenue = sql<string>`coalesce(${venues.canonicalVenueId}, ${venues.id})`;
+
+/** How many URLs of each kind there are, so the index knows what to list. */
+async function sitemapCounts(db: DB): Promise<Record<Kind, number>> {
   const upcoming = gte(events.startsAt, nowIso());
-  const today = new Date().toISOString().slice(0, 10);
-
-  // lastmod is when we last wrote the row, not "now" — a sitemap that claims
-  // every URL changed today gets its lastmod ignored.
-  const [eventRows, artistRows, venueRows] = await Promise.all([
+  const [ev, ar, ve] = await Promise.all([
+    db.select({ n: sql<number>`count(*)` }).from(events).where(upcoming).get(),
     db
+      .select({ n: sql<number>`count(distinct ${events.artistId})` })
+      .from(events)
+      .where(upcoming)
+      .get(),
+    db
+      .select({ n: sql<number>`count(distinct ${canonicalVenue})` })
+      .from(events)
+      .innerJoin(venues, eq(venues.id, events.venueId))
+      .where(upcoming)
+      .get(),
+  ]);
+  return { events: ev?.n ?? 0, artists: ar?.n ?? 0, venues: ve?.n ?? 0 };
+}
+
+const pagesFor = (count: number, kind: string): number => {
+  const wanted = Math.max(1, Math.ceil(count / SITEMAP_PAGE));
+  if (wanted > SITEMAP_MAX_PAGES) {
+    console.warn(
+      `sitemap: ${count} ${kind} needs ${wanted} pages, capping at ${SITEMAP_MAX_PAGES} — ` +
+        `${count - SITEMAP_MAX_PAGES * SITEMAP_PAGE} URLs will not be listed`,
+    );
+    return SITEMAP_MAX_PAGES;
+  }
+  return wanted;
+};
+
+/** `<sitemapindex>` — the document /sitemap.xml serves now. */
+export async function sitemapIndex(env: Env, origin: string): Promise<string> {
+  const db = getDb(env.DB);
+  const today = new Date().toISOString().slice(0, 10);
+  const counts = await sitemapCounts(db);
+
+  const children = ['/sitemap-pages.xml'];
+  for (const kind of ['events', 'artists', 'venues'] as Kind[]) {
+    const pages = pagesFor(counts[kind], kind);
+    for (let p = 1; p <= pages; p++) children.push(`/sitemap-${kind}-${p}.xml`);
+  }
+
+  const entries = children
+    .map((path) => `  <sitemap><loc>${xml(origin + path)}</loc><lastmod>${today}</lastmod></sitemap>`)
+    .join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries}\n</sitemapindex>\n`;
+}
+
+type Url = { path: string; lastmod: string; changefreq: string; priority: string };
+
+const urlset = (origin: string, urls: Url[]) =>
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls
+    .map(
+      (u) =>
+        `  <url><loc>${xml(origin + u.path)}</loc><lastmod>${u.lastmod}</lastmod>` +
+        `<changefreq>${u.changefreq}</changefreq><priority>${u.priority}</priority></url>`,
+    )
+    .join('\n')}\n</urlset>\n`;
+
+/** The static routes and every city hub — the pages a crawler should start from. */
+async function pagesSitemap(env: Env, origin: string): Promise<string> {
+  const db = getDb(env.DB);
+  const today = new Date().toISOString().slice(0, 10);
+  const urls: Url[] = [
+    { path: '/', lastmod: today, changefreq: 'daily', priority: '1.0' },
+    // Server-rendered, and the hub that links to the detail pages in plain <a>
+    // tags — worth as much as the app root to a crawler.
+    { path: '/concerts', lastmod: today, changefreq: 'daily', priority: '1.0' },
+    { path: '/browse', lastmod: today, changefreq: 'daily', priority: '0.9' },
+    { path: '/map', lastmod: today, changefreq: 'daily', priority: '0.8' },
+    { path: '/search', lastmod: today, changefreq: 'weekly', priority: '0.6' },
+  ];
+
+  // A town with nothing on is noindex on its own page, so it stays out of here too.
+  for (const t of await allTowns(db)) {
+    if (t.upcoming > 0) {
+      urls.push({ path: `/concerts/${t.slug}`, lastmod: today, changefreq: 'daily', priority: '0.9' });
+    }
+  }
+  return urlset(origin, urls);
+}
+
+/**
+ * One page of detail URLs.
+ *
+ * Venues are listed by *canonical* id. The same room filed by three sources is one
+ * venue everywhere else in the app, and volunteering the member ids offered Google
+ * 154 URLs that were duplicates of another URL by construction.
+ */
+async function detailSitemap(env: Env, origin: string, kind: Kind, page: number): Promise<string> {
+  const db = getDb(env.DB);
+  const today = new Date().toISOString().slice(0, 10);
+  const upcoming = gte(events.startsAt, nowIso());
+  const offset = (page - 1) * SITEMAP_PAGE;
+  const day = (iso: string | null) => (iso ?? '').slice(0, 10) || today;
+
+  if (kind === 'events') {
+    const rows = await db
       .select({ id: events.id, updated: events.createdAt })
       .from(events)
       .where(upcoming)
-      .orderBy(events.startsAt)
-      .limit(5000),
-    db
+      // id breaks the tie: an unstable order across pages means a URL that appears
+      // twice and another that appears in no page at all.
+      .orderBy(events.startsAt, events.id)
+      .limit(SITEMAP_PAGE)
+      .offset(offset);
+    // Events go stale the moment they happen, so they get the highest churn.
+    return urlset(
+      origin,
+      rows.map((e) => ({
+        path: `/event/${e.id}`,
+        lastmod: day(e.updated),
+        changefreq: 'daily',
+        priority: '0.8',
+      })),
+    );
+  }
+
+  if (kind === 'artists') {
+    const rows = await db
       .select({ id: events.artistId, updated: sql<string>`max(${events.createdAt})` })
       .from(events)
       .where(upcoming)
       .groupBy(events.artistId)
-      .limit(5000),
-    db
-      .select({ id: events.venueId, updated: sql<string>`max(${events.createdAt})` })
-      .from(events)
-      .where(and(upcoming, isNotNull(events.venueId)))
-      .groupBy(events.venueId)
-      .limit(5000),
-  ]);
-
-  const urls: string[] = [];
-  const add = (path: string, lastmod: string, changefreq: string, priority: string) =>
-    urls.push(
-      `  <url><loc>${xml(origin + path)}</loc><lastmod>${lastmod}</lastmod>` +
-        `<changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`,
+      .orderBy(events.artistId)
+      .limit(SITEMAP_PAGE)
+      .offset(offset);
+    return urlset(
+      origin,
+      rows.map((a) => ({
+        path: `/artist/${a.id}`,
+        lastmod: day(a.updated),
+        changefreq: 'weekly',
+        priority: '0.7',
+      })),
     );
+  }
 
-  add('/', today, 'daily', '1.0');
-  // The only server-rendered page, and the hub that links to the detail pages
-  // below in plain <a> tags — worth as much as the app root to a crawler.
-  add('/concerts', today, 'daily', '1.0');
-  add('/browse', today, 'daily', '0.9');
-  add('/map', today, 'daily', '0.8');
-  add('/search', today, 'weekly', '0.6');
+  const rows = await db
+    .select({ id: canonicalVenue, updated: sql<string>`max(${events.createdAt})` })
+    .from(events)
+    .innerJoin(venues, eq(venues.id, events.venueId))
+    .where(and(upcoming, isNotNull(events.venueId)))
+    .groupBy(canonicalVenue)
+    .orderBy(canonicalVenue)
+    .limit(SITEMAP_PAGE)
+    .offset(offset);
+  return urlset(
+    origin,
+    rows
+      .filter((v) => v.id)
+      .map((v) => ({
+        path: `/venue/${v.id}`,
+        lastmod: day(v.updated),
+        changefreq: 'weekly',
+        priority: '0.6',
+      })),
+  );
+}
 
-  const day = (iso: string | null) => (iso ?? '').slice(0, 10) || today;
-
-  // Events go stale the moment they happen, so they get the highest churn.
-  for (const e of eventRows) add(`/event/${e.id}`, day(e.updated), 'daily', '0.8');
-  for (const a of artistRows) add(`/artist/${a.id}`, day(a.updated), 'weekly', '0.7');
-  for (const v of venueRows) if (v.id) add(`/venue/${v.id}`, day(v.updated), 'weekly', '0.6');
-
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join(
-    '\n',
-  )}\n</urlset>\n`;
+/**
+ * A child sitemap by filename, or null when the name isn't one we publish.
+ *
+ * Names are matched rather than parsed loosely: an unbounded page number would let
+ * anyone ask the Worker for `/sitemap-events-99999.xml` and pay for the scan.
+ */
+export async function sitemapChild(env: Env, origin: string, name: string): Promise<string | null> {
+  if (name === 'pages') return pagesSitemap(env, origin);
+  const m = /^(events|artists|venues)-(\d{1,3})$/.exec(name);
+  if (!m) return null;
+  const kind = m[1] as Kind;
+  const page = Number(m[2]);
+  if (page < 1 || page > SITEMAP_MAX_PAGES) return null;
+  return detailSitemap(env, origin, kind, page);
 }
 
 // --- per-page metadata ------------------------------------------------------
@@ -217,6 +365,10 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     description:
       `${row.name} plays ${where || 'live'} on ${when}. ` +
       'Tickets, lineup and what people are saying about the show.',
+    // A show that has happened is a dead page: nothing to buy, nothing to attend,
+    // and it will never be right again. Kept crawlable for its links, out of the
+    // index for the same reason a newspaper doesn't reprint last week's listings.
+    noindex: row.startsAt < nowIso(),
     image: row.artistImage,
     jsonLd: {
       '@context': 'https://schema.org',
@@ -275,6 +427,10 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
     description:
       `${row.name}${genres.length ? ` (${genres.join(', ')})` : ''} upcoming concerts, tour dates and tickets` +
       `${next ? ` — next up ${next.venueName ?? 'live'} on ${formatDate(next.startsAt)}` : ''}.`,
+    // An artist with nothing booked is a page whose entire content is "no upcoming
+    // shows". There are tens of thousands of those in the catalogue and indexing
+    // them teaches Google the site is mostly empty pages.
+    noindex: shows.length === 0,
     image: row.image,
     jsonLd: {
       '@context': 'https://schema.org',
@@ -304,16 +460,22 @@ async function venueSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       country: venues.country,
       lat: venues.lat,
       lng: venues.lng,
+      canonicalVenueId: venues.canonicalVenueId,
     })
     .from(venues)
     .where(eq(venues.id, id))
     .get();
   if (!row) return null;
 
+  // The room, not the row: three sources filing the same venue is one cluster, and
+  // the app shows the cluster's whole calendar on any of its ids. Counting only
+  // this row's own events would under-report a venue that merged.
+  const cluster = await clusterMemberIds(db, [id]);
+  const head = row.canonicalVenueId ?? id;
   const upcoming = await db
     .select({ count: sql<number>`count(*)` })
     .from(events)
-    .where(and(eq(events.venueId, id), gte(events.startsAt, nowIso())))
+    .where(and(inArray(events.venueId, cluster), gte(events.startsAt, nowIso())))
     .get();
   const n = upcoming?.count ?? 0;
   const where = place(row.city, row.region);
@@ -323,6 +485,13 @@ async function venueSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     description:
       `${n > 0 ? `${n} upcoming concert${n === 1 ? '' : 's'}` : 'Upcoming concerts'} at ${row.name}` +
       `${where ? ` in ${where}` : ''} — full lineup, dates, prices and tickets.`,
+    // A room with nothing booked has nothing to say, and there are thousands of
+    // them behind expired listings.
+    noindex: n === 0,
+    // Every member id renders the same room from the same cluster, so only the
+    // head is a page. Without this, a venue that merged three ways is three URLs
+    // competing with each other for the same query.
+    ...(head !== id ? { canonicalPath: `/venue/${head}` } : null),
     jsonLd: {
       '@context': 'https://schema.org',
       '@type': 'MusicVenue',
@@ -371,7 +540,8 @@ const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;
 /** Rewrite the SPA shell's <head> for this specific URL. */
 export function injectSeo(res: Response, url: URL, seo: PageSeo): Response {
   const origin = url.origin;
-  const canonical = origin + (url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : '/');
+  const self = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : '/';
+  const canonical = origin + (seo.canonicalPath ?? self);
   const custom = seo.image ? absolute(origin, seo.image) : null;
   const image = custom ?? absolute(origin, OG_IMAGE);
 

@@ -20,6 +20,15 @@ export type Env = {
    * falls back to the request's own origin.
    */
   PRIMARY_HOST?: string;
+  /**
+   * IndexNow key — any 8–128 characters of `[A-Za-z0-9-]` that you invent.
+   *
+   * Set it and the hourly crawl announces the shows it just wrote to Bing, Yandex
+   * and the rest, and `/<key>.txt` starts answering with the key so they can check
+   * we own it. Unset (the default, and local dev) and nothing is submitted. Needs
+   * `PRIMARY_HOST` too: IndexNow rejects a URL list whose host it can't verify.
+   */
+  INDEXNOW_KEY?: string;
 };
 
 /** Hono generics for typed `c.env` across the app. */

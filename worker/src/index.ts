@@ -8,8 +8,10 @@ import { events } from './routes/events';
 import { feed } from './routes/feed';
 import { search } from './routes/search';
 import { venues } from './routes/venues';
+import { cityPage } from './cities';
+import { submitFresh } from './indexnow';
 import { landingPage } from './landing';
-import { injectSeo, pageSeo, robotsTxt, robotsTxtOffBrand, sitemapXml } from './seo';
+import { injectSeo, pageSeo, robotsTxt, robotsTxtOffBrand, sitemapChild, sitemapIndex } from './seo';
 import { crawlBandsintown } from './sources';
 
 // The Worker runs first for every request (run_worker_first). It handles the
@@ -70,26 +72,61 @@ app.get('/robots.txt', (c) =>
   }),
 );
 
-app.get('/sitemap.xml', async (c) => {
-  const xml = await sitemapXml(c.env, siteOrigin(c));
-  return c.body(xml, 200, {
-    'Content-Type': 'application/xml; charset=utf-8',
-    // The show list changes as events are ingested and expire.
-    'Cache-Control': 'public, max-age=3600',
-  });
+// The show list changes as events are ingested and expire.
+const SITEMAP_HEADERS = {
+  'Content-Type': 'application/xml; charset=utf-8',
+  'Cache-Control': 'public, max-age=3600',
+};
+
+/**
+ * IndexNow's ownership check: the crawler fetches `/<key>.txt` and expects the key
+ * back. Anything else that looks like a key file falls through to the assets, so
+ * this can't shadow a real file.
+ */
+// Note the regex holds no `{n,m}` quantifier: Hono ends a `:param{…}` pattern at
+// the first `}`, so a quantifier there truncates the route and it silently never
+// matches. Shape checks belong in the handler.
+app.get('/:file{[A-Za-z0-9-]+\\.txt}', async (c, next) => {
+  const key = c.env.INDEXNOW_KEY;
+  if (!key || c.req.param('file') !== `${key}.txt`) return next();
+  return c.text(key, 200, { 'Cache-Control': 'public, max-age=86400' });
+});
+
+app.get('/sitemap.xml', async (c) =>
+  c.body(await sitemapIndex(c.env, siteOrigin(c)), 200, SITEMAP_HEADERS),
+);
+
+/**
+ * The children the index points at: `/sitemap-pages.xml`, `/sitemap-events-3.xml`.
+ * One document per 5,000 URLs, because a single one silently truncated at 5,000 and
+ * left two thirds of the catalogue unlisted.
+ */
+app.get('/:file{sitemap-[a-z0-9-]+\\.xml}', async (c) => {
+  const name = c.req.param('file').replace(/^sitemap-/, '').replace(/\.xml$/, '');
+  const xml = await sitemapChild(c.env, siteOrigin(c), name);
+  if (!xml) return c.notFound();
+  return c.body(xml, 200, SITEMAP_HEADERS);
 });
 
 /**
- * The one page on the site that is real HTML rather than the SPA shell. Registered
- * before the asset handler so it wins over the export's SPA fallback.
+ * The pages the Worker renders itself, as real HTML rather than the SPA shell.
+ * Registered before the asset handler so they win over the export's SPA fallback.
+ *
+ * Cheap to regenerate and never personalised, so the edge holds them and serves
+ * the stale copy while it refreshes.
  */
-app.get('/concerts', async (c) => {
-  const html = await landingPage(c.env, siteOrigin(c));
-  return c.html(html, 200, {
-    // Cheap to regenerate and never personalised, so let the edge hold it and
-    // serve the stale copy while it refreshes.
-    'Cache-Control': 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400',
-  });
+const PAGE_CACHE = 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400';
+
+app.get('/concerts', async (c) =>
+  c.html(await landingPage(c.env, siteOrigin(c)), 200, { 'Cache-Control': PAGE_CACHE }),
+);
+
+app.get('/concerts/:slug', async (c) => {
+  const html = await cityPage(c.env, siteOrigin(c), c.req.param('slug'));
+  // A slug no town answers to is a 404, not the SPA shell with a 200. Soft 404s
+  // are the fastest way to teach a crawler that made-up URLs on this site work.
+  if (!html) return c.notFound();
+  return c.html(html, 200, { 'Cache-Control': PAGE_CACHE });
 });
 
 // Static assets. Every HTML response is the same client-rendered shell, so its
@@ -112,15 +149,30 @@ app.all('*', async (c) => {
  * CPU budget as a request, and the queue is drained a little at a time.
  */
 const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env) => {
+  // Read before the crawl, so "created since" names exactly what this run wrote.
+  const since = new Date().toISOString().slice(0, 19) + 'Z';
+  let failure: unknown = null;
   try {
     console.log('crawl:', JSON.stringify(await crawlBandsintown(env)));
   } catch (err) {
-    // Logged for the detail, then re-thrown: a scheduled handler that returns
-    // normally is recorded as a successful invocation, and a crawl that never
-    // works would look like a crawl that runs.
     console.error('crawl failed:', err);
-    throw err;
+    failure = err;
   }
+
+  // Announce whatever it managed to write, even if it then fell over — the shows
+  // are in the database either way, and this is the only fast path to being
+  // indexed. A failed ping must never fail the crawl.
+  try {
+    const result = await submitFresh(env, since);
+    if (result) console.log('indexnow:', JSON.stringify(result));
+  } catch (err) {
+    console.warn('indexnow failed:', err);
+  }
+
+  // Re-thrown rather than swallowed: a scheduled handler that returns normally is
+  // recorded as a successful invocation, and a crawl that never works would look
+  // like a crawl that runs.
+  if (failure) throw failure;
 };
 
 export default { fetch: app.fetch, scheduled };

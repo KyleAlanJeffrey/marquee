@@ -367,7 +367,7 @@ const FOLLOWING_HORIZON_DAYS = 365;
  * Each statement binds one chunk, and only one: `or(inArray(a), inArray(b))` over
  * the same chunk binds it twice, which puts 90 ids over D1's 100-parameter ceiling.
  */
-async function clusterMemberIds(db: DB, ids: string[]): Promise<string[]> {
+export async function clusterMemberIds(db: DB, ids: string[]): Promise<string[]> {
   const out = new Set<string>(ids);
   const heads = new Set<string>();
   // Hop one: by primary key.
