@@ -283,6 +283,15 @@ Seznam and Naver — while `/<key>.txt` starts answering with the key so they ca
 verify it. Unset, nothing is submitted. Google doesn't participate in IndexNow,
 so this complements the sitemap rather than replacing it.
 
+What isn't obvious until it bites: submitting the *same* URL repeatedly is read as
+spam. The first version sent `/` and every affected city hub on every run, and
+IndexNow answered 429 "Too Many Requests (potential Spam)" every time — while a
+one-off POST of 200 never-submitted event URLs from the same host and key was
+accepted with 200. Volume was never the problem; announcing a couple of hundred
+listing pages 96 times a day was. `indexnow_log` now records when each listing page
+was last announced and holds it back for 24 hours. Event URLs are exempt, because
+each one is a page that did not exist an hour ago.
+
 ### Venue identity, and why a coordinate isn't enough
 
 Two sources agree on *where* long before they agree on what a room is called, so

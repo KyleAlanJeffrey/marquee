@@ -661,6 +661,22 @@ instead of coverage.
   head.
 - [x] **IndexNow.** The hourly crawl announces what it wrote. Off unless
   `INDEXNOW_KEY` is set; never fails the crawl.
+- [x] **IndexNow was being refused, and said so quietly.** Every run came back 429
+  "Too Many Requests (potential Spam)" — 102 URLs on one, 263 on the next — so
+  nothing had ever reached Bing, Yandex, Seznam or Naver. Not volume: a one-off POST
+  of 200 never-submitted event URLs, same host and key, was accepted with 200, and a
+  single-URL POST seconds after a 429 with 202. The refused payloads re-sent `/` and
+  every affected hub, 96 times a day. `indexnow_log` (migration 0007) now holds a
+  listing page back for 24 hours after announcing it; event URLs are exempt because
+  they're new by construction.
+- [x] **Meta descriptions inside what a search result shows.** Bing's audit flagged
+  one instance; production had six — `/` at 190 characters and every city hub over
+  (Austin 169, Toronto 170, New York 171, LA 174, London 181). The event and venue
+  templates were worse in a way the audit couldn't see, since they interpolate feed
+  names that reach 195 and 90 characters. `clampDesc` (DESC_MAX 155) is enforced in
+  `shell()` and `injectSeo()`, the two places any description is emitted, and the
+  templates were tightened so the clamp is a backstop. `/map` and `/settings` were on
+  the short side of the same check. Measured across 19 pages: all now 80–153.
 - [x] **Server-rendered detail bodies** (`worker/src/detail.ts`). `/event/:id`,
   `/artist/:id` and `/venue/:id` had excellent heads and a body of nine words. Now
   the rows that built the metadata build the body too — the show plus the rest of
