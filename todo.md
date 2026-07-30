@@ -661,22 +661,25 @@ instead of coverage.
   head.
 - [x] **IndexNow.** The hourly crawl announces what it wrote. Off unless
   `INDEXNOW_KEY` is set; never fails the crawl.
+- [x] **Server-rendered detail bodies** (`worker/src/detail.ts`). `/event/:id`,
+  `/artist/:id` and `/venue/:id` had excellent heads and a body of nine words. Now
+  the rows that built the metadata build the body too — the show plus the rest of
+  that act's tour, the full tour-date list, the venue's calendar. 15–26 real links
+  per page where there were none.
+  The hydration blocker turned out not to be one: rewriting
+  `__EXPO_ROUTER_HYDRATE__` to `false` on exactly these pages switches the bundle
+  from `hydrateRoot` to `createRoot().render()`, which clears the container by
+  design — so the injected markup hands over cleanly, and all that is given up is a
+  spinner's worth of prerender. Verified in the browser: flag `false`, `#mq-sr`
+  gone after boot, one child under `#root`, no console errors. App routes are
+  untouched and still hydrate.
+- [x] **One page per town, with all of its shows.** Towns are spelled several ways
+  in the venue rows ("Montréal"/"Montreal", "United Kingdom"/"GB"); the hub pages
+  were picking one row and dropping the others' shows — 61 of Montréal's 126. The
+  spellings now fold into one town, and the losing slugs 301 to the winner.
 
 ## SEO follow-ups
 
-- [ ] **Server-render the body of `/event/:id`, `/artist/:id`, `/venue/:id`.**
-  The biggest remaining lever and the only one that needs an architectural
-  decision. These routes have excellent heads — real titles, complete
-  `MusicEvent` JSON-LD with `offers`, `PostalAddress` and `geo` — and a body of
-  **nine words**: "Marquee FINDING SHOWS AROUND YOU… Explore Following Saved
-  Profile". That is the whole long tail (thousands of "artist + city + date"
-  queries) invisible to anything that doesn't run JS.
-  Injecting content into `#root` is *not* the fix: the Expo export sets
-  `__EXPO_ROUTER_HYDRATE__ = true`, so React hydrates the prerendered shell and
-  extra markup is a hydration mismatch. The real options are (a) Expo's server
-  output mode, (b) a `page.ts`-rendered document per entity with the app route
-  canonicalling to it, or (c) accepting the mismatch. Wants a decision, not a
-  patch.
 - [ ] **Move the landing page to `/`.** `/` collects every backlink and renders
   nine words; `/concerts` renders a thousand and collects none. The usual shape is
   marketing page at `/`, app at `/browse`. Cheap to do, but it changes the app's

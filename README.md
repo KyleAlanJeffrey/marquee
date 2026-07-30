@@ -29,6 +29,7 @@ worker/
   src/timezone.ts venue-local → UTC (state/province zone + Intl, longitude fallback)
   src/seo.ts      robots.txt, sitemap index + children, per-page <head> + JSON-LD
   src/page.ts     shared chrome for the server-rendered pages (CSS, head, shell)
+  src/detail.ts   the <body> for /event, /artist and /venue, injected into the shell
   src/landing.ts  /concerts — the front door, rendered without JavaScript
   src/cities.ts   /concerts/:town — a page per town, and the town↔slug mapping
   src/indexnow.ts tells Bing et al. about the shows the crawl just wrote
@@ -211,7 +212,7 @@ face value).
 ## SEO
 
 The web build is a client-rendered SPA, so a crawler that doesn't run JS would
-otherwise see an empty shell. Four layers fix that:
+otherwise see an empty shell. Five layers fix that:
 
 1. `src/app/+html.tsx` — head defaults baked into every prerendered route
    (canonical, Open Graph/Twitter card, keywords, `WebSite` JSON-LD, manifest).
@@ -223,11 +224,21 @@ otherwise see an empty shell. Four layers fix that:
    rewrites the shell's `<head>` on the way out (title, description, canonical,
    social card, `noindex` for unknown ids) plus `MusicEvent` / `MusicGroup` /
    `MusicVenue` JSON-LD. It also serves `/robots.txt` and a live `/sitemap.xml`.
-4. `worker/src/landing.ts` + `worker/src/cities.ts` — the first three layers only
-   ever fix the `<head>`; the `<body>` of every app route still needs the bundle to
-   boot before it says anything. Everything under `/concerts` is the exception:
-   server-rendered HTML with no JS and no images, built from D1 on the edge and
-   sharing one stylesheet via `page.ts`. `/concerts` is the front door (totals, the
+4. `worker/src/detail.ts` — the layers above only fix the `<head>`, and a page
+   whose entire body is a loading spinner has nothing to rank. So the same D1 rows
+   that produced the metadata also render the body: the show and the rest of that
+   act's tour on `/event/:id`, the whole tour-date list on `/artist/:id`, the
+   calendar on `/venue/:id`. The markup replaces the export's prerendered spinner
+   inside `#root`, and the Worker rewrites `__EXPO_ROUTER_HYDRATE__` to `false` on
+   exactly those pages so the bundle mounts with `createRoot().render()` — which
+   clears the container by design — instead of hydrating markup that no longer
+   matches. Nothing is lost in the swap; what it discards is a spinner's worth of
+   prerender. App routes keep hydration untouched.
+5. `worker/src/landing.ts` + `worker/src/cities.ts` — a crawler still needs a way
+   *in*, and a page per query people actually type. Everything under `/concerts` is
+   a document of its own rather than a rewritten shell: server-rendered HTML with no
+   JS and no images, built from D1 on the edge and sharing one stylesheet via
+   `page.ts`. `/concerts` is the front door (totals, the
    next twelve shows one-per-city, thirty city links, the busiest venues, the
    most-booked artists, an FAQ). `/concerts/:town` is one page per town with an
    upcoming show — ~1,700 of them — each listing that town's next 120 shows by

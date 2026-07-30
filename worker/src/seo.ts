@@ -1,11 +1,14 @@
-import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 
 import { allTowns } from './cities';
 import { clusterMemberIds } from './data';
 import type { DB } from './db';
 import { getDb } from './db';
+import { artistBody, eventBody, venueBody } from './detail';
 import type { Env } from './env';
 import { artists, events, venues } from './schema';
+import { zoneFor } from './timezone';
 
 // The web app is a client-rendered SPA: the HTML that Cloudflare serves for
 // /event/<uuid> is the same empty shell for every event, so a crawler that
@@ -65,6 +68,12 @@ export type PageSeo = {
    * for a page that already has one (a venue cluster member). Root-relative.
    */
   canonicalPath?: string;
+  /**
+   * Server-rendered markup for `#root` — see detail.ts. Present means the page has
+   * something to say without JavaScript, and that the bundle should mount fresh
+   * rather than try to hydrate it.
+   */
+  body?: string;
 };
 
 // --- helpers ----------------------------------------------------------------
@@ -327,9 +336,11 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       startsAt: events.startsAt,
       ticketUrl: events.ticketUrl,
       priceFrom: events.priceFrom,
+      artistId: events.artistId,
       artistName: artists.name,
       artistImage: artists.imageUrl,
       artistGenres: artists.genres,
+      venueId: sql<string | null>`coalesce(${venues.canonicalVenueId}, ${venues.id})`,
       venueName: venues.name,
       venueCity: venues.city,
       venueRegion: venues.region,
@@ -343,6 +354,24 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     .where(eq(events.id, id))
     .get();
   if (!row) return null;
+
+  // The rest of this act's tour: the internal links a crawler follows out of here,
+  // and the question anyone on the page is about to ask. One indexed range scan on
+  // events_artist_idx(artist_id, starts_at).
+  const alsoPlaying = await db
+    .select({
+      id: events.id,
+      startsAt: events.startsAt,
+      venueName: venues.name,
+      city: venues.city,
+      region: venues.region,
+      country: venues.country,
+    })
+    .from(events)
+    .leftJoin(venues, eq(venues.id, events.venueId))
+    .where(and(eq(events.artistId, row.artistId), gte(events.startsAt, nowIso()), ne(events.id, id)))
+    .orderBy(events.startsAt)
+    .limit(8);
 
   const where = row.venueName ? [row.venueName, place(row.venueCity, row.venueRegion)].filter(Boolean).join(', ') : '';
   const when = formatDate(row.startsAt);
@@ -374,6 +403,24 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     // index for the same reason a newspaper doesn't reprint last week's listings.
     noindex: row.startsAt < nowIso(),
     image: row.artistImage,
+    body: eventBody({
+      id,
+      name: row.name,
+      startsAt: row.startsAt,
+      zone: zoneFor(row.venueRegion, row.venueCountry),
+      ticketUrl: row.ticketUrl,
+      priceFrom: row.priceFrom,
+      artistId: row.artistId,
+      artistName: row.artistName,
+      venueId: row.venueId,
+      venueName: row.venueName,
+      city: row.venueCity,
+      region: row.venueRegion,
+      country: row.venueCountry,
+      // Each date in its own venue's timezone — a Manila show read in London time is
+      // off by a day, and a tour list is mostly other countries.
+      alsoPlaying: alsoPlaying.map((s) => ({ ...s, zone: zoneFor(s.region, s.country) })),
+    }),
     jsonLd: {
       '@context': 'https://schema.org',
       '@type': 'MusicEvent',
@@ -417,13 +464,28 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
     }
   })();
 
+  // One over the page's limit, only to know whether to say "more in the app".
+  const SHOWS = 24;
+  const canon = alias(venues, 'canon');
   const shows = await db
-    .select({ id: events.id, name: events.name, startsAt: events.startsAt, venueName: venues.name })
+    .select({
+      id: events.id,
+      name: events.name,
+      startsAt: events.startsAt,
+      venueId: canon.id,
+      venueName: venues.name,
+      city: venues.city,
+      region: venues.region,
+      country: venues.country,
+    })
     .from(events)
     .leftJoin(venues, eq(venues.id, events.venueId))
+    // Linked by cluster head: a member id is a second URL for the same room, and
+    // venueSeo canonicals it away — no reason to spend a link on it.
+    .leftJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
     .where(and(eq(events.artistId, id), gte(events.startsAt, nowIso())))
     .orderBy(events.startsAt)
-    .limit(10);
+    .limit(SHOWS + 1);
 
   const next = shows[0];
   return {
@@ -436,6 +498,22 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
     // them teaches Google the site is mostly empty pages.
     noindex: shows.length === 0,
     image: row.image,
+    body: artistBody({
+      id,
+      name: row.name,
+      genres,
+      shows: shows.slice(0, SHOWS).map((s) => ({
+        id: s.id,
+        startsAt: s.startsAt,
+        zone: zoneFor(s.region, s.country),
+        venueId: s.venueId,
+        venueName: s.venueName,
+        city: s.city,
+        region: s.region,
+        country: s.country,
+      })),
+      truncated: shows.length > SHOWS,
+    }),
     jsonLd: {
       '@context': 'https://schema.org',
       '@type': 'MusicGroup',
@@ -443,7 +521,7 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
       url: `${origin}/artist/${id}`,
       ...(row.image ? { image: row.image } : null),
       ...(genres.length ? { genre: genres } : null),
-      event: shows.map((s) => ({
+      event: shows.slice(0, 10).map((s) => ({
         '@type': 'MusicEvent',
         name: s.name,
         url: `${origin}/event/${s.id}`,
@@ -476,13 +554,29 @@ async function venueSeo(env: Env, id: string, origin: string): Promise<PageSeo |
   // this row's own events would under-report a venue that merged.
   const cluster = await clusterMemberIds(db, [id]);
   const head = row.canonicalVenueId ?? id;
-  const upcoming = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(events)
-    .where(and(inArray(events.venueId, cluster), gte(events.startsAt, nowIso())))
-    .get();
+  const SHOWS = 30;
+  const [upcoming, shows] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(events)
+      .where(and(inArray(events.venueId, cluster), gte(events.startsAt, nowIso())))
+      .get(),
+    db
+      .select({
+        id: events.id,
+        startsAt: events.startsAt,
+        artistId: events.artistId,
+        artistName: artists.name,
+      })
+      .from(events)
+      .innerJoin(artists, eq(artists.id, events.artistId))
+      .where(and(inArray(events.venueId, cluster), gte(events.startsAt, nowIso())))
+      .orderBy(events.startsAt)
+      .limit(SHOWS),
+  ]);
   const n = upcoming?.count ?? 0;
   const where = place(row.city, row.region);
+  const zone = zoneFor(row.region, row.country);
 
   return {
     title: `${row.name}${where ? ` — ${where}` : ''} tickets & upcoming shows · ${NAME}`,
@@ -500,6 +594,16 @@ async function venueSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     // head is a page. Without this, a venue that merged three ways is three URLs
     // competing with each other for the same query.
     ...(head !== id ? { canonicalPath: `/venue/${head}` } : null),
+    body: venueBody({
+      id,
+      name: row.name,
+      city: row.city,
+      region: row.region,
+      country: row.country,
+      upcoming: n,
+      shows: shows.map((s) => ({ ...s, zone })),
+      truncated: n > shows.length,
+    }),
     jsonLd: {
       '@context': 'https://schema.org',
       '@type': 'MusicVenue',
@@ -610,6 +714,31 @@ export function injectSeo(res: Response, url: URL, seo: PageSeo): Response {
         el.setAttribute('content', tag.content);
       },
     });
+  }
+
+  if (seo.body) {
+    const body = seo.body;
+    rewriter
+      // The export prerendered a loading spinner into #root and set the hydrate flag
+      // so React would adopt it. Replacing those children *and* hydrating is a
+      // mismatch, and React resolves a mismatch by throwing the whole tree away with
+      // a console error. Turning the flag off switches the bundle to
+      // `createRoot().render()`, which discards the container's children by design —
+      // which is exactly the handover we want, since all it discards is our markup
+      // after it has been read. Nothing is lost: the thing being hydrated was a
+      // spinner.
+      .on('script', {
+        text(chunk) {
+          if (chunk.text.includes('__EXPO_ROUTER_HYDRATE__')) {
+            chunk.replace(chunk.text.replace(/__EXPO_ROUTER_HYDRATE__\s*=\s*true/, '__EXPO_ROUTER_HYDRATE__=false'));
+          }
+        },
+      })
+      .on('#root', {
+        element(el) {
+          el.setInnerContent(body, { html: true });
+        },
+      });
   }
 
   return rewriter.transform(res);
