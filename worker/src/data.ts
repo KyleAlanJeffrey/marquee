@@ -348,6 +348,9 @@ export async function eventsByIds(db: DB, ids: string[]) {
 export const FOLLOWING_IDS_MAX = 100;
 /** Shows returned per request; a year of one person's follows fits well inside. */
 const FOLLOWING_EVENT_LIMIT = 300;
+/** Slack on the bounding box, in miles: the box is drawn around the row an event
+ *  points at, while the gate measures from that row's cluster head. */
+const VENUE_BOX_PAD_MILES = 25;
 /** How far ahead the Following screen looks — further than the location feed,
  *  because a followed artist announcing a date in five months is the whole point. */
 const FOLLOWING_HORIZON_DAYS = 365;
@@ -397,8 +400,10 @@ async function clusterMemberIds(db: DB, ids: string[]): Promise<string[]> {
  * wasn't in it and the screen said nobody you follow is playing. A follow is a
  * standing question about a specific artist or room, so it gets asked as one.
  *
- * `lat`/`lng` are optional and only fill in `distance_miles` for the cards; they
- * never filter, because a followed venue two towns over is still followed.
+ * `lat`/`lng` fill in `distance_miles`, and with `radiusMiles` they gate the list:
+ * the point of the screen is shows you could actually get to. What is *not* gated
+ * is time — the whole horizon inside the radius comes back, which is the half the
+ * location feed got wrong.
  */
 export async function followingEvents(
   db: DB,
@@ -408,6 +413,7 @@ export async function followingEvents(
     venueIds?: string[];
     lat?: number | null;
     lng?: number | null;
+    radiusMiles?: number | null;
   },
 ) {
   const clean = (ids: string[] | undefined) =>
@@ -426,6 +432,21 @@ export async function followingEvents(
   const canon = alias(venues, 'canon');
   const horizon = isoInDays(FOLLOWING_HORIZON_DAYS);
   const now = nowIso();
+  const hasPoint = typeof opts.lat === 'number' && typeof opts.lng === 'number';
+  const radiusMiles = hasPoint && opts.radiusMiles ? opts.radiusMiles : null;
+  // Boxed on venues.lat/lng, the indexed pair, and padded because the gate itself
+  // measures from the cluster head — which can sit a few miles from the row an
+  // event points at. The haversine below is what actually decides.
+  const box = (() => {
+    if (radiusMiles === null) return undefined;
+    const pad = radiusMiles + VENUE_BOX_PAD_MILES;
+    const latDelta = pad / 69;
+    const lngDelta = pad / (69 * Math.max(Math.cos((opts.lat! * Math.PI) / 180), 0.01));
+    return and(
+      between(venues.lat, opts.lat! - latDelta, opts.lat! + latDelta),
+      between(venues.lng, opts.lng! - lngDelta, opts.lng! + lngDelta),
+    );
+  })();
   const columns = {
     event_id: events.id,
     event_name: events.name,
@@ -452,7 +473,7 @@ export async function followingEvents(
       .innerJoin(artists, eq(artists.id, events.artistId))
       .leftJoin(venues, eq(venues.id, events.venueId))
       .leftJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
-      .where(and(gte(events.startsAt, now), lte(events.startsAt, horizon), where))
+      .where(and(gte(events.startsAt, now), lte(events.startsAt, horizon), box, where))
       .orderBy(events.startsAt)
       .limit(FOLLOWING_EVENT_LIMIT);
 
@@ -492,10 +513,7 @@ export async function followingEvents(
     );
   }
 
-  const hasPoint = typeof opts.lat === 'number' && typeof opts.lng === 'number';
   return [...byId.values()]
-    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
-    .slice(0, FOLLOWING_EVENT_LIMIT)
     .map((r) => ({
       ...r,
       artist_genres: parseGenres(r.artist_genres),
@@ -504,7 +522,14 @@ export async function followingEvents(
         hasPoint && r.venue_lat != null && r.venue_lng != null
           ? haversineMiles(opts.lat!, opts.lng!, r.venue_lat, r.venue_lng)
           : null,
-    }));
+    }))
+    // Measured off the head's coordinates, the same number the card shows, so the
+    // gate can never contradict the label next to it. A show we can't place is out
+    // when a radius is in force: "50 mi" has to mean it, and guessing on a venue
+    // with no coordinates is how a London date turns up in a San Francisco list.
+    .filter((r) => radiusMiles === null || (r.distance_miles !== null && r.distance_miles <= radiusMiles))
+    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+    .slice(0, FOLLOWING_EVENT_LIMIT);
 }
 
 export async function artistById(db: DB, id: string) {

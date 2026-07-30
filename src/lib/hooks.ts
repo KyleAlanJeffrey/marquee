@@ -145,12 +145,14 @@ export function useSavedShowDetails(eventIds: string[]) {
  *
  * Asked as its own question rather than filtered out of `useNearbyEvents`: that
  * feed is one bounded page of what's nearest in time inside a radius, so a followed
- * artist playing past the end of it was invisible, and a followed venue in the next
- * town over never appeared at all. `coords` only fills in distances.
+ * artist playing past the end of it was invisible. This asks about the follows
+ * themselves and keeps the radius as the bound — the whole horizon inside it, not
+ * the first page of it. Without a point there is no gate, only no distances.
  */
 export function useFollowingEvents(
   ids: { artistIds: string[]; spotifyIds: string[]; venueIds: string[] },
   coords: Coords | null,
+  radiusMiles: number | null,
 ) {
   // Caller order is kept — the stores hold the newest follow first — so a list over
   // the cap loses its oldest entries rather than whichever ids happen to sort last.
@@ -163,8 +165,11 @@ export function useFollowingEvents(
   // Rounded into the key too: distance labels don't need to survive every GPS
   // twitch, and a raw point would refetch the whole list each time it moved a metre.
   const near = coords ? `${coords.lat.toFixed(2)},${coords.lng.toFixed(2)}` : null;
+  // No point means no gate: a radius is meaningless without somewhere to measure
+  // from, and an empty screen would be the wrong way to say location is off.
+  const radius = coords ? radiusMiles : null;
   return useQuery({
-    queryKey: ['following-events', ...key, near],
+    queryKey: ['following-events', ...key, near, radius],
     enabled: artistIds.length + spotifyIds.length + venueIds.length > 0,
     placeholderData: (prev) => prev,
     queryFn: async (): Promise<FollowingEvent[]> => {
@@ -174,6 +179,7 @@ export function useFollowingEvents(
         venueIds,
         lat: coords?.lat ?? null,
         lng: coords?.lng ?? null,
+        radiusMiles: radius,
       });
       return data.items ?? [];
     },

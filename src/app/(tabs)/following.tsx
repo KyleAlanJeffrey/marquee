@@ -22,6 +22,7 @@ import { useFollowedVenues } from '@/lib/followed-venues-store';
 import { useFollows } from '@/lib/follows-store';
 import { useFollowingEvents } from '@/lib/hooks';
 import { getCurrentCoords } from '@/lib/location';
+import { usePrefs } from '@/lib/prefs-store';
 import type { Coords } from '@/lib/types';
 
 type Tab = 'artists' | 'venues';
@@ -30,6 +31,7 @@ export default function FollowingScreen() {
   const theme = useTheme();
   const { follows, ready: followsReady } = useFollows();
   const { venues, isFollowingVenue, toggleVenue, ready: venuesReady } = useFollowedVenues();
+  const { radiusMiles } = usePrefs();
 
   const [tab, setTab] = useState<Tab>('artists');
   const [coords, setCoords] = useState<Coords | null>(null);
@@ -46,10 +48,10 @@ export default function FollowingScreen() {
     [follows, venues],
   );
   const askable = ids.artistIds.length + ids.spotifyIds.length + ids.venueIds.length > 0;
-  const events = useFollowingEvents(ids, coords);
+  const events = useFollowingEvents(ids, coords, radiusMiles);
 
-  // Location is a nicety here, not a gate: it labels each card with a distance.
-  // Without it the shows still load, they just don't say how far away they are.
+  // With a location the list is gated to the radius from Profile; without one it
+  // still loads, ungated and with no distances, rather than showing nothing.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -208,18 +210,22 @@ export default function FollowingScreen() {
                     </View>
                   )}
                   <ThemedText type="label" style={[styles.sectionLabel, { color: theme.primary }]}>
-                    COMING UP
+                    {coords ? `WITHIN ${radiusMiles} MI` : 'COMING UP'}
                   </ThemedText>
                 </View>
               }
               ListEmptyComponent={
                 <EmptyState
                   icon="calendar-outline"
-                  title="Nothing announced yet"
+                  title={coords ? 'Nothing in range' : 'Nothing announced yet'}
                   message={
-                    tab === 'artists'
-                      ? 'None of the artists you follow have a date on sale anywhere. Pull to refresh once they announce.'
-                      : 'Nothing listed at the venues you follow. Pull to refresh, or open a venue for its own page.'
+                    coords
+                      ? tab === 'artists'
+                        ? `None of the artists you follow have a date within ${radiusMiles} mi — at any point in the next year. Widen your radius in Profile, or pull to refresh.`
+                        : `Nothing on at the venues you follow within ${radiusMiles} mi. Widen your radius in Profile, or open a venue for its full lineup.`
+                      : tab === 'artists'
+                        ? 'None of the artists you follow have a date on sale. Pull to refresh once they announce.'
+                        : 'Nothing listed at the venues you follow. Pull to refresh, or open a venue for its own page.'
                   }
                 />
               }

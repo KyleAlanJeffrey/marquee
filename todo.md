@@ -67,12 +67,17 @@ Production: **https://marquee.rocks**.
   filter the location feed, which is one bounded page of what's nearest in time
   inside a radius — around SF that page ends nine weeks out, so a followed artist
   playing in October wasn't in it and the screen said nobody you follow is
-  playing. The route asks about the artists and rooms themselves: a year ahead, no
-  radius, both lists in one request, each row tagged with which half it answers
-  (the client can't tell — rows carry the canonical venue id, not the id the
-  device stored). Follows are sent by catalog id *and* Spotify id, because an
-  artist followed from search only ever has the latter. Location just fills in
-  distances now.
+  playing. The route asks about the artists and rooms themselves, both lists in
+  one request, each row tagged with which half it answers (the client can't tell —
+  rows carry the canonical venue id, not the id the device stored). Follows are
+  sent by catalog id *and* Spotify id, because an artist followed from search only
+  ever has the latter.
+- [x] **Still gated by the radius from Profile**, measured off the venue's
+  displayed coordinates so the gate can't contradict the "12 mi" next to it. What
+  the radius no longer bounds is *time*: the whole year inside it comes back
+  rather than the first 400 rows of it. A show we can't place is out while a
+  radius is in force. With no location there is no gate — the list loads whole,
+  headed "COMING UP" instead of "WITHIN 50 MI", rather than showing nothing.
 - [x] **Saved** is its own tab. Stored snapshots render instantly, then the
   server's rows replace them: `POST /api/events/by-ids` returns only shows still
   to come, soonest first, so nothing on the client has to decide what time it is.

@@ -42,7 +42,7 @@ export const eventIdsBody = z.object({
 /**
  * The on-device follow lists, asked as a question about those artists and rooms.
  * Either list may be empty (you can follow only venues), but not both. The point
- * is optional and only fills in distances.
+ * fills in distances, and with a radius it also bounds the list.
  */
 export const followingBody = z
   .object({
@@ -53,6 +53,8 @@ export const followingBody = z
     venueIds: z.array(entityId).max(FOLLOWING_IDS_MAX).optional().default([]),
     lat: latitude.nullish(),
     lng: longitude.nullish(),
+    // Only gates when there is a point to measure from.
+    radiusMiles: z.coerce.number().positive().max(1000).nullish(),
   })
   .refine((b) => b.artistIds.length + b.spotifyIds.length + b.venueIds.length > 0, {
     message: 'follow at least one artist or venue',
