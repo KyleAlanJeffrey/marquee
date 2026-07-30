@@ -278,6 +278,13 @@ characters of `[A-Za-z0-9-]`:
 npx wrangler secret put INDEXNOW_KEY
 ```
 
+Use that command, not the dashboard's **Variables** panel. A plaintext variable
+added there is not in `wrangler.jsonc`, and `wrangler deploy` replaces the whole
+vars block with the one it finds in the config — so the next push silently unbinds
+it. That happened here: submissions stopped with no 429, no error and no log line,
+looking exactly like a run with nothing to announce. Secrets survive a deploy, and
+the unbound case now logs instead of returning quietly.
+
 and each crawl POSTs the URLs it just created to IndexNow — read by Bing, Yandex,
 Seznam and Naver — while `/<key>.txt` starts answering with the key so they can
 verify it. Unset, nothing is submitted. Google doesn't participate in IndexNow,

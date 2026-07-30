@@ -102,7 +102,16 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
   const host = env.PRIMARY_HOST;
   // Without a canonical host there is no absolute URL to submit, and IndexNow
   // rejects a list whose host doesn't match the key's.
-  if (!key || !host) return null;
+  //
+  // Said out loud, because returning quietly is how this went unnoticed: the key had
+  // been set as a plain environment variable in the dashboard, `wrangler deploy`
+  // replaced the vars block with the one in wrangler.jsonc, and submissions stopped
+  // with no 429, no error and no line in the log — indistinguishable from a run that
+  // had nothing to announce.
+  if (!key || !host) {
+    console.log(`indexnow: off (${!key ? 'INDEXNOW_KEY' : 'PRIMARY_HOST'} not bound)`);
+    return null;
+  }
   if (!KEY_SHAPE.test(key)) {
     console.warn('indexnow: INDEXNOW_KEY is not 8–128 of [A-Za-z0-9-]; skipping');
     return null;
@@ -121,7 +130,10 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
     .where(and(gte(events.createdAt, since), gte(events.startsAt, nowIso())))
     .limit(MAX_URLS);
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    console.log('indexnow: nothing new to announce');
+    return null;
+  }
 
   const origin = `https://${host}`;
   const cities = new Set<string>();
