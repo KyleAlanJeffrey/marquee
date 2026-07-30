@@ -62,8 +62,17 @@ Production: **https://marquee.rocks**.
   button, and a second mini button squeezed the artist name to "John…".
 - [x] **Following** has an Artists/Venues switch (`src/components/segmented.tsx`).
   Artists keeps the avatar rail; Venues lists followed rooms with an unfollow
-  heart. Both show "NEAR YOU" — shows in range by followed artist or followed
-  venue.
+  heart.
+- [x] **Following asks its own question** (`POST /api/following`). It used to
+  filter the location feed, which is one bounded page of what's nearest in time
+  inside a radius — around SF that page ends nine weeks out, so a followed artist
+  playing in October wasn't in it and the screen said nobody you follow is
+  playing. The route asks about the artists and rooms themselves: a year ahead, no
+  radius, both lists in one request, each row tagged with which half it answers
+  (the client can't tell — rows carry the canonical venue id, not the id the
+  device stored). Follows are sent by catalog id *and* Spotify id, because an
+  artist followed from search only ever has the latter. Location just fills in
+  distances now.
 - [x] **Saved** is its own tab. Stored snapshots render instantly, then the
   server's rows replace them: `POST /api/events/by-ids` returns only shows still
   to come, soonest first, so nothing on the client has to decide what time it is.
@@ -626,6 +635,22 @@ instead of coverage.
 - [x] Artist bio (Wikipedia), top tracks + fans (Deezer), photo + Spotify link.
 - [ ] Fan/artist galleries from real images; support acts from same-venue
   events; ticket price on the event Buy bar.
+
+## Data-quality follow-ups
+
+- [ ] **Chained venue clusters.** "Three Links Deep Ellum" is clustered into "The
+  Bomb Factory" — two genuinely different Dallas rooms. Individually their names
+  conflict, so they can only have merged transitively through an intermediate
+  row ("The Factory In Deep Ellum" / "The Studio at the Factory"). `sameVenue` is
+  pairwise; clustering is not. Wants a check that a candidate agrees with the
+  whole cluster, not just the row it was compared against.
+- [ ] **`findExistingShows` scans the venues table per listing.**
+  `worker/src/data.ts` matches shows with
+  `venue_id in (select id from venues where coalesce(canonical_venue_id, id) = ?)`
+  — the exact non-sargable form the read paths were changed away from, one
+  statement per incoming show on the hot ingest path. Resolve cluster members
+  once per distinct venue id (two indexed lookups, as `clusterVenueIds` does) and
+  bind an `in (...)`.
 
 ## Known limitations (by design)
 
