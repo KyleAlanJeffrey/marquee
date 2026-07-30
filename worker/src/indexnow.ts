@@ -68,6 +68,21 @@ export function unannounced(candidates: string[], announced: Set<string>): strin
   return candidates.filter((p) => !announced.has(p));
 }
 
+/**
+ * Whether a response status means "consider these announced".
+ *
+ * Success, obviously. And 429 — which is the case that matters, because recording
+ * only successes deadlocks: the throttle exists to stop re-announcing listing pages,
+ * so a host being refused *for* re-announcing them never builds up a log, never
+ * skips anything, and gets refused again forever. Observed in production as
+ * `skipped: 0, status: 429` on consecutive runs.
+ *
+ * Anything else (403 on a rejected key, 422 on a host mismatch) is a different fault
+ * and should be retried rather than backed off from.
+ */
+export const recordsOn = (status: number): boolean =>
+  (status >= 200 && status < 300) || status === 429;
+
 async function announcedSince(db: DB, cutoff: string): Promise<Set<string>> {
   // The whole recent window in one read rather than asking about each path: D1 caps
   // a statement at 100 bound parameters, and a busy run has more hubs than that.
@@ -176,14 +191,27 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
   // "nothing was ever submitted", so it goes in the log as a warning, not a stat.
   if (!res.ok) {
     console.warn(`indexnow: ${res.status} ${res.statusText} for ${urlList.length} URLs`);
-  } else {
-    // Only on success, and deliberately after the POST rather than claimed before
-    // it. Two invocations overlapping — a crawl that runs past its 15-minute slot —
-    // could then both pick the same hub and announce it twice. That is one duplicate
-    // against the 96-a-day this replaces, and the alternative costs more than it
-    // saves: a claim taken up front has to be released when the submission fails,
-    // and an isolate that dies mid-flight would leave the page unannounced for a day
-    // with nothing to show why.
+  }
+
+  // Recorded on 429 as well as on success, which is the opposite of what this did
+  // first — and the first version deadlocked. The whole point of the throttle is to
+  // stop re-announcing listing pages, but "only record what was accepted" means a
+  // host that is being refused *for* re-announcing never builds up the log, so the
+  // throttle it needs can never engage: every run resends the same hubs, gets 429,
+  // records nothing, repeat. Observed exactly that — `skipped: 0, status: 429`.
+  //
+  // 429 is "you have told me too often". Whether those URLs were queued or dropped,
+  // the correct response to it is to back off, and backing off is what writing the
+  // row does. Other failures (403 on a bad key, 422 on a bad host) are a different
+  // problem and are left to retry next run.
+  //
+  // Written after the POST rather than claimed before it. Two invocations overlapping
+  // — a crawl that runs past its 15-minute slot — could then both pick the same hub
+  // and announce it twice. That is one duplicate against the 96-a-day this replaces,
+  // and a claim taken up front has to be released when the submission fails; an
+  // isolate that dies mid-flight would leave the page unannounced for a day with
+  // nothing to show why.
+  if (recordsOn(res.status)) {
     await recordAnnounced(db, recorded, nowIso());
   }
 

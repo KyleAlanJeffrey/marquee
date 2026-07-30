@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { KEY_SHAPE, unannounced } from '../src/indexnow';
+import { KEY_SHAPE, recordsOn, unannounced } from '../src/indexnow';
 
 describe('the key a crawler fetches back', () => {
   it('accepts the shapes the .txt route serves', () => {
@@ -35,6 +35,20 @@ describe('holding back listing pages we just announced', () => {
   it('can hold back the whole listing set — the event URLs are the point', () => {
     const candidates = ['/', '/concerts/austin-tx'];
     expect(unannounced(candidates, new Set(candidates))).toEqual([]);
+  });
+
+  it('backs off on 429, or the throttle can never engage', () => {
+    // The deadlock this replaces: recording only successes meant a host refused *for*
+    // re-announcing never built up a log, so it re-announced forever. Production
+    // showed it as `skipped: 0, status: 429` on consecutive runs.
+    expect(recordsOn(429)).toBe(true);
+    // Bing returns 202 for "accepted, key validation pending" — not in its own table.
+    for (const ok of [200, 202, 204]) expect(recordsOn(ok), String(ok)).toBe(true);
+  });
+
+  it('retries rather than backs off when the fault is ours', () => {
+    // 403 is a rejected key and 422 a host mismatch: fix the cause, don't go quiet.
+    for (const bad of [400, 403, 422, 500, 503]) expect(recordsOn(bad), String(bad)).toBe(false);
   });
 
   it('keeps the order it was given, so hubs stay ahead of events in the payload', () => {
