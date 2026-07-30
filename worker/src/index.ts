@@ -122,11 +122,17 @@ app.get('/concerts', async (c) =>
 );
 
 app.get('/concerts/:slug', async (c) => {
-  const html = await cityPage(c.env, siteOrigin(c), c.req.param('slug'));
+  const found = await cityPage(c.env, siteOrigin(c), c.req.param('slug'));
   // A slug no town answers to is a 404, not the SPA shell with a 200. Soft 404s
   // are the fastest way to teach a crawler that made-up URLs on this site work.
-  if (!html) return c.notFound();
-  return c.html(html, 200, { 'Cache-Control': PAGE_CACHE });
+  if (!found) return c.notFound();
+  // A spelling we no longer publish — `/concerts/london-gb` — is a URL already in
+  // sitemaps and IndexNow submissions. Send it to the one we do, permanently, so the
+  // ranking follows rather than splitting.
+  if (found.kind === 'moved') {
+    return c.redirect(`/concerts/${found.slug}`, 301);
+  }
+  return c.html(found.html, 200, { 'Cache-Control': PAGE_CACHE });
 });
 
 // Static assets. Every HTML response is the same client-rendered shell, so its

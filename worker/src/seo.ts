@@ -156,7 +156,11 @@ async function sitemapCounts(db: DB): Promise<Record<Kind, number>> {
 }
 
 const pagesFor = (count: number, kind: string): number => {
-  const wanted = Math.max(1, Math.ceil(count / SITEMAP_PAGE));
+  // No rows, no child: an advertised sitemap that turns out to be an empty urlset
+  // is reported back as an error, and `sitemap-pages.xml` is unconditional, so the
+  // index can never end up empty either way.
+  if (count === 0) return 0;
+  const wanted = Math.ceil(count / SITEMAP_PAGE);
   if (wanted > SITEMAP_MAX_PAGES) {
     console.warn(
       `sitemap: ${count} ${kind} needs ${wanted} pages, capping at ${SITEMAP_MAX_PAGES} — ` +
@@ -486,8 +490,12 @@ async function venueSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       `${n > 0 ? `${n} upcoming concert${n === 1 ? '' : 's'}` : 'Upcoming concerts'} at ${row.name}` +
       `${where ? ` in ${where}` : ''} — full lineup, dates, prices and tickets.`,
     // A room with nothing booked has nothing to say, and there are thousands of
-    // them behind expired listings.
-    noindex: n === 0,
+    // them behind expired listings. Only the head carries it, though: `noindex`
+    // and a canonical pointing elsewhere on the same URL are contradictory
+    // instructions, and Google resolves them by propagating the noindex to the
+    // canonical target — which would take the head down with the member. An empty
+    // cluster's head is noindex on its own page anyway.
+    noindex: head === id && n === 0,
     // Every member id renders the same room from the same cluster, so only the
     // head is a page. Without this, a venue that merged three ways is three URLs
     // competing with each other for the same query.

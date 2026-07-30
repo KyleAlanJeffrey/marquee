@@ -116,7 +116,7 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/admin/backfill-bandsintown?limit&offset` | one-off Bandsintown sweep over known artists (needs `ADMIN_TOKEN`) |
 | `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (a sitemap index; children at `/sitemap-pages.xml`, `/sitemap-events-N.xml`, …) |
 | `GET /concerts` | server-rendered landing page — real HTML, no JS, built live from D1 |
-| `GET /concerts/:town` | one server-rendered page per town (`/concerts/austin-tx`); 404 for a slug no town answers to |
+| `GET /concerts/:town` | one server-rendered page per town (`/concerts/austin-tx`); 301 for another spelling of one, 404 for a slug no town answers to |
 
 ## Deploying
 
@@ -233,6 +233,14 @@ otherwise see an empty shell. Four layers fix that:
    upcoming show — ~1,700 of them — each listing that town's next 120 shows by
    date, its venues, its acts and the towns within 180 miles. Both carry a JSON-LD
    `@graph`. Edge-cached 30 minutes, stale-while-revalidate a day.
+
+   A town is a (city, region) pair on the venue rows, the same identity the app's
+   town search uses — but the rows spell it more than one way. "Montréal" and
+   "Montreal", "United Kingdom" and "GB": one town, two rows, and picking one row
+   would leave the other's shows off the page (61 of Montréal's 126, measured).
+   `cities.ts` folds them — busiest spelling wins the URL and the title, the shows
+   are looked up under every spelling — and the spellings that lost redirect to the
+   one that won, since some of them are already in Google's index.
 
 ### Index hygiene
 
