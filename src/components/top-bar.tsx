@@ -59,12 +59,15 @@ export function TopBar({ onSearchPress, transparent, back, title, action }: Prop
         </View>
       )}
       <View style={[styles.side, styles.right]}>
-        {action ??
-          (onSearchPress && (
-            <Pressable onPress={onSearchPress} hitSlop={10}>
-              <Ionicons name="search" size={22} color={theme.primary} />
-            </Pressable>
-          ))}
+        {/* `!== undefined` rather than `??`: a screen that passes `null` is asking
+            for an empty slot, and `??` would hand it the search icon instead. */}
+        {action !== undefined
+          ? action
+          : onSearchPress && (
+              <Pressable onPress={onSearchPress} hitSlop={10}>
+                <Ionicons name="search" size={22} color={theme.primary} />
+              </Pressable>
+            )}
       </View>
     </View>
   );
