@@ -4,7 +4,7 @@ import { citySlug } from './cities';
 import type { DB } from './db';
 import { getDb } from './db';
 import type { Env } from './env';
-import { events, indexnowLog, venues } from './schema';
+import { events, indexnowLog, ingestRuns, venues } from './schema';
 
 /**
  * Tell the search engines about a show the moment we have it.
@@ -62,6 +62,31 @@ export type IndexNowResult = {
 const nowIso = () => new Date().toISOString().slice(0, 19) + 'Z';
 const hoursAgoIso = (hours: number) =>
   new Date(Date.now() - hours * 3_600_000).toISOString().slice(0, 19) + 'Z';
+
+/**
+ * Keep the outcome where it can be queried later.
+ *
+ * `console.log` is not a record. Chasing the 429 meant catching a cron in
+ * `wrangler tail`, and tail *samples*: at 3,442 events in a window it dropped the
+ * invocation entirely twice, so the same run had to be waited for three times over.
+ * `ingest_runs` exists for exactly this reason — see migration 0006, where a source
+ * whose key went missing kept "succeeding" invisibly — and a submission that is being
+ * refused is the same class of silence.
+ */
+async function recordRun(db: DB, startedAt: string, r: IndexNowResult): Promise<void> {
+  await db.insert(ingestRuns).values({
+    id: crypto.randomUUID(),
+    source: 'indexnow',
+    kind: 'indexnow',
+    startedAt,
+    finishedAt: nowIso(),
+    scanned: r.submitted,
+    inserted: r.events,
+    // A refused submission announced nothing, whatever the URL count says.
+    failed: r.status >= 300 ? r.submitted : 0,
+    note: `${r.status} cities=${r.cities} skipped=${r.skipped}`,
+  });
+}
 
 /** The paths in `candidates` that aren't in the recently-announced set. */
 export function unannounced(candidates: string[], announced: Set<string>): string[] {
@@ -215,11 +240,13 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
     await recordAnnounced(db, recorded, nowIso());
   }
 
-  return {
+  const result: IndexNowResult = {
     submitted: urlList.length,
     events: rows.length,
     cities: cities.size,
     skipped: listings.length - fresh.length,
     status: res.status,
   };
+  await recordRun(db, since, result);
+  return result;
 }
