@@ -27,11 +27,10 @@ me.get('/', async (c) => {
   // cold start — an error status would light up as a fault in logs and in
   // whatever error reporting gets added later.
   if (!userId) {
-    return c.json({ signed_in: false, configured: Boolean(c.env.CLERK_SECRET_KEY), user: null });
+    return c.json({ signed_in: false, user: null });
   }
   return c.json({
     signed_in: true,
-    configured: true,
     user: (await findUser(getDb(c.env.DB), userId)) ?? { id: userId, handle: null },
   });
 });

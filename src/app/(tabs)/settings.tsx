@@ -12,7 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { authConfigured, useAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/auth';
 import { useFollows } from '@/lib/follows-store';
 import { RADIUS_OPTIONS, usePrefs } from '@/lib/prefs-store';
 import { ensureNotificationPermission } from '@/lib/reminders';
@@ -68,37 +68,32 @@ export default function ProfileScreen() {
           Profile
         </ThemedText>
 
-        {/* First, because it is now the thing the rest depends on: with accounts
-            switched on, following and saving need one. Hidden entirely in a build
-            with no Clerk key, where they don't. */}
-        {authConfigured ? (
-          <>
-            <Label>ACCOUNT</Label>
-            <GlassCard style={styles.card}>
-              <PressableScale
-                haptic
-                accessibilityRole="button"
-                accessibilityLabel={signedIn ? 'Manage your account' : 'Sign in'}
-                onPress={() => router.push('/sign-in')}
-                style={styles.row}>
-                <Ionicons
-                  name={signedIn ? 'person-circle' : 'person-circle-outline'}
-                  size={26}
-                  color={signedIn ? theme.primary : theme.textTertiary}
-                />
-                <View style={{ flex: 1 }}>
-                  <ThemedText type="smallBold">
-                    {loading ? 'Checking…' : signedIn ? (displayName ?? 'Your account') : 'Not signed in'}
-                  </ThemedText>
-                  <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                    {signedIn ? 'MANAGE OR SIGN OUT' : 'NEEDED TO FOLLOW, SAVE AND LOG SHOWS'}
-                  </ThemedText>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
-              </PressableScale>
-            </GlassCard>
-          </>
-        ) : null}
+        {/* First, because it is what the rest depends on: following and saving
+            need an account. */}
+        <Label>ACCOUNT</Label>
+        <GlassCard style={styles.card}>
+          <PressableScale
+            haptic
+            accessibilityRole="button"
+            accessibilityLabel={signedIn ? 'Manage your account' : 'Sign in'}
+            onPress={() => router.push('/sign-in')}
+            style={styles.row}>
+            <Ionicons
+              name={signedIn ? 'person-circle' : 'person-circle-outline'}
+              size={26}
+              color={signedIn ? theme.primary : theme.textTertiary}
+            />
+            <View style={{ flex: 1 }}>
+              <ThemedText type="smallBold">
+                {loading ? 'Checking…' : signedIn ? (displayName ?? 'Your account') : 'Not signed in'}
+              </ThemedText>
+              <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                {signedIn ? 'MANAGE OR SIGN OUT' : 'NEEDED TO FOLLOW, SAVE AND LOG SHOWS'}
+              </ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+          </PressableScale>
+        </GlassCard>
 
         <Label>REMINDERS</Label>
         <GlassCard style={styles.card}>

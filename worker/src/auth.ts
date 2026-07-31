@@ -6,14 +6,9 @@
  * <session token>` header into a user id it can trust, and to keep a local mirror
  * row so the rest of the schema has something to point a foreign key at.
  *
- * Two properties this file is written around:
+ * One property this file is written around:
  *
- * 1. **Unset keys mean anonymous, not broken.** `CLERK_SECRET_KEY` is absent in
- *    local dev and on any fork, and the app it is bolted onto works perfectly well
- *    with no account at all — browsing, following, saving and the private log are
- *    all on-device. So a missing key resolves every request to "signed out" and
- *    nothing throws. The failure mode of the whole feature is the status quo.
- * 2. **Verification should cost no subrequest, and only does if it's configured
+ * **Verification should cost no subrequest, and only does if it's configured
  *    to.** `verifyToken` checks the signature against Clerk's JWKS; given only
  *    `CLERK_SECRET_KEY` it fetches that JWKS from Clerk's API (cached by the SDK
  *    after the first miss), and given `CLERK_JWT_KEY` — the PEM public key from
@@ -52,10 +47,10 @@ export function bearerToken(header: string | undefined | null): string | null {
 /**
  * Verify a session token and return its subject.
  *
- * Returns anonymous for every kind of failure — no key, no token, expired,
- * malformed, signed by someone else. The caller cannot act differently on any of
- * them (they all mean "not signed in"), and telling them apart in a response
- * would say which half of a guess was right.
+ * Returns anonymous for every kind of failure — no token, expired, malformed,
+ * signed by someone else. The caller cannot act differently on any of them (they
+ * all mean "not signed in"), and telling them apart in a response would say which
+ * half of a guess was right.
  *
  * A token minted by a *different* Clerk instance fails here on the signature
  * alone: the JWKS being checked against is ours, fetched with our key. What
@@ -72,9 +67,8 @@ export function bearerToken(header: string | undefined | null): string | null {
  * native token has been inspected and shown to carry an `azp` we can name.
  */
 export async function callerFrom(env: Env, authorization: string | undefined): Promise<Caller> {
-  const secret = env.CLERK_SECRET_KEY;
   const token = bearerToken(authorization);
-  if (!secret || !token) return ANONYMOUS;
+  if (!token) return ANONYMOUS;
 
   const parties = (env.CLERK_AUTHORIZED_PARTIES ?? '')
     .split(',')
@@ -88,7 +82,7 @@ export async function callerFrom(env: Env, authorization: string | undefined): P
     // type-checks against neither but fails *open* if it ever compiled: an
     // undefined subject read as a valid caller.
     const claims = await verifyToken(token, {
-      secretKey: secret,
+      secretKey: env.CLERK_SECRET_KEY,
       ...(env.CLERK_JWT_KEY ? { jwtKey: env.CLERK_JWT_KEY } : {}),
       ...(parties.length ? { authorizedParties: parties } : {}),
     });

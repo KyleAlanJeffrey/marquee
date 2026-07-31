@@ -2,20 +2,14 @@
  * Accounts, on the client side.
  *
  * Clerk holds the identity; this file is the seam between it and the rest of the
- * app, and it exists so that the rest of the app never imports Clerk directly.
- * Two reasons that matters here:
+ * app, and it exists so the rest of the app never imports Clerk directly.
  *
- * 1. **No key means no accounts, and no accounts has to keep working.** Marquee
- *    shipped without them, and everything except publishing still works that way:
- *    browsing, following, saving, reminders and the private log are all on-device.
- *    So `<AuthProvider>` renders its children untouched when
- *    `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` is unset — no provider, no network, no
- *    crash — and `useAuth()` answers "signed out" to everyone who asks. A fork
- *    with no Clerk account gets the app as it was.
- * 2. **Hooks can't be called conditionally.** Since the provider may be absent,
- *    anything reading Clerk's hooks has to be inside a component that only renders
- *    when it is present. That's what the split below is for, and it is the whole
- *    reason this is a context of our own rather than a re-export.
+ * **The key is required.** There is no keyless mode and nothing anywhere asks
+ * whether accounts are switched on. A build without
+ * `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` throws here, on purpose: the alternative was
+ * a build that looked fine, quietly compiled every account-shaped thing out of
+ * itself, and took two deploys to notice. `.env.production` is tracked so that a
+ * fresh clone has the key without anyone configuring anything.
  */
 
 import { ClerkProvider, useAuth as useClerkAuth, useUser } from '@clerk/expo';
@@ -24,14 +18,9 @@ import { createContext, useContext, useEffect, useMemo } from 'react';
 
 import { setTokenProvider } from '@/lib/api';
 
-/** Unset in local dev and on forks, which is a supported way to run this app. */
 export const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
 
-export const authConfigured = Boolean(CLERK_PUBLISHABLE_KEY);
-
 export type AuthState = {
-  /** False when Clerk isn't configured at all — distinct from "signed out". */
-  configured: boolean;
   /** Still deciding. Callers should not render a signed-out state on this. */
   loading: boolean;
   signedIn: boolean;
@@ -49,27 +38,15 @@ export type AuthState = {
   signOut: () => Promise<void>;
 };
 
-const SIGNED_OUT: AuthState = {
-  configured: false,
-  loading: false,
-  signedIn: false,
-  userId: null,
-  displayName: null,
-  avatarUrl: null,
-  getToken: async () => null,
-  signOut: async () => {},
-};
+const AuthContext = createContext<AuthState | null>(null);
 
-const AuthContext = createContext<AuthState>(SIGNED_OUT);
-
-/** Reads Clerk's hooks. Only ever rendered inside a real `<ClerkProvider>`. */
+/** Reads Clerk's hooks, so it only renders inside `<ClerkProvider>`. */
 function ClerkBridge({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn, userId, getToken, signOut } = useClerkAuth();
   const { user } = useUser();
 
   const value = useMemo<AuthState>(
     () => ({
-      configured: true,
       loading: !isLoaded,
       signedIn: Boolean(isSignedIn),
       userId: userId ?? null,
@@ -92,9 +69,6 @@ function ClerkBridge({ children }: { children: React.ReactNode }) {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // No key: don't mount Clerk at all. `<ClerkProvider>` with an empty key throws,
-  // and the point is that this configuration runs.
-  if (!authConfigured) return <>{children}</>;
   return (
     // `tokenCache` is Clerk's own: SecureStore (Keychain / EncryptedSharedPreferences)
     // on native, and deliberately `undefined` on web, where Clerk uses browser
@@ -107,5 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useAuth(): AuthState {
-  return useContext(AuthContext);
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth used outside AuthProvider');
+  return ctx;
 }

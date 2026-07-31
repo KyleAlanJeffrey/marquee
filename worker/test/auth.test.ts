@@ -29,12 +29,8 @@ describe('bearerToken', () => {
 });
 
 describe('callerFrom', () => {
-  it('is anonymous when Clerk is not configured at all', async () => {
-    // The whole app has to work in this state — it is local dev, it is a fork, and
-    // it is the app that shipped before accounts existed. A missing key must never
-    // become an error path.
-    await expect(callerFrom(env(), 'Bearer whatever')).resolves.toEqual(ANONYMOUS);
-  });
+  // No "anonymous when Clerk isn't configured" case: the key is required now, so a
+  // missing one is a broken deploy rather than a state worth pinning behaviour to.
 
   it('is anonymous when there is no token', async () => {
     await expect(callerFrom(env({ CLERK_SECRET_KEY: 'sk_test_x' }), undefined)).resolves.toEqual(ANONYMOUS);

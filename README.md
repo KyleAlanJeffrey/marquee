@@ -199,26 +199,32 @@ with `"cli.//" is not allowed`, which is why these notes live here instead.
 
 **Clerk** is the identity provider (`@clerk/expo` on the client, `@clerk/backend`
 in the Worker) — see "Accounts" in `todo.md` for why it was bought rather than
-built. Four variables, and only the first two are needed:
+built. Four variables; **the first two are required and the app does not run
+without them.**
 
-- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` (client, in `.env`) — publishable by design;
-  it names the Clerk instance and authorises nothing.
-- `CLERK_SECRET_KEY` (Worker, in `.dev.vars` / `wrangler secret put`). **Set this
-  whenever the publishable key is set.** The two halves apart is the one bad
-  configuration: the app would sign somebody in while the Worker verifies nothing,
-  so it looks signed-in and every write 401s.
+- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` (client) — publishable by design; it names
+  the Clerk instance and authorises nothing. Production and EAS builds get it from
+  the tracked `.env.production`, so there is nothing to configure for those; `.env`
+  is only for pointing local dev at a different instance. A build without it throws
+  at startup on purpose — the alternative was a build that silently compiled every
+  account-shaped thing out of itself and looked fine doing it.
+- `CLERK_SECRET_KEY` (Worker, in `.dev.vars` / `wrangler secret put`) — the half
+  that makes a session mean anything to the API. Note that `wrangler dev` does not
+  reload `.dev.vars`; restart it after editing.
 - `CLERK_JWT_KEY` (Worker, optional) — the PEM public key from **API keys → Show
   JWT public key**. With it, verifying a session is pure computation; without it
   the SDK fetches the JWKS from Clerk's API on a cache miss, and a Worker's
   subrequest budget is shared with ingestion. Worth setting in production.
 - `CLERK_AUTHORIZED_PARTIES` (Worker, optional) — comma-separated origins allowed
   to have minted a session. Guards the subdomain-cookie-leak case; a token from a
-  *different* Clerk instance already fails on its signature.
+  *different* Clerk instance already fails on its signature. **Leave it unset
+  unless you have inspected a real native token**: `@clerk/backend` throws on a
+  *missing* `azp` exactly as hard as a wrong one, and only the web frontend
+  reliably sends one, so an allowlist locks the iOS and Android apps out and looks
+  like an ordinary "not signed in".
 
-**Leaving all of them unset is a supported configuration**, not a broken one: no
-provider is mounted, every request resolves to signed-out, and the app behaves
-exactly as it did before accounts existed. `GET /api/me` reports which state
-you're in — `{"signed_in":false,"configured":false}` means no keys are set.
+`GET /api/me` answers `{"signed_in":false,"user":null}` when nobody is signed in
+and `401`s a `POST` from an unverified caller.
 
 **Bandsintown** has far more of the club/DIY tier than Ticketmaster, and its API
 is gated: it's for "artists and anyone working on their behalf". If you manage an

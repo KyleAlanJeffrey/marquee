@@ -32,11 +32,11 @@ export type Env = {
   /**
    * Clerk's secret key — the one that makes accounts exist at all.
    *
-   * Unset is a supported state, not a broken one: every route resolves to
-   * "signed out", and signed out is exactly the app that shipped before accounts
-   * did. Local dev and forks run this way.
+   * Required, not optional. Unset used to mean "everybody is signed out", which
+   * read as a working deploy and behaved like a broken one. `.dev.vars` locally,
+   * `wrangler secret put` in production.
    */
-  CLERK_SECRET_KEY?: string;
+  CLERK_SECRET_KEY: string;
   /**
    * The PEM public key from the Clerk dashboard (API keys → Show JWT public key).
    *

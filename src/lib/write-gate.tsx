@@ -45,19 +45,10 @@ export type WriteGate = {
   deny: (what: string) => void;
 };
 
-/**
- * Open by default, and that is deliberate.
- *
- * With no Clerk key there are no accounts to require, and the app has to keep
- * working exactly as it did before they existed — a fork, a local dev run, and the
- * build that shipped before this commit. So an absent provider means "allowed",
- * never "denied": failing closed here would turn a missing env var into an app
- * where nothing can be saved and nothing says why.
- */
-export const OPEN_GATE: WriteGate = { allowed: true, pending: false, deny: () => {} };
-
-export const WriteGateContext = createContext<WriteGate>(OPEN_GATE);
+export const WriteGateContext = createContext<WriteGate | null>(null);
 
 export function useWriteGate(): WriteGate {
-  return useContext(WriteGateContext);
+  const ctx = useContext(WriteGateContext);
+  if (!ctx) throw new Error('useWriteGate used outside WriteGateProvider');
+  return ctx;
 }

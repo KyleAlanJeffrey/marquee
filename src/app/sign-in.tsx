@@ -10,7 +10,6 @@ import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { authConfigured } from '@/lib/auth';
 
 import { SignInReason, SignedInPanel } from '@/components/sign-in-shared';
 
@@ -64,30 +63,24 @@ export default function SignInScreen() {
       <View style={styles.body}>
         <SignInReason why={why} />
 
-        {authConfigured ? (
-          <PressableScale
-            haptic
-            accessibilityRole="button"
-            accessibilityLabel="Continue to sign in"
-            disabled={busy}
-            onPress={open}
-            style={[styles.cta, { backgroundColor: theme.primary, opacity: busy ? 0.6 : 1 }]}>
-            {busy ? (
-              <ActivityIndicator color={theme.background} />
-            ) : (
-              <>
-                <Ionicons name="log-in-outline" size={18} color={theme.background} />
-                <ThemedText type="smallBold" style={{ color: theme.background }}>
-                  CONTINUE
-                </ThemedText>
-              </>
-            )}
-          </PressableScale>
-        ) : (
-          <ThemedText type="small" themeColor="textSecondary">
-            Accounts aren&apos;t switched on in this build, so nothing here needs one.
-          </ThemedText>
-        )}
+        <PressableScale
+          haptic
+          accessibilityRole="button"
+          accessibilityLabel="Continue to sign in"
+          disabled={busy}
+          onPress={open}
+          style={[styles.cta, { backgroundColor: theme.primary, opacity: busy ? 0.6 : 1 }]}>
+          {busy ? (
+            <ActivityIndicator color={theme.background} />
+          ) : (
+            <>
+              <Ionicons name="log-in-outline" size={18} color={theme.background} />
+              <ThemedText type="smallBold" style={{ color: theme.background }}>
+                CONTINUE
+              </ThemedText>
+            </>
+          )}
+        </PressableScale>
 
         {failed ? (
           <ThemedText type="small" style={{ color: theme.error }}>

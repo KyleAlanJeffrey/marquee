@@ -10,7 +10,7 @@ import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { authConfigured, useAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/auth';
 
 // Clerk's `appearance` is plain CSS values outside React, so it can't use
 // `useTheme()`. The app is dark-only today, which is what makes that safe.
@@ -70,11 +70,7 @@ export default function SignInScreen() {
         <SignInReason why={why} />
         <SignedInPanel />
 
-        {!authConfigured ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            Accounts aren&apos;t switched on in this build, so nothing here needs one.
-          </ThemedText>
-        ) : signedIn ? null : (
+        {signedIn ? null : (
           <>
             {/* Two routeless components rather than Clerk's own routing: this screen
                 is a modal over whatever you were doing, and handing path control to

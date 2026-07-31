@@ -490,6 +490,55 @@ real abuse angle is sign-up spam against the dev instance, and that instance has
 CAPTCHA enabled. `CLERK_SECRET_KEY` is the half that matters and it is in neither
 the repo nor the bundle.
 
+**Deployed and confirmed**, bundle `entry-1a8c0a95…`:
+
+- Key body present in the deployed bundle, and `window.Clerk` is defined on the live site.
+- `marquee.rocks/settings` sections are now `MARQUEE, ACCOUNT, REMINDERS, SEARCH
+  RADIUS`, with the row reading "Not signed in / NEEDED TO FOLLOW, SAVE AND LOG SHOWS".
+- `marquee.rocks/sign-in` renders the Clerk card with three social buttons —
+  `cl-button__apple`, `cl-button__facebook`, `cl-button__google` — plus email and
+  password. Apple showed up on its own the moment Kyle enabled it; the screen
+  renders whatever the instance reports, as designed.
+
+#### No keyless mode any more (decided by Kyle 2026-07-31)
+
+"Make all the logic as simple as possible as well. No logic for whether a key for
+clerk is present or not. The website should fail if it isnt."
+
+Every "are accounts switched on" branch is gone. What that removed:
+
+- `authConfigured`, and the `AuthState.configured` field it fed.
+- `AuthProvider`'s no-key path that rendered `children` with no Clerk at all, and
+  the `SIGNED_OUT` default state that existed only to answer `useAuth()` in that
+  case. `useAuth()` now throws outside its provider.
+- `OPEN_GATE`, along with the paragraph arguing that an absent provider should mean
+  "allowed". `useWriteGate()` throws outside its provider too.
+- The `authConfigured ?` wrappers on the Profile ACCOUNT section and on both
+  sign-in screens, including two copies of "Accounts aren't switched on in this
+  build".
+- Server side: `CLERK_SECRET_KEY` is a required `Env` field rather than optional,
+  `callerFrom` no longer has a `!secret` branch, and `/api/me` no longer returns a
+  `configured` flag. The test asserting the keyless path was deleted rather than
+  reworded — it pinned behaviour for a configuration that is no longer supported.
+
+The gate simplified along with it: `allowed: !loading && signedIn`,
+`pending: loading`. No `configured` term in either.
+
+`tsc` clean, 215 tests in 14 files (was 216 — the deleted one).
+
+**One platform difference is real and is not the landing page.** Native
+`sign-in.tsx` uses Clerk's hosted flow (`useHostedAuth`); web `sign-in.web.tsx` uses
+Clerk's prebuilt `<SignIn>`/`<SignUp>` components, which do not exist on native.
+Same entry points, same gate, same copy — different last mile, because Clerk ships
+different tools for each. Everything else about accounts is now identical by
+construction, since there is no longer a branch that could differ.
+
+- [ ] **Pre-existing lint error, untouched:** `src/app/event/[id].tsx:113` —
+  `Date.now()` in render trips `react-hooks/purity`. It arrived with the attendance
+  log in `d2c1dd1` and is the only thing `expo lint` reports. Left alone because
+  fixing it changes when "has this show happened" is evaluated, which deserves its
+  own look rather than a drive-by.
+
 #### The gate: browse open, keeping gated (decided by Kyle 2026-07-31)
 
 Asked how hard the account requirement should be, Kyle chose **gate saving, allow

@@ -13,7 +13,7 @@ import { WriteGateContext, type WriteGate } from '@/lib/write-gate';
  * and navigation; that half is what the data layer sees.
  */
 export function WriteGateProvider({ children }: { children: ReactNode }) {
-  const { configured, signedIn, loading } = useAuth();
+  const { signedIn, loading } = useAuth();
 
   const deny = useCallback((what: string) => {
     router.push({ pathname: '/sign-in', params: { why: what } });
@@ -21,16 +21,16 @@ export function WriteGateProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<WriteGate>(
     () => ({
-      // Deliberately not `|| loading`. Clerk takes a moment — a network round trip
-      // on web — to say whether a stored session is still good, and during it the
-      // app is already interactive. Treating that as allowed let a signed-out user
-      // slip a Follow past the gate depending on how fast their network was, so the
-      // window is now reported as `pending` and the write waits for the answer.
-      allowed: !configured || (!loading && signedIn),
-      pending: configured && loading,
+      // `loading` is deliberately not folded into `allowed`. Clerk takes a moment —
+      // a network round trip on web — to say whether a stored session is still
+      // good, and during it the app is already interactive. Treating that as allowed
+      // let a signed-out user slip a Follow past the gate depending on how fast
+      // their network was, so it is reported as `pending` and the write waits.
+      allowed: !loading && signedIn,
+      pending: loading,
       deny,
     }),
-    [configured, loading, signedIn, deny],
+    [loading, signedIn, deny],
   );
 
   return <WriteGateContext.Provider value={value}>{children}</WriteGateContext.Provider>;
