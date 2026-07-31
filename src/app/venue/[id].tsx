@@ -15,7 +15,7 @@ import { StageBackground } from '@/components/stage-background';
 import { StaticMap } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
-import { Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshVenueEvents } from '@/lib/discovery';
 import { useFollowedVenues } from '@/lib/followed-venues-store';
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   header: { padding: Spacing.three, gap: Spacing.one + 2 },
-  name: { color: '#fff' },
+  name: { color: Colors.dark.onImage },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   followRow: { flexDirection: 'row', marginTop: Spacing.two },
   // Wraps, because four chips don't fit one line on a narrow phone and a

@@ -41,7 +41,7 @@ export function EventGridCard({
           onPress={onToggleFollow}
           hitSlop={8}
           style={[styles.heart, { backgroundColor: following ? theme.cyan : 'rgba(0,0,0,0.45)', borderColor: theme.border }]}>
-          <Ionicons name={following ? 'heart' : 'heart-outline'} size={15} color={following ? theme.onCyan : '#fff'} />
+          <Ionicons name={following ? 'heart' : 'heart-outline'} size={15} color={following ? theme.onCyan : theme.onImage} />
         </Pressable>
       </View>
       <View style={styles.body}>

@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Colors, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type Props = {
@@ -55,5 +55,5 @@ const styles = StyleSheet.create({
   action: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: Spacing.two, paddingLeft: Spacing.three },
   bar: { width: 4, height: 22, borderRadius: 2 },
   badge: { paddingHorizontal: Spacing.one + 2, paddingVertical: 2, borderRadius: Radius.xs },
-  badgeText: { color: '#fff', letterSpacing: 1, fontSize: 10 },
+  badgeText: { color: Colors.dark.onErrorContainer, letterSpacing: 1, fontSize: 10 },
 });

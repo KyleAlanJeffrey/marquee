@@ -39,7 +39,7 @@ export function ComingUpCard({ event, onPress }: { event: NearbyEvent; onPress: 
           <ThemedText type="labelSm" style={{ color: theme.primary }}>
             {month}
           </ThemedText>
-          <ThemedText type="smallBold" style={{ color: '#fff' }}>
+          <ThemedText type="smallBold" style={{ color: theme.onImage }}>
             {day}
           </ThemedText>
         </View>
@@ -72,7 +72,7 @@ export function ComingUpCard({ event, onPress }: { event: NearbyEvent; onPress: 
             <Ionicons
               name={reminded ? 'notifications' : 'notifications-outline'}
               size={16}
-              color={reminded ? theme.onPrimary : '#fff'}
+              color={reminded ? theme.onPrimary : theme.onImage}
             />
           </Pressable>
         </View>

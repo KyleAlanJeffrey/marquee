@@ -58,6 +58,16 @@ const stage = {
   // "orange" and these are a salmon and a deep red.
   error: '#ffb4ab',
   errorContainer: '#93000a',
+  onErrorContainer: '#ffdad6',
+
+  /**
+   * Text and icons sitting on photography or a scrim over it.
+   *
+   * Pure white on purpose, and the one place the palette's `text` is wrong: over
+   * an image, the warm olive cast of #e5e1e4 reads as dirty, and there is no
+   * controlled background behind it to keep contrast honest.
+   */
+  onImage: '#ffffff',
 
   /** Following is expressed in cyan throughout, never in the primary lime. */
   following: '#7df4ff',
@@ -96,7 +106,6 @@ export const Fonts = {
 } as const;
 
 export const Spacing = {
-  half: 2,
   one: 4,
   two: 8,
   three: 16,
@@ -142,7 +151,14 @@ export const Glow = {
     shadowOffset: { width: 0, height: 0 },
     elevation: 8,
   },
-  card: {
+  /**
+   * The one plain drop shadow, for a full-bleed image tile.
+   *
+   * Not for glass cards — those carry no shadow at all and get their light from a
+   * brighter top border instead. A photo tile has no border to light, so it needs
+   * something to separate it from the charcoal behind it.
+   */
+  lift: {
     shadowColor: '#000',
     shadowOpacity: 0.5,
     shadowRadius: 14,

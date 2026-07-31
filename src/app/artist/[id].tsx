@@ -17,7 +17,7 @@ import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
-import { Glow, Radius, Spacing } from '@/constants/theme';
+import { Colors, Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   hero: { height: 500, justifyContent: 'flex-end' },
   heroBody: { padding: Spacing.three, gap: Spacing.one + 2 },
-  heroName: { color: '#fff' },
+  heroName: { color: Colors.dark.onImage },
   heroActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginTop: Spacing.two, flexWrap: 'wrap' },
   heroGenres: { flexDirection: 'row', gap: Spacing.two },
   heroStats: { flexDirection: 'row', alignItems: 'center', marginTop: Spacing.three },

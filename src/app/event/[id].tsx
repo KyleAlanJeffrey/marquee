@@ -14,7 +14,7 @@ import { PressableScale } from '@/components/pressable-scale';
 import { StaticMap } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
-import { Glow, Radius, Spacing } from '@/constants/theme';
+import { Colors, Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { useSavedShows } from '@/lib/saved-shows-store';
@@ -252,7 +252,7 @@ export default function EventScreen() {
                   <ThemedText type="labelSm" style={{ color: theme.cyan }}>
                     SUPPORT
                   </ThemedText>
-                  <ThemedText type="smallBold" numberOfLines={1} style={{ color: '#fff' }}>
+                  <ThemedText type="smallBold" numberOfLines={1} style={{ color: theme.onImage }}>
                     {s.name}
                   </ThemedText>
                 </View>
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.one,
   },
   liveDot: { width: 7, height: 7, borderRadius: 4 },
-  heroTitle: { color: '#fff' },
+  heroTitle: { color: Colors.dark.onImage },
   heroVenue: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: Spacing.one },
   section: { paddingHorizontal: Spacing.three, gap: Spacing.two + 2 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, padding: Spacing.three },

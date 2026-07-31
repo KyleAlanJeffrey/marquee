@@ -5,7 +5,7 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
-import { Glow, Radius, Spacing } from '@/constants/theme';
+import { Colors, Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatEventDateParts, formatPrice, formatTime, formatVenue } from '@/lib/format';
 import type { NearbyEvent } from '@/lib/types';
@@ -27,7 +27,7 @@ export function FeaturedCard({ event, following, onPress, onToggleFollow }: Prop
     <PressableScale
       onPress={onPress}
       scaleTo={0.99}
-      style={[styles.card, { borderColor: theme.border }, Glow.card]}>
+      style={[styles.card, { borderColor: theme.border }, Glow.lift]}>
       <Image
         source={event.artist_image_url ? { uri: event.artist_image_url } : undefined}
         style={StyleSheet.absoluteFill}
@@ -59,7 +59,7 @@ export function FeaturedCard({ event, following, onPress, onToggleFollow }: Prop
             borderColor: following ? theme.cyan : theme.border,
           },
         ]}>
-        <Ionicons name={following ? 'heart' : 'heart-outline'} size={20} color={following ? theme.onCyan : '#fff'} />
+        <Ionicons name={following ? 'heart' : 'heart-outline'} size={20} color={following ? theme.onCyan : theme.onImage} />
       </Pressable>
 
       <View style={styles.body}>
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     gap: Spacing.two,
   },
-  name: { color: '#fff', marginTop: 2 },
+  name: { color: Colors.dark.onImage, marginTop: 2 },
   venueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   priceCol: { alignItems: 'flex-end' },
 });

@@ -39,7 +39,7 @@ export function GalleryStrip({ imageUrl }: { imageUrl: string | null }) {
             end={{ x: 1, y: 0 }}
           />
           <View style={[styles.likeChip, { backgroundColor: 'rgba(0,0,0,0.4)' }]}>
-            <Ionicons name="heart" size={12} color="#fff" />
+            <Ionicons name="heart" size={12} color={theme.onImage} />
           </View>
         </View>
       ))}

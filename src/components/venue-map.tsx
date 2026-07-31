@@ -35,7 +35,7 @@ export function VenueMap({ pins, locationLabel, withinMiles, onExplore }: Props)
             <Ionicons name="navigate" size={18} color={theme.cyan} />
           </View>
           <View style={{ flex: 1 }}>
-            <ThemedText type="smallBold" style={{ color: '#fff' }} numberOfLines={1}>
+            <ThemedText type="smallBold" style={{ color: theme.onImage }} numberOfLines={1}>
               {locationLabel ?? 'Your area'}
             </ThemedText>
             <ThemedText type="labelSm" style={{ color: theme.textSecondary }}>
@@ -48,7 +48,7 @@ export function VenueMap({ pins, locationLabel, withinMiles, onExplore }: Props)
             haptic={false}
             onPress={onExplore}
             style={[styles.exploreBtn, { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: theme.border }]}>
-            <ThemedText type="label" style={{ color: '#fff', fontSize: 12 }}>
+            <ThemedText type="label" style={{ color: theme.onImage, fontSize: 12 }}>
               Explore Area
             </ThemedText>
           </PressableScale>
