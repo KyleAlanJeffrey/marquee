@@ -5,9 +5,9 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { GlassCard } from '@/components/glass-card';
-import { MeshBackground } from '@/components/mesh-background';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
+import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
@@ -59,7 +59,7 @@ export default function ProfileScreen() {
   return (
     <View style={{ flex: 1 }}>
       <PageMeta title="Profile" description="Your Marquee search radius, reminders and notification settings." />
-      <MeshBackground />
+      <StageBackground />
       <TopBar />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <ThemedText type="headline" style={styles.title}>

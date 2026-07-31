@@ -9,9 +9,9 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { DateBlock } from '@/components/date-block';
 import { ErrorState } from '@/components/error-state';
 import { FollowButton } from '@/components/follow-button';
-import { MeshBackground } from '@/components/mesh-background';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
+import { StageBackground } from '@/components/stage-background';
 import { StaticMap } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
@@ -75,7 +75,7 @@ export default function VenueScreen() {
         title={`${v.name}${place ? ` — ${place}` : ''} tickets & upcoming shows`}
         description={`Upcoming concerts at ${v.name}${place ? ` in ${place}` : ''} — full lineup, dates, prices and tickets.`}
       />
-      <MeshBackground />
+      <StageBackground />
       <FlatList
         data={events}
         keyExtractor={(e: VenueEvent) => e.event_id}

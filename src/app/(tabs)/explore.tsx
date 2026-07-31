@@ -9,10 +9,10 @@ import { ComingUpCard } from '@/components/coming-up-card';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorState } from '@/components/error-state';
 import { FeaturedCard } from '@/components/featured-card';
-import { MeshBackground } from '@/components/mesh-background';
 import { PageMeta } from '@/components/page-meta';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
 import { SectionTitle } from '@/components/section-title';
+import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { VenueTile } from '@/components/venue-card';
@@ -175,7 +175,7 @@ export default function ExploreScreen() {
         title="Concerts near you"
         description="See which artists are playing near you over the next few months, filter by genre and radius, and follow the ones you don't want to miss."
       />
-      <MeshBackground />
+      <StageBackground />
       <TopBar onSearchPress={() => router.push('/search')} />
 
       {denied ? (
@@ -373,7 +373,8 @@ const styles = StyleSheet.create({
     marginTop: Spacing.three,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two + 4,
-    borderRadius: Radius.pill,
+    // Inputs take the 4px UI radius, same as buttons.
+    borderRadius: Radius.sm,
     borderWidth: 1,
   },
   venuesHeader: {

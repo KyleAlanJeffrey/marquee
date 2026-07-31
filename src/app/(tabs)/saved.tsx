@@ -5,10 +5,10 @@ import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'r
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { EmptyState } from '@/components/empty-state';
-import { MeshBackground } from '@/components/mesh-background';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
+import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
@@ -103,7 +103,7 @@ export default function SavedScreen() {
         title="Saved shows"
         description="The concerts you put aside on Marquee, soonest first, with live prices and door times."
       />
-      <MeshBackground />
+      <StageBackground />
       <TopBar onSearchPress={() => router.push('/search')} />
 
       {!ready ? (

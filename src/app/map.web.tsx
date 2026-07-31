@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { EventMapList } from '@/components/event-map-list';
-import { MeshBackground } from '@/components/mesh-background';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
+import { StageBackground } from '@/components/stage-background';
 import { MAPBOX_TOKEN } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
@@ -178,7 +178,9 @@ export default function MapScreen() {
       map.fitBounds(bounds, { padding: 80, maxZoom: 13, duration: 0 });
       fittedRef.current = true;
     }
-  }, [groups, ready]);
+    // The three theme tokens are listed because the pin markup reads them; the
+    // palette is a module constant, so in practice they never re-fire this.
+  }, [groups, ready, theme.primary, theme.cyanSoft, theme.backgroundLowest]);
 
   // Keep the GL canvas sized to the window.
   useEffect(() => {
@@ -191,7 +193,7 @@ export default function MapScreen() {
     return (
       <View style={{ flex: 1 }}>
         <PageMeta title="Concert map" description="Every upcoming concert near you, plotted on a map by venue." />
-        <MeshBackground />
+        <StageBackground />
         {coords ? (
           <EventMapList coords={coords} radius={radiusMiles} />
         ) : (

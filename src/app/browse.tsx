@@ -6,10 +6,10 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { EventGridCard } from '@/components/event-grid-card';
 import { FeaturedCard } from '@/components/featured-card';
-import { MeshBackground } from '@/components/mesh-background';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
+import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Glow, Radius, Spacing } from '@/constants/theme';
@@ -81,7 +81,7 @@ export default function BrowseScreen() {
             : 'Every upcoming show inside your radius, filterable by genre — grid, list or map.'
         }
       />
-      <MeshBackground />
+      <StageBackground />
       <TopBar back title={town ?? 'Browse'} onSearchPress={() => router.push('/search')} />
 
       <FlatList

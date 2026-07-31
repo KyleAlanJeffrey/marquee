@@ -214,7 +214,8 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     margin: Spacing.three,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.md,
+    // Inputs take the 4px UI radius, same as buttons.
+    borderRadius: Radius.sm,
     borderWidth: 1.5,
   },
   input: { flex: 1, paddingVertical: Spacing.two + 4, fontSize: 16, fontFamily: Fonts.body },

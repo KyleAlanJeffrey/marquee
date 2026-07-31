@@ -7,11 +7,11 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorState } from '@/components/error-state';
 import { FollowButton } from '@/components/follow-button';
-import { MeshBackground } from '@/components/mesh-background';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
 import { Segmented } from '@/components/segmented';
+import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { VenueRow, placeOf } from '@/components/venue-card';
@@ -107,7 +107,7 @@ export default function FollowingScreen() {
         title="Artists and venues you follow"
         description="The artists and venues you follow on Marquee, with their next shows near you and a reminder before doors."
       />
-      <MeshBackground />
+      <StageBackground />
       <TopBar onSearchPress={() => router.push('/search')} />
 
       {nothingFollowed ? (
