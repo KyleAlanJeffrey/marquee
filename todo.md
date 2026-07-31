@@ -116,6 +116,11 @@ during A/B):
     stuck; check `/settings` remembers a radius. (I can't create a real session.)
   - [ ] When a production Clerk instance exists: `pk_live_` key into
     `.env.production`, delete the startup warning that nags about `pk_test_`.
+    This is also what removes the residual Clerk pop-up window during
+    email/username sign-up on marquee.rocks: a `pk_test_` instance on a real
+    domain has no first-party cookie, so ClerkJS syncs the dev session through
+    `accounts.dev` in a separate window. Instance plumbing, not our code —
+    verification and redirects are already onsite.
   - [ ] Onboarding copy note: sign-in has no first-run reward any more (there is
     no local data to migrate) — a new account starts empty by design.
 

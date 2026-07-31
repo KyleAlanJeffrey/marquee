@@ -100,6 +100,10 @@ export function useFollowPerson(key: string) {
   });
 }
 
+/** Sync attempts per sign-in, and the pause between them. */
+const SYNC_TRIES = 3;
+const SYNC_RETRY_MS = 2500;
+
 /**
  * Push the mirror row when a session appears.
  *
@@ -107,6 +111,12 @@ export function useFollowPerson(key: string) {
  * Clerk itself (no body — there is nothing the client is trusted to say). Once
  * per user per app run: profiles change rarely, and the ones who change theirs
  * mid-session see it after their next launch.
+ *
+ * Retried, not fire-and-forget: the first attempt rides a session Clerk minted
+ * moments ago, and losing that race once used to mean the account had no
+ * profile row until the next launch — a fresh sign-up staring at "this profile
+ * doesn't exist". (The server also self-heals an own-profile read now; this
+ * retry is what fixes `/api/me` and the lists reads that don't go through it.)
  *
  * Rendered as a component rather than called as a hook so it can sit in the
  * root layout next to the other mount-once wiring.
@@ -119,20 +129,34 @@ export function ProfileSync() {
   useEffect(() => {
     if (!signedIn || !userId || synced.current === userId) return;
     synced.current = userId;
-    apiPost('/me', {})
-      .then(() => {
-        // `/api/me` and every profile read come off the mirror row this just
-        // rewrote — the own-profile card on the Profile tab in particular may
-        // have 404ed moments ago, before the row existed.
-        queryClient.invalidateQueries({ queryKey: ['me'] });
-        queryClient.invalidateQueries({ queryKey: ['profile'] });
-      })
-      .catch((err) => {
-        // Cleared so the next auth change retries, instead of one failed sync
-        // meaning this session never writes a profile at all.
-        synced.current = null;
-        console.warn('profile sync failed:', err);
-      });
+
+    let cancelled = false;
+    const attempt = (triesLeft: number) => {
+      apiPost('/me', {})
+        .then(() => {
+          if (cancelled) return;
+          // `/api/me` and every profile read come off the mirror row this just
+          // rewrote — the own-profile card on the Profile tab in particular may
+          // have 404ed moments ago, before the row existed.
+          queryClient.invalidateQueries({ queryKey: ['me'] });
+          queryClient.invalidateQueries({ queryKey: ['profile'] });
+        })
+        .catch((err) => {
+          console.warn(`profile sync failed (${triesLeft - 1} retries left):`, err);
+          if (cancelled) return;
+          if (triesLeft > 1) {
+            setTimeout(() => !cancelled && attempt(triesLeft - 1), SYNC_RETRY_MS);
+          } else {
+            // Out of tries: clear the marker so the next auth change starts over.
+            synced.current = null;
+          }
+        });
+    };
+    attempt(SYNC_TRIES);
+
+    return () => {
+      cancelled = true;
+    };
   }, [signedIn, userId, queryClient]);
 
   return null;

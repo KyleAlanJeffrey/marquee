@@ -1,7 +1,7 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 
-import { callerFrom, ensureUser } from '../auth';
+import { callerFrom, ensureUser, syncProfileFromClerk } from '../auth';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
 import { personFollows, users } from '../schema';
@@ -67,7 +67,27 @@ async function findByKey(db: DB, key: string) {
 
 people.get('/:key', async (c) => {
   const db = getDb(c.env.DB);
-  const person = await findByKey(db, c.req.param('key'));
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  let person = await findByKey(db, c.req.param('key'));
+
+  // Your own profile self-heals. The mirror row is normally written by the
+  // client calling `POST /me` after sign-in, but that call rides a freshly
+  // minted session and can lose the race with Clerk's own handshake — which
+  // left a real signed-up account staring at "this profile doesn't exist".
+  // A signed-in caller asking for themselves *is* proof the account exists,
+  // so answer by syncing rather than by 404ing.
+  if (!person && userId && c.req.param('key') === userId) {
+    try {
+      await syncProfileFromClerk(c.env, db, userId);
+    } catch (err) {
+      // Clerk being unreachable shouldn't turn "who am I" into a 500 — the
+      // token already proved the account, so claim the bare row and render a
+      // nameless profile until a later sync fills it in.
+      console.warn('own-profile self-heal could not reach Clerk:', err);
+      await ensureUser(db, userId);
+    }
+    person = await findByKey(db, userId);
+  }
   if (!person) return c.json({ error: 'not found' }, 404);
 
   // Joined against `users` exactly as the lists below are, so the number on the
@@ -85,7 +105,6 @@ people.get('/:key', async (c) => {
 
   // Whether *you* follow them only exists when there is a you. Anonymous readers
   // get null, and the client renders the follow button from it either way.
-  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
   const viewerFollows =
     userId && userId !== person.id
       ? !!(await db
