@@ -51,6 +51,16 @@ export type Collection<T, Ref> = {
    * you get a log row with a rating and no show attached.
    */
   update: (ref: Ref, patch: Partial<T>) => void;
+  /**
+   * Swap the whole list for a known-good one — what the account sync adopts after
+   * merging the device's copy with the server's.
+   *
+   * Not gated, unlike `add`: this only runs while signed in, and it is the payoff
+   * the gate exists to deliver rather than something to hold back. It also does
+   * what a disk read cannot, which is *state* what the list is — so it unlocks
+   * persistence and makes any read still in flight stop merging into it.
+   */
+  replaceAll: (items: T[]) => void;
 };
 
 export type CollectionConfig<Ref, T extends Ref> = {
@@ -114,6 +124,11 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
     // because a later read still has to be merged in without undoing it.
     const readOk = useRef(false);
     const rereading = useRef(false);
+    // Set once `replaceAll` has said what the list is. A disk read still in flight
+    // must not merge its entries back in after that: the sync already folded the
+    // stored copy into what it wrote, so merging again would resurrect whatever the
+    // user removed on another device.
+    const superseded = useRef(false);
 
     /** One read attempt. Resolves to whether it produced a list. */
     const readStored = useCallback(async () => {
@@ -125,7 +140,9 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
           console.warn(`stored ${label} was not a list; leaving it alone`);
           return false;
         }
-        setItems((current) => mergeStored(current, stored, dropped.current, isValid, matches));
+        if (!superseded.current) {
+          setItems((current) => mergeStored(current, stored, dropped.current, isValid, matches));
+        }
         readOk.current = true;
         setWritable(true);
         return true;
@@ -297,9 +314,20 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
       [applyUpdate, guard],
     );
 
+    const replaceAll = useCallback((next: T[]) => {
+      superseded.current = true;
+      // The list is known now, which is exactly the condition `readOk` guards: the
+      // reason not to persist was "we might be about to write [] over a list we
+      // failed to read", and that no longer applies.
+      readOk.current = true;
+      setWritable(true);
+      touched.current = true;
+      setItems(next);
+    }, []);
+
     const value = useMemo(
-      () => ({ items, ready, has, add, remove, toggle, update }),
-      [items, ready, has, add, remove, toggle, update],
+      () => ({ items, ready, has, add, remove, toggle, update, replaceAll }),
+      [items, ready, has, add, remove, toggle, update, replaceAll],
     );
 
     return <Context.Provider value={value}>{children}</Context.Provider>;

@@ -533,6 +533,79 @@ Same entry points, same gate, same copy — different last mile, because Clerk s
 different tools for each. Everything else about accounts is now identical by
 construction, since there is no longer a branch that could differ.
 
+#### The lists follow the account now (2026-07-31)
+
+`GET` / `PUT /api/me/lists`, one `user_lists` row per `(user, kind)` holding the
+client's own JSON array, plus `src/lib/list-sync.tsx` on the device.
+
+**Storage is a document, not four relational tables.** The job is portability — a
+lost phone is not a lost history — and not querying. Nothing asks "who follows this
+artist"; what gets asked is "give me my list back". That buys one table, one pair of
+routes, no column-per-field mapping to keep in step with four client types, and no
+working around SQLite's 999-variable statement limit when somebody with 400 follows
+signs in. `0010_user_lists.sql` records the point at which to stop: the moment a list
+has to be read by anyone but its owner. Public reviews (phase 3) and a friends feed
+(phase 4) both need real columns, and neither is a migration of this table — a review
+is a different object from a private log entry.
+
+**The sync policy: pull once per device, push on every change.** Three cases, decided
+by a `marquee.list-sync.v1` mark holding the last account synced on this device:
+
+| mark | meaning | what happens |
+| --- | --- | --- |
+| absent | lists built before any account | **union** local + remote, keep both |
+| ≠ this user | shared phone, or a second account | **adopt** the account's copy |
+| = this user | ordinary cold start | keep local, push it |
+
+The union is the migration this whole feature exists for, and `mergeLists` explains
+why adding up is the only answer that can't throw away something real. The
+*different account* case must not merge: it would push the previous person's follows
+and gig history into the new person's account, which on a shared phone is somebody
+else's private data ending up under your name.
+
+- [ ] **Two devices used in the same period will not see each other's changes** until
+  the second one's first sign-in. A union cannot express a deletion — that is asserted
+  as a test in `list-merge.test.ts` so it can't later be mistaken for a bug — so
+  merging on every start would resurrect everything anyone ever removed. Fixing it
+  properly means per-entry tombstones and versions. Pull-once is the honest version of
+  the small thing rather than a broken version of the big one.
+- [ ] **Not verified end to end**, because that needs a real session and creating an
+  account isn't something I can do. What *is* verified: both routes 401 without a
+  token, a follow with neither `artistId` nor `spotifyId` is 400, an empty body is
+  400, and signed out on web the app makes **zero** requests to `/me/lists` and
+  writes no sync mark. Sign in, add a follow, then sign in on another browser and
+  check it arrives.
+
+One trap avoided in `local-collection.tsx`: `replaceAll` sets a `superseded` flag, so
+a disk read still in flight stops merging its entries into the list afterwards.
+Without it the hydrate merge would re-add exactly what the sync had just resolved.
+
+#### CodeRabbit on the Clerk work: two findings, both acted on
+
+Reviewed `d2c1dd1..1819bbd`, 16 files.
+
+**1. `.env.production` ships a `pk_test_` key** — accepted the risk, rejected the
+prescription. It advised removing the value so builds fail loudly instead of falling
+back to the development instance. But there is no production Clerk instance to point
+at, and accounts are required now, so an empty value doesn't fail *loudly* — it
+throws at startup and takes the site down. That is the exact state Kyle reported
+twenty minutes earlier ("not seeing any deployed clerk account logic"). The real
+complaint underneath is **silence**, and the key says which instance it is, so
+`src/lib/auth.tsx` now warns on startup when a release build is running on a
+`pk_test_` key. Noisy, and still deployable.
+
+**2. Nothing tested the missing-`CLERK_SECRET_KEY` path** — accepted, and it exposed
+that the earlier "no keyless mode" pass was incomplete. Making the field required in
+`Env` was a *compile-time* claim only; at runtime `verifyToken` threw, the catch
+swallowed it, and every caller came back anonymous. So the server still did the thing
+Kyle had asked to remove: looked healthy while quietly treating everybody as signed
+out. `callerFrom` now throws when the secret is absent, asserted by a test.
+
+Safe to be that blunt because the blast radius was checked rather than assumed:
+`callerFrom` is called only from `/api/me*` and `/api/me/lists`. A deploy that loses
+the secret 500s the account endpoints and leaves browsing, search and every page
+working.
+
 - [x] **Lint error fixed**, `src/app/event/[id].tsx` — `Date.now()` in the component
   body tripped `react-hooks/purity`. Now a `useNow()` hook with a lazy `useState`
   initializer, so the clock is read once per mount. Two wrong turns on the way,
@@ -569,11 +642,9 @@ Verified on web signed out: tapping "Were you there?" routes to
 **What this does *not* yet do:** the data still lives only on the device. Signing in
 unlocks the button; it does not yet sync anything or make it portable. That half
 needs the Worker to trust a session, so it is blocked on `CLERK_SECRET_KEY`.
+*(Unblocked and built the same day — see "The lists follow the account now" below.)*
 
-- [ ] **Server-side storage for the four lists** — D1 tables, routes, and migrate
-  the device's copy up on first sign-in. Blocked on the secret key. Until it lands,
-  the gate is friction ahead of its own payoff, which is the right order but not a
-  good place to stop.
+- [x] **Server-side storage for the four lists** — done 2026-07-31, see below.
 
 #### The instance is configured wrong for iOS (found 2026-07-31)
 

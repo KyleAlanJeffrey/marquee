@@ -20,6 +20,7 @@ import { AttendancesProvider } from '@/lib/attendances-store';
 import { AuthProvider } from '@/lib/auth';
 import { FollowedVenuesProvider } from '@/lib/followed-venues-store';
 import { FollowsProvider } from '@/lib/follows-store';
+import { ListSync } from '@/lib/list-sync';
 import { useNotificationObserver } from '@/lib/notifications';
 import { PrefsProvider } from '@/lib/prefs-store';
 import { SavedShowsProvider } from '@/lib/saved-shows-store';
@@ -58,7 +59,12 @@ function LocalStores({ children }: { children: React.ReactNode }) {
       <FollowedVenuesProvider>
         <SavedShowsProvider>
           <AttendancesProvider>
-            <PrefsProvider>{children}</PrefsProvider>
+            <PrefsProvider>
+              {/* Inside all four, because it reads and replaces every one of them.
+                  Renders nothing; it is here for the effects. */}
+              <ListSync />
+              {children}
+            </PrefsProvider>
           </AttendancesProvider>
         </SavedShowsProvider>
       </FollowedVenuesProvider>

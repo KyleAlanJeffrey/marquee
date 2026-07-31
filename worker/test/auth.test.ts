@@ -29,8 +29,20 @@ describe('bearerToken', () => {
 });
 
 describe('callerFrom', () => {
-  // No "anonymous when Clerk isn't configured" case: the key is required now, so a
-  // missing one is a broken deploy rather than a state worth pinning behaviour to.
+  it('refuses to answer at all when the secret key is missing', async () => {
+    // The key is required now, and this is what enforces it. Making the field
+    // non-optional in `Env` was a compile-time claim only: without this throw the
+    // runtime went on treating everybody as signed out, which is indistinguishable
+    // from a working deploy where nobody happens to be logged in.
+    //
+    // Safe to be this blunt because nothing outside `/api/me*` calls `callerFrom`,
+    // so a deploy that loses the secret breaks the account endpoints and leaves
+    // browsing alone.
+    await expect(callerFrom(env(), 'Bearer whatever')).rejects.toThrow(/CLERK_SECRET_KEY/);
+    // Including when there is no token to check — otherwise a misconfigured deploy
+    // looks healthy right up until somebody signs in.
+    await expect(callerFrom(env(), undefined)).rejects.toThrow(/CLERK_SECRET_KEY/);
+  });
 
   it('is anonymous when there is no token', async () => {
     await expect(callerFrom(env({ CLERK_SECRET_KEY: 'sk_test_x' }), undefined)).resolves.toEqual(ANONYMOUS);

@@ -54,11 +54,19 @@ export async function apiGet<T>(path: string): Promise<T> {
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  return send<T>('POST', path, body);
+}
+
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return send<T>('PUT', path, body);
+}
+
+async function send<T>(method: 'POST' | 'PUT', path: string, body: unknown): Promise<T> {
   const res = await fetch(url(path), {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`POST ${path} → ${res.status}`);
+  if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
   return res.json() as Promise<T>;
 }

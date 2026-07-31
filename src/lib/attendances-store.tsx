@@ -117,7 +117,7 @@ export function AttendancesProvider({ children }: { children: ReactNode }) {
 export type NewAttendance = Omit<Attendance, 'loggedAt' | 'rating' | 'venueRating' | 'note'>;
 
 export function useAttendances() {
-  const { items, ready, has, add, remove, toggle, update } = collection.useCollection();
+  const { items, ready, has, add, remove, toggle, update, replaceAll } = collection.useCollection();
 
   const blank = (show: NewAttendance): Attendance => ({
     ...show,
@@ -132,6 +132,8 @@ export function useAttendances() {
     attended: [...items].sort((a, b) => b.startsAt.localeCompare(a.startsAt)),
     /** Insertion order, which is what the storage holds. */
     raw: items,
+    /** For the account sync only — see `list-sync.tsx`. */
+    replaceAll,
     ready,
     wasThere: has,
     /** Everything logged about one show, or null. */

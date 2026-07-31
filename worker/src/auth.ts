@@ -65,8 +65,20 @@ export function bearerToken(header: string | undefined | null): string | null {
  * a well-meaning allowlist of `marquee.rocks` would lock out the iOS and Android
  * apps and look exactly like every other "not signed in". Set it only once a real
  * native token has been inspected and shown to carry an `azp` we can name.
+ *
+ * Throws — rather than returning anonymous — when `CLERK_SECRET_KEY` is missing.
+ * Making the field required in `Env` was only a compile-time claim; without this the
+ * runtime still quietly treated every caller as signed out, which is the exact
+ * failure that took two deploys to notice on the client. The blast radius is checked
+ * and small: nothing outside `/api/me*` calls this, so a deploy that loses the
+ * secret 500s the account endpoints and leaves browsing, search and every page
+ * working.
  */
 export async function callerFrom(env: Env, authorization: string | undefined): Promise<Caller> {
+  if (!env.CLERK_SECRET_KEY) {
+    throw new Error('CLERK_SECRET_KEY is not set; the Worker cannot verify sessions');
+  }
+
   const token = bearerToken(authorization);
   if (!token) return ANONYMOUS;
 

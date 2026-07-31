@@ -65,9 +65,11 @@ export function SavedShowsProvider({ children }: { children: ReactNode }) {
 type NewSavedShow = Omit<SavedShow, 'savedAt'>;
 
 export function useSavedShows() {
-  const { items, ready, has, add, remove, toggle } = collection.useCollection();
+  const { items, ready, has, add, remove, toggle, replaceAll } = collection.useCollection();
   return {
     saved: items,
+    /** For the account sync only — see `list-sync.tsx`. */
+    replaceAll,
     ready,
     isSaved: has,
     save: (show: NewSavedShow) => add({ ...show, savedAt: Date.now() }),

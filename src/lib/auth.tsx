@@ -20,6 +20,18 @@ import { setTokenProvider } from '@/lib/api';
 
 export const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
 
+// A release build running on Clerk's *development* instance. Legal, and how the app
+// ships today — there is only one instance — but it caps sign-ups, stamps
+// "Development mode" on the card, and is the thing that will still be true by
+// accident on the day a production instance exists and one build forgets to point at
+// it. The key says which it is, so there is no reason for that day to be quiet.
+if (!__DEV__ && CLERK_PUBLISHABLE_KEY.startsWith('pk_test_')) {
+  console.warn(
+    'Clerk: this is a production build using a pk_test_ (development) instance. ' +
+      'Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY to the pk_live_ key in .env.production.',
+  );
+}
+
 export type AuthState = {
   /** Still deciding. Callers should not render a signed-out state on this. */
   loading: boolean;

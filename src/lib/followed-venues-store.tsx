@@ -53,9 +53,11 @@ export function FollowedVenuesProvider({ children }: { children: ReactNode }) {
 type NewFollowedVenue = Omit<FollowedVenue, 'followedAt'>;
 
 export function useFollowedVenues() {
-  const { items, ready, has, add, remove, toggle } = collection.useCollection();
+  const { items, ready, has, add, remove, toggle, replaceAll } = collection.useCollection();
   return {
     venues: items,
+    /** For the account sync only — see `list-sync.tsx`. */
+    replaceAll,
     ready,
     isFollowingVenue: has,
     followVenue: (venue: NewFollowedVenue) => add({ ...venue, followedAt: Date.now() }),

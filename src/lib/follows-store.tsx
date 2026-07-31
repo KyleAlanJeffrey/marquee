@@ -69,9 +69,11 @@ type NewFollow = Omit<FollowedArtist, 'followedAt'>;
  * every screen reads them.
  */
 export function useFollows() {
-  const { items, ready, has, add, remove, toggle } = collection.useCollection();
+  const { items, ready, has, add, remove, toggle, replaceAll } = collection.useCollection();
   return {
     follows: items,
+    /** For the account sync only — see `list-sync.tsx`. */
+    replaceAll,
     ready,
     isFollowing: has,
     follow: (artist: NewFollow) => add({ ...artist, followedAt: Date.now() }),
