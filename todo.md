@@ -819,17 +819,25 @@ out to rest on a fact worth its own writeup:
   somebody with 200 gigs behind them can log **none** of them. For a product whose
   loop is "log what you've seen" that is a blank page where the value goes.
 
-  The way out is in that document, and the wedge is something already built: the log
-  renders purely from its own snapshot — no `useEvent`, no fetch, not revalidated —
-  so **a logged show does not need a row in `events`**. That splits the problem into
-  discovery (hard) and logging (already solved), and the recommended first pass is
-  three pickers over the 3,771 artists and 2,891 venue clusters we already have, into
-  a `past_shows` table with synthetic `past:<uuid>` ids. No new data source, no
-  moderation queue.
+  **Then the cheap experiment got run, and it changed the plan.** Bandsintown answers
+  for past dates — `date=past`, `date=all`, explicit ranges — and across **eight
+  artists drawn at random from our own `artists` table, 8 of 8 returned history**,
+  averaging ~137 past events each, back to a hard floor at 2014. Obscure ones
+  included: Marti Jones, 20 shows, 2014–2019. Crucially **~99.6% carry coordinates**
+  (1,088 of 1,091), so they join to our 2,891 venue clusters through the same
+  proximity path the live crawl already uses, and Bandsintown keys by *name* — so the
+  23%-MBID problem that sank Setlist.fm doesn't apply here. Checked for a silent cap
+  and found none: Radiohead reads 0 for both 2015 and 2019, which is correct rather
+  than broken.
 
-  Two cheap experiments come first and neither has been run: whether Bandsintown
-  answers for past dates (we already hold the credential), and the real MusicBrainz
-  join rate against 50 realistic gigs.
+  So the plan is **on-demand backfill, not contribution**: the first person to ask
+  about an artist pays for one fetch, which keeps ~half a million rows off a cron
+  budget already tight on CPU. User contribution shrinks to pre-2014 and rooms
+  Bandsintown doesn't know; Setlist.fm drops to a maybe and MusicBrainz drops off.
+
+  The wedge that makes it cheap is already built: the log renders purely from its own
+  snapshot — no `useEvent`, no fetch, not revalidated — so **a logged show does not
+  need a row in `events`**, and the picker is new rows behind an existing surface.
 
 - **[`docs/social.md`](docs/social.md)** — the object model, and the structural
   difference that has to drive it: a film is watched by millions separately, a concert

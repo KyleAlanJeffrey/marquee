@@ -56,7 +56,11 @@ shape on both sides.
 
 ## The sources, honestly
 
-### Setlist.fm — the only real corpus, and already assessed
+### Setlist.fm — was the only candidate, now the pre-2014 one
+
+*(Written before the Bandsintown result below, and left standing because the reasoning
+still holds — it is just answering a smaller question now.)*
+
 
 ~7M setlists going back decades, contributed by the exact people we want. It is the
 closest thing to a concert TMDB that exists.
@@ -95,13 +99,44 @@ The Showbox. Not a catalogue.
 
 Had exactly this data. The public API is closed to new keys. Not available.
 
-### Bandsintown past events
+### Bandsintown past events — **run, and it works**
 
-We already hold a Bandsintown `app_id` and the client is written. Their artist events
-endpoint takes a date range, and whether it will answer for past dates is a
-**five-minute experiment nobody has run**. If it returns even a couple of years of
-history for artists we already track, it is by far the cheapest partial answer, and
-it needs no new credential or agreement. **Run this before designing anything else.**
+This was written as "a five-minute experiment nobody has run". It has now been run,
+and it is the answer.
+
+`GET /artists/{name}/events?date=past`, `date=all`, and explicit ranges
+(`date=2015-01-01,2016-12-31`) all return past events. Measured against **eight
+artists drawn at random from our own `artists` table**, not hand-picked:
+
+| artist | past events | range | with coordinates |
+| --- | --- | --- | --- |
+| Big Richard | 308 | 2022-02 → 2026-09 | 308 |
+| Bilmuri | 235 | 2018-08 → 2026-10 | 235 |
+| KANA-BOON | 240 | 2017-10 → 2026-10 | 240 |
+| Radiohead | 101 | 2014-07 → 2025-12 | 98 |
+| Alex Isley | 70 | 2015-12 → 2026-09 | 70 |
+| Takuya Nakamura | 69 | 2016-10 → 2026-11 | 68 |
+| boygenius | 49 | 2018-11 → 2023-10 | 49 |
+| Marti Jones | 20 | 2014-07 → 2019-10 | 20 |
+
+**8 of 8 returned history**, including the obscure ones — Marti Jones is not a name
+anybody would have cherry-picked. Mean ~137 past events per artist.
+
+Three properties that matter more than the counts:
+
+1. **Coordinates on ~99.6% of past events** (1,088 of 1,091). That is the join. Our
+   2,891 venue clusters are deduped by proximity, so a past event with lat/lng lands
+   in an existing cluster through the same `sameVenue` path the live crawl already
+   uses. No new matching logic.
+2. **Keyed by artist name, not MBID.** The 23%-MBID problem that sank Setlist.fm does
+   not apply, and our Bandsintown client already queries by name.
+3. **A hard floor at 2014.** An explicit `2005-01-01,2010-12-31` range for Radiohead
+   returns `0`, so this is their data horizon rather than a paging limit.
+
+Checked for a silent cap and did not find one. Radiohead's yearly slices give
+2016: 23, 2017: 30, 2018: 24 — and **0 for both 2015 and 2019**, which is *correct*:
+they were recording *A Moon Shaped Pool* in 2015 and off the road in 2019. Those 77
+are most of the 101, so the total looks complete rather than truncated.
 
 ### User contribution
 
@@ -111,11 +146,40 @@ because the only record of that night is in the heads of the people who were the
 
 ## Recommendation
 
-**Let people log past shows by picking from what we already have, and treat the event
-row as something we derive rather than something we require.**
+**Backfill 2014-onward from Bandsintown, on demand. Keep user contribution for what
+that cannot reach.**
 
-The key observation is that Marquee is not missing the hard parts. A concert is
-mostly a pointer at three things:
+The experiment above rewrote this section. The original plan led with user-contributed
+shows because there appeared to be no usable corpus; there is one, we already hold the
+credential, and it joins to our venues by coordinates. Building a contribution flow
+first would have been a moderation queue we did not need to open.
+
+### The primary path: on-demand backfill
+
+Eagerly crawling 3,771 artists × ~137 past events is roughly **half a million rows**,
+against a cron budget the todo already flags as tight on CPU and subrequests. So it is
+pulled, not pushed:
+
+- Somebody says "I saw Bilmuri" → fetch *that* artist's past events → they pick the
+  night. The first person to care about an artist pays for the fetch, once.
+- Cache per artist with a `past_events_fetched_at` stamp, same shape as the existing
+  `enrichment_checked_at`.
+- Self-limiting by construction: the only artists backfilled are ones a real person
+  asked about, which is also the only useful prioritisation available.
+
+Past events land in `events` — they are machine-owned rows from a source we already
+ingest, which is exactly what that table is for — flagged so the repair passes and
+the feeds can tell "happened" from "cancelled" and so the crawl does not try to
+refresh them.
+
+### The fallback: user contribution, for pre-2014 and the missing tail
+
+Still needed, but now for a much smaller job: gigs before Bandsintown's 2014 horizon,
+and rooms it does not know. That is where the three-picker flow below belongs, and
+scoping it to the residue rather than the whole problem is what keeps it small.
+
+The key observation for that path is that Marquee is not missing the hard parts. A
+concert is mostly a pointer at three things:
 
 | part | do we have it? |
 | --- | --- |
@@ -160,15 +224,27 @@ dedupe, and nearly impossible to vandalise into something libellous.
 
 ## What to build first, in order
 
-1. **Run the Bandsintown past-date experiment.** One request. It either changes the
-   plan or rules out the cheapest option.
-2. **Measure the MusicBrainz join** against 50 realistic gigs, so "coverage is thin"
-   is a number rather than a received opinion.
-3. **`past_shows` + the three-picker flow + synthetic ids.** Ships value with no new
-   data source and no moderation queue, and makes the log usable for somebody with a
-   history. This is the increment that makes the pivot real.
-4. **Re-read Setlist.fm's terms for the lookup-at-logging shape**, and email them.
-   Slow, so start it early even though it lands last.
+1. ~~Run the Bandsintown past-date experiment.~~ **Done** — see above. It changed the
+   plan, which is what made it worth doing before anything was built.
+2. **On-demand past-event backfill for one artist.** A route that takes an artist,
+   fetches their past Bandsintown events, joins venues by coordinates through the
+   existing dedupe path, and writes them. This is the increment that makes the pivot
+   real: it takes the catalogue from 19 days of history to about a decade, for every
+   artist anybody asks about.
+3. **"I saw them before" on the artist page** — the past events, pick one, log it. The
+   log screen already renders whatever it is handed, so this is a picker over new rows
+   rather than a new surface.
+4. **Then measure what is left.** With 2014-onward covered, the size of the remaining
+   problem is a number rather than a guess, and it decides whether steps 5 and 6 are
+   worth anything.
+5. **`past_shows` + three pickers + synthetic ids**, for pre-2014 and rooms
+   Bandsintown does not know.
+6. **Setlist.fm for the pre-2014 corpus**, if step 4 says the residue is big enough to
+   be worth an email and a terms review. Much weaker a case than it was an hour ago.
+
+MusicBrainz drops off the list. It was a candidate because the corpus problem looked
+unsolved; for 2014-onward it is now strictly worse than a source we already have, and
+for pre-2014 it shares Setlist.fm's MBID join problem without its coverage.
 
 ## Open, and Kyle's call
 
