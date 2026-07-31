@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anybody:ital,wght@0,400;0,500;0,700;0,800;1,800&display=block">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1200px;height:630px;overflow:hidden}
+  body{
+    /* Same charcoal base and the same two stage lights as the landing page, so a
+       social unfurl and the page it links to look like one thing. */
+    background:
+      radial-gradient(58% 52% at 12% 0%,rgba(195,244,0,.16),transparent 70%),
+      radial-gradient(50% 46% at 92% 100%,rgba(125,244,255,.12),transparent 72%),
+      #131315;
+    color:#e5e1e4;
+    font-family:'Anybody',sans-serif;
+    padding:62px 72px;
+    display:flex;
+    flex-direction:column;
+    justify-content:space-between;
+    position:relative;
+  }
+  /* Grain, matching the landing page's, so the flat dark isn't a void. */
+  body::after{
+    content:'';position:absolute;inset:0;opacity:.05;mix-blend-mode:overlay;pointer-events:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .top{display:flex;align-items:center;gap:16px}
+  .brand{font-weight:700;font-size:40px;letter-spacing:-.04em}
+  .eyebrow{
+    font-weight:800;font-size:19px;letter-spacing:.2em;text-transform:uppercase;color:#c3f400;
+    margin-bottom:22px;
+  }
+  h1{
+    font-weight:800;font-style:italic;text-transform:uppercase;
+    font-size:96px;line-height:.94;letter-spacing:-.05em;color:#e5e1e4;
+  }
+  h1 .lit{
+    background:linear-gradient(100deg,#abd600,#c3f400 45%,#7df4ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .foot{display:flex;align-items:center;gap:18px;font-size:21px;font-weight:500;color:#8e9379}
+  .rule{width:56px;height:3px;background:#c3f400;flex:none}
+</style>
+</head>
+<body>
+  <div class="top">
+    <svg width="52" height="52" viewBox="0 0 64 64" fill="none">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="64" y2="0" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#c3f400"/><stop offset="1" stop-color="#00dbe9"/>
+      </linearGradient></defs>
+      <rect x="6" y="9" width="52" height="46" rx="15" fill="none" stroke="url(#g)" stroke-width="3.5"/>
+      <line x1="32" y1="13" x2="32" y2="51" stroke="#00dbe9" stroke-width="3" stroke-linecap="round"/>
+      <line x1="18.5" y1="26" x2="18.5" y2="40" stroke="#abd600" stroke-width="3.5" stroke-linecap="round"/>
+      <line x1="25" y1="22" x2="25" y2="44" stroke="#c3f400" stroke-width="3.5" stroke-linecap="round"/>
+      <line x1="39" y1="20" x2="39" y2="46" stroke="#00dbe9" stroke-width="3.5" stroke-linecap="round"/>
+      <line x1="45.5" y1="27" x2="45.5" y2="39" stroke="#7df4ff" stroke-width="3.5" stroke-linecap="round"/>
+    </svg>
+    <span class="brand">Marquee</span>
+  </div>
+
+  <div>
+    <p class="eyebrow">No account needed</p>
+    <h1>Every concert<br><span class="lit">near you.</span></h1>
+  </div>
+
+  <div class="foot">
+    <span class="rule"></span>
+    <span>Ticketmaster, SeatGeek and Bandsintown, merged into one listing</span>
+  </div>
+</body>
+</html>
