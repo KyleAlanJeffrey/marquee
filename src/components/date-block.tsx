@@ -5,7 +5,7 @@ import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatEventDateParts } from '@/lib/format';
 
-/** The "ticket stub" date block: month over day, Space Grotesk. */
+/** The "ticket stub" date block: month over day. */
 export function DateBlock({
   startsAt,
   size = 'md',

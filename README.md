@@ -373,8 +373,21 @@ rules. OpenStreetMap was the free option for websites and had no `website` tag f
 two of four venues checked, so a button that worked half the time would be worse
 than one that always gets you there in one more tap.
 
-Regenerate the social card and PWA icons in `public/` with
-`node scripts/gen-web-assets.mjs`.
+### Brand assets
+
+`node scripts/gen-web-assets.mjs` redraws every icon — the PWA set in `public/`,
+the favicon, and the app, splash and Android adaptive layers in `assets/images/` —
+from one vector mark plus `public/manifest.json`. The mark's geometry is a copy of
+`src/components/brand-logo.tsx`, so the inline SVG in the app and the PNGs on disk
+stay the same drawing.
+
+The 1200×630 social card is built separately, because it sets Anybody and `sharp`
+can only use fonts installed locally. `scripts/og-image.html` is the source; the
+generator's header has the headless-Chrome command that rasterises it.
+
+**After rebuilding the card, bump `?v` on `OG_IMAGE` in `worker/src/page.ts` and in
+`src/app/+html.tsx`.** Facebook, X, Slack, iMessage and Google all cache the card
+against its URL, so without a new URL an existing share keeps showing the old one.
 
 ## How it works
 
