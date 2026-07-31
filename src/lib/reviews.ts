@@ -102,6 +102,29 @@ export function useReportReview() {
   });
 }
 
+export type RatingStats = { count: number; average: number | null };
+
+/** Reviews only headline a page once a few people agree — one rave is a rave. */
+export const STATS_FLOOR = 3;
+
+export function useArtistReviewStats(artistId: string) {
+  return useQuery({
+    queryKey: ['artist-review-stats', artistId],
+    enabled: !!artistId,
+    queryFn: (): Promise<{ live: RatingStats }> =>
+      apiGet(`/artists/${encodeURIComponent(artistId)}/review-stats`),
+  });
+}
+
+export function useVenueReviewStats(venueId: string) {
+  return useQuery({
+    queryKey: ['venue-review-stats', venueId],
+    enabled: !!venueId,
+    queryFn: (): Promise<{ room: RatingStats }> =>
+      apiGet(`/venues/${encodeURIComponent(venueId)}/review-stats`),
+  });
+}
+
 /**
  * Block or unblock a person. Blocking severs follows both ways and hides both
  * parties' reviews from each other — the server owns those consequences; this

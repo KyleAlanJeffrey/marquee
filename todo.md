@@ -73,7 +73,15 @@ History-backfill has landed, so **nothing below is blocked any more** except D o
    Still open in B: Kyle's end-to-end pass in the UI; a content *filter* beyond
    report/block/hide if store review demands one; and the store submission
    itself, which this phase shares a deadline with (guideline 1.2).
-3. [ ] **Phase C — the roll-ups.** Artist live-reputation and venue-quality
+3. [~] **Phase C — the roll-ups.** First slice 2026-07-31: `GET
+   /api/{artists,venues}/:id/review-stats` (indexed aggregate over public
+   reviews; artist = performance scores, venue = room scores), rendered in the
+   artist hero and venue stat grid behind a 3-review confidence floor. Still
+   open: the denormalised `rating_count`/`rating_sum` counters once volume
+   justifies them, and `AggregateRating` JSON-LD on the server-rendered pages —
+   deliberately deferred until real reviews exist, since fabricated-looking
+   review markup is a manual-action category, not a ranking nudge.
+   Original brief: **the roll-ups.** Artist live-reputation and venue-quality
    scores on `/artist/[id]` and `/venue/[id]`, which are already server-rendered
    and indexed. Highest-leverage phase: "is X good live" becomes a page that
    answers a question people type into Google. Denormalised `rating_count` /

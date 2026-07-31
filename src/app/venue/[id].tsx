@@ -14,6 +14,7 @@ import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { StageBackground } from '@/components/stage-background';
 import { StatGrid, type Stat } from '@/components/stat-grid';
+import { STATS_FLOOR, useVenueReviewStats } from '@/lib/reviews';
 import { StaticMap } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
@@ -33,6 +34,7 @@ export default function VenueScreen() {
   const venue = useVenue(id);
   const info = useVenueInfo(id);
   const shows = useInfiniteVenueEvents(id);
+  const roomStats = useVenueReviewStats(id);
   const queryClient = useQueryClient();
   const { isFollowingVenue, toggleVenue } = useFollowedVenues();
 
@@ -73,6 +75,7 @@ export default function VenueScreen() {
 
   const place = [v.city, v.region].filter(Boolean).join(', ');
   const stats = info.data?.stats ?? null;
+  const room = roomStats.data?.room;
   const description = info.data?.description ?? null;
   const photo = info.data?.photo ?? null;
 
@@ -84,9 +87,16 @@ export default function VenueScreen() {
    * quiet room. The upcoming count is the accent because it is the reason to be
    * on this page.
    */
+  // "Is it a good room" — reviews' second score, aggregated, behind the same
+  // confidence floor as the artist page (docs/social.md phase C).
+  const roomCell: Stat | null =
+    room && room.count >= STATS_FLOOR && room.average != null
+      ? { value: `★ ${room.average}`, label: `THE ROOM · ${room.count} REVIEWS`, accent: true }
+      : null;
   const statCells: Stat[] = stats
     ? [
-        stats.upcoming > 0 && { value: String(stats.upcoming), label: 'UPCOMING SHOWS', accent: true },
+        roomCell,
+        stats.upcoming > 0 && { value: String(stats.upcoming), label: 'UPCOMING SHOWS', accent: !roomCell },
         stats.acts > 1 && { value: String(stats.acts), label: 'ARTISTS BOOKED' },
         stats.busiest_month && stats.busiest_month_shows > 1
           ? { value: monthLabel(stats.busiest_month), label: 'BUSIEST MONTH' }

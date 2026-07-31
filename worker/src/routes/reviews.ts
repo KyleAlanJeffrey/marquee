@@ -240,4 +240,42 @@ reviewRoutes.post('/reviews/:id/report', zValidator('json', reportBody), async (
   return c.json({ ok: true });
 });
 
+/**
+ * The roll-ups (phase C): what reviews say about an artist live, or about a
+ * room, across every show. Computed on read for now — one indexed aggregate
+ * per page at today's volume; the denormalised counters the design doc calls
+ * for are the scale-up step, recorded in todo.md, and this endpoint's shape is
+ * what they'd feed either way.
+ *
+ * The confidence floor lives in the client ("3 reviews" renders, "1 review"
+ * doesn't headline a page), but the raw count always returns so the floor is
+ * a display decision rather than hidden data.
+ */
+const ratingStats = async (db: DB, col: 'artist_id' | 'venue_id', id: string, ratingCol: 'rating' | 'venue_rating') =>
+  (await db
+    .select({
+      count: sql<number>`count(*)`,
+      average: sql<number | null>`round(avg(${sql.raw(ratingCol)}), 1)`,
+    })
+    .from(reviews)
+    .where(
+      and(
+        sql`${sql.raw(col)} = ${id}`,
+        sql`${sql.raw(ratingCol)} is not null`,
+        eq(reviews.visibility, 'public'),
+        isNull(reviews.deletedAt),
+      ),
+    )
+    .get()) ?? { count: 0, average: null };
+
+reviewRoutes.get('/artists/:id/review-stats', async (c) => {
+  const db = getDb(c.env.DB);
+  return c.json({ live: await ratingStats(db, 'artist_id', c.req.param('id'), 'rating') });
+});
+
+reviewRoutes.get('/venues/:id/review-stats', async (c) => {
+  const db = getDb(c.env.DB);
+  return c.json({ room: await ratingStats(db, 'venue_id', c.req.param('id'), 'venue_rating') });
+});
+
 export { blockedEitherWay };

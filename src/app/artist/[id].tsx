@@ -24,6 +24,7 @@ import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
 import { openUrl } from '@/lib/open-url';
 import { useArtist, useArtistEvents, useArtistInfo } from '@/lib/hooks';
+import { STATS_FLOOR, useArtistReviewStats } from '@/lib/reviews';
 import { formatCount, formatTime, formatVenue } from '@/lib/format';
 import type { ArtistEvent } from '@/lib/types';
 
@@ -41,6 +42,7 @@ export default function ArtistScreen() {
   const artist = useArtist(id);
   const events = useArtistEvents(id);
   const info = useArtistInfo(id);
+  const liveStats = useArtistReviewStats(id);
   const { isFollowing, toggle } = useFollows();
   const queryClient = useQueryClient();
 
@@ -85,7 +87,13 @@ export default function ArtistScreen() {
   }
 
   const fans = info.data?.followers ?? null;
+  // "Are they good live" — the aggregate of nights people actually saw, behind
+  // a confidence floor so one rave doesn't headline the page (docs/social.md).
+  const live = liveStats.data?.live;
   const heroStats: { value: string | number; label: string }[] = [
+    ...(live && live.count >= STATS_FLOOR && live.average != null
+      ? [{ value: `★ ${live.average}`, label: `LIVE · ${live.count} REVIEWS` }]
+      : []),
     { value: events.data?.length ?? '—', label: 'UPCOMING SHOWS' },
     ...(fans != null ? [{ value: formatCount(fans), label: 'FANS' }] : []),
     { value: a.genres.length || '—', label: 'GENRES' },
