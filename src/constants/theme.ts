@@ -1,10 +1,16 @@
 /**
  * Marquee "Electric Stage" design system.
  *
- * A deep charcoal foundation punctuated by high-visibility acid lime. Charcoal
+ * A deep charcoal foundation punctuated by a high-visibility neon green. Charcoal
  * rather than pure black on purpose: it lets tonal layering read as depth. Depth
  * comes from translucent overlays and luminous 1px borders, not drop shadows —
  * a glassmorphic stack over a neutral base.
+ *
+ * The accent is a laser green at hue 137°, not the acid lime this started as. The
+ * lime sat at hue 72°, where red and green are nearly equal — which is to say it
+ * was a yellow, and it read as one: fine at full strength on a CTA, olive at 12%
+ * behind a chip, and sickly once the neutrals were derived from it. Rotating it
+ * into true green is only half the fix; the greys had to stop being khaki too.
  *
  * One typeface, Anybody, doing all the work through its weight axis. ExtraBold
  * italic in caps is the signature and is reserved for hero names, where the
@@ -23,7 +29,7 @@ const stage = {
   backgroundLowest: '#0e0e10',
   backgroundElevated: '#201f21', // cards (surface-container)
   backgroundHigh: '#2a2a2c', // date blocks, chips (surface-container-high)
-  // Inputs sit *below* the base layer so a focused lime border reads as a glow.
+  // Inputs sit *below* the base layer so a focused green border reads as a glow.
   inputBg: '#0a0a0b',
   glass: 'rgba(19,19,21,0.6)',
   border: 'rgba(255,255,255,0.10)',
@@ -33,21 +39,26 @@ const stage = {
 
   // Text
   text: '#e5e1e4', // on-surface
-  textSecondary: '#c4c9ac', // on-surface-variant — warm olive, not a cold grey
-  textTertiary: '#8e9379', // outline
+  // Near-neutral, with only enough green in them to belong to the accent. They
+  // used to be a khaki (#c4c9ac) and an olive (#8e9379), pulled from the old
+  // yellow-green — which put a sickly cast on every line of secondary copy in
+  // the app, far more surface than the accent itself ever touched.
+  textSecondary: '#c3cbc6', // on-surface-variant
+  textTertiary: '#879089', // outline
 
-  // Primary — high-visibility acid lime. The dominant focal point; nothing else
+  // Primary — high-visibility neon green. The dominant focal point; nothing else
   // competes with it, which is why it is spent only on actions and active states.
-  primary: '#c3f400', // accent text / borders / active
-  primaryVivid: '#abd600', // primary-fixed-dim — the slightly recessed lime
-  onPrimary: '#161e00', // near-black, for text sitting on lime
+  primary: '#2fff6a', // accent text / borders / active
+  primaryVivid: '#2ae05d', // the slightly recessed green
+  onPrimary: '#00230f', // near-black green, for text sitting on the accent
   // The two accent alphas the spec calls out by name: a 12% fill behind a chip,
   // and the 30% edge that lifts a floating element without a drop shadow.
-  primaryFill: 'rgba(195,244,0,0.12)',
-  primaryEdge: 'rgba(195,244,0,0.30)',
+  primaryFill: 'rgba(47,255,106,0.12)',
+  primaryEdge: 'rgba(47,255,106,0.30)',
 
-  // Tertiary — electric cyan. Supporting accent, so the lime never saturates
-  // the whole screen.
+  // Tertiary — electric cyan. Supporting accent, so the green never saturates the
+  // whole screen. It stays ~50° off the primary on the wheel: cyan carries a
+  // meaning here (following, saved), so the two must never be mistaken.
   cyan: '#7df4ff',
   cyanSoft: '#00dbe9',
   onCyan: '#00363a', // deep teal, for text and icons sitting on cyan
@@ -64,18 +75,18 @@ const stage = {
    * Text and icons sitting on photography or a scrim over it.
    *
    * Pure white on purpose, and the one place the palette's `text` is wrong: over
-   * an image, the warm olive cast of #e5e1e4 reads as dirty, and there is no
+   * an image, the warm cast of #e5e1e4 reads as dirty, and there is no
    * controlled background behind it to keep contrast honest.
    */
   onImage: '#ffffff',
 
-  /** Following is expressed in cyan throughout, never in the primary lime. */
+  /** Following is expressed in cyan throughout, never in the primary green. */
   following: '#7df4ff',
 
-  // Primary button fill. Deliberately a near-solid lime ramp rather than a
-  // two-hue gradient: the spec calls for solid lime CTAs, and this keeps the one
+  // Primary button fill. Deliberately a near-solid ramp in one hue rather than a
+  // two-hue gradient: the spec calls for solid CTAs, and this keeps the one
   // gradient component honest without it reading as a colour transition.
-  gradient: ['#c3f400', '#abd600'] as const,
+  gradient: ['#2fff6a', '#2ae05d'] as const,
   // Hero image → background fade
   heroFade: ['transparent', 'rgba(19,19,21,0.6)', '#131315'] as const,
 } as const;
@@ -138,7 +149,7 @@ export const Radius = {
  */
 export const Glow = {
   primary: {
-    shadowColor: '#c3f400',
+    shadowColor: '#2fff6a',
     shadowOpacity: 0.45,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 0 },

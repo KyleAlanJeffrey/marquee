@@ -21,7 +21,7 @@ const NAME = 'Marquee';
  * links people have already shared. The `?v` is what makes them fetch again, and
  * it has to be bumped whenever public/og-image.png is rebuilt.
  */
-export const OG_IMAGE = '/og-image.png?v=2';
+export const OG_IMAGE = '/og-image.png?v=3';
 
 // --- text -------------------------------------------------------------------
 
@@ -134,7 +134,7 @@ export function bulbs(count: number): string {
 
 const LOGO = `<svg width="26" height="26" viewBox="0 0 26 26" role="img" aria-hidden="true">
   <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-    <stop offset="0" stop-color="#c3f400"/><stop offset="1" stop-color="#00dbe9"/>
+    <stop offset="0" stop-color="#2fff6a"/><stop offset="1" stop-color="#00dbe9"/>
   </linearGradient></defs>
   <rect x="1" y="1" width="24" height="24" rx="7" fill="none" stroke="url(#g)" stroke-width="2"/>
   <g fill="url(#g)"><rect x="7" y="10" width="2.6" height="6" rx="1.3"/><rect x="11.7" y="6.5" width="2.6" height="13" rx="1.3"/><rect x="16.4" y="9" width="2.6" height="8" rx="1.3"/></g>
@@ -173,11 +173,11 @@ export const css = `
   /* Charcoal, never #000 — pure black gives tonal layering nothing to sit on. */
   --bg:#131315; --bg-low:#0e0e10; --card:#201f21; --card-high:#2a2a2c;
   --line:rgba(255,255,255,.10); --line-str:rgba(255,255,255,.18);
-  --ink:#e5e1e4; --ink-2:#c4c9ac; --ink-3:#8e9379;
-  /* Acid lime is the only dominant accent; cyan supports so it never saturates.
+  --ink:#e5e1e4; --ink-2:#c3cbc6; --ink-3:#879089;
+  /* The neon green is the only dominant accent; cyan supports so it never saturates.
      --on-accent is the near-black that has to sit on top of lime — lime is far
      too bright to carry white text. */
-  --accent:#c3f400; --accent-vivid:#abd600; --on-accent:#161e00;
+  --accent:#2fff6a; --accent-vivid:#2ae05d; --on-accent:#00230f;
   --cyan:#7df4ff; --warm:#ffb4ab;
   /* One typeface. The hierarchy is carried by weight and tracking, not by a
      second family — so these are role names over a single stack. */
@@ -196,7 +196,7 @@ body{
 body::before{
   content:'';position:absolute;inset:0 0 auto;height:min(900px,90vh);z-index:-2;pointer-events:none;
   background:
-    radial-gradient(58% 42% at 18% 0%,rgba(195,244,0,.13),transparent 70%),
+    radial-gradient(58% 42% at 18% 0%,rgba(47,255,106,.13),transparent 70%),
     radial-gradient(46% 38% at 88% 6%,rgba(125,244,255,.10),transparent 72%),
     linear-gradient(180deg,var(--bg-low),var(--bg) 70%);
 }
@@ -235,7 +235,7 @@ ol,ul{margin:0;padding:0;list-style:none}
 .bulbs{display:flex;gap:10px;justify-content:space-between;padding:0 2px 30px;overflow:hidden}
 .bulbs i{
   width:5px;height:5px;flex:none;border-radius:50%;background:var(--accent);
-  box-shadow:0 0 10px 2px rgba(195,244,0,.5);opacity:.85;
+  box-shadow:0 0 10px 2px rgba(47,255,106,.5);opacity:.85;
   animation:flicker 3.4s calc(var(--i) * -.11s) infinite ease-in-out;
 }
 @keyframes flicker{0%,100%{opacity:.9;transform:scale(1)}42%{opacity:.22;transform:scale(.82)}}
@@ -267,9 +267,9 @@ h1 .lit{
   font-family:var(--label);font-size:15px;font-weight:800;letter-spacing:.02em;
   /* Solid lime with near-black text, per the spec — no two-hue gradient. */
   background:var(--accent);color:var(--on-accent);
-  box-shadow:0 12px 34px -16px rgba(195,244,0,.75);transition:transform .18s,box-shadow .18s;
+  box-shadow:0 12px 34px -16px rgba(47,255,106,.75);transition:transform .18s,box-shadow .18s;
 }
-.btn:hover{transform:translateY(-2px);box-shadow:0 18px 40px -16px rgba(195,244,0,.9)}
+.btn:hover{transform:translateY(-2px);box-shadow:0 18px 40px -16px rgba(47,255,106,.9)}
 .btn.ghost{background:none;border:1px solid var(--line-str);color:var(--ink);box-shadow:none}
 .btn.ghost:hover{border-color:var(--accent);color:var(--accent)}
 
@@ -297,7 +297,7 @@ h2{font-size:clamp(27px,3.6vw,38px)}
 .shows li:last-child{border-bottom:1px solid var(--line)}
 .shows a{display:grid;grid-template-columns:92px minmax(0,1fr) auto;gap:20px;align-items:center;padding:17px 6px;transition:background .16s,padding-left .16s}
 /* A list row lights its left edge on hover — a 4px lime accent, per the spec. */
-.shows a:hover{background:linear-gradient(90deg,rgba(195,244,0,.07),transparent 70%);padding-left:14px;box-shadow:inset 4px 0 0 var(--accent)}
+.shows a:hover{background:linear-gradient(90deg,rgba(47,255,106,.07),transparent 70%);padding-left:14px;box-shadow:inset 4px 0 0 var(--accent)}
 .date{font-family:var(--label);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--warm)}
 .date small{display:block;font-size:11px;letter-spacing:.14em;color:var(--ink-3)}
 .who{display:block;font-family:var(--display);font-weight:700;font-size:clamp(18px,2.2vw,22px);letter-spacing:-.03em}

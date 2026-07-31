@@ -61,13 +61,13 @@ export default function Root({ children }: PropsWithChildren) {
         {/* Relative here, absolutized by the Worker (crawlers need a full URL). */}
         <meta property="og:url" content="/" />
         {/* ?v must match OG_IMAGE in worker/src/page.ts — see the note there. */}
-        <meta property="og:image" content="/og-image.png?v=2" />
+        <meta property="og:image" content="/og-image.png?v=3" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:image:alt" content={TITLE} />
 
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:image" content="/og-image.png?v=2" />
+        <meta name="twitter:image" content="/og-image.png?v=3" />
 
         <meta name="theme-color" content="#131315" />
         <meta name="color-scheme" content="dark" />
@@ -84,7 +84,7 @@ export default function Root({ children }: PropsWithChildren) {
 
         {/*
           Drop the browser's own focus ring on text fields. It lands inside the
-          field's lime border and the two rings read as a rendering bug.
+          field's green border and the two rings read as a rendering bug.
 
           This only removes a ring we replace: a focused field takes the primary
           border plus its glow, which is louder than what the browser drew. It has

@@ -14,7 +14,7 @@ type Props = {
   style?: ViewStyle;
 };
 
-/** Primary CTA: solid acid lime with near-black text and a soft neon glow. */
+/** Primary CTA: solid neon green with near-black text and a soft glow. */
 export function GradientButton({ label, onPress, block, style }: Props) {
   const theme = useTheme();
   return (

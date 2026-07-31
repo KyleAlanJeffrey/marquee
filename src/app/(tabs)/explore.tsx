@@ -138,7 +138,16 @@ export default function ExploreScreen() {
     return [...seen.values()];
   }, [shown, isFollowing]);
 
-  const cityLabel = label?.split(',')[0] ?? shown[0]?.venue_city ?? null;
+  /**
+   * Where *you* are — the only thing allowed to name your town.
+   *
+   * This used to fall back to the first row's venue city, which is a different
+   * claim wearing the same words: that row is whatever the feed sorted first, so
+   * a fix in downtown Austin announced "Live in Coupland" (30 miles out) and the
+   * map captioned itself the same way. Only the reverse geocode knows where the
+   * device is, and with no geocode both fall back to saying "near you" instead.
+   */
+  const areaLabel = label?.split(',')[0] ?? null;
   const nearestMiles = useMemo(() => {
     const dists = shown.map((e) => e.distance_miles).filter((d): d is number => d != null);
     return dists.length ? Math.max(1, Math.round(Math.min(...dists))) : null;
@@ -212,13 +221,26 @@ export default function ExploreScreen() {
             </ThemedText>
           </Pressable>
 
-          {/* Head */}
+          {/* Head. The two-line caps-italic statement is the same device the landing
+              page and the social card open with, so the app doesn't introduce
+              itself in a different voice than the page that brought you here. */}
           <View style={styles.head}>
-            <ThemedText type="headline">Near Me</ThemedText>
+            {/* The hero says the town, so this says everything the hero doesn't —
+                and drops the count when the hero is already carrying it. */}
             <View style={styles.locRow}>
-              <Ionicons name="location" size={15} color={theme.cyan} />
-              <ThemedText type="label" style={{ color: theme.textSecondary }}>
-                {coords ? (label ?? 'Your area').toUpperCase() : 'FINDING YOUR AREA…'}
+              <Ionicons name="location" size={14} color={theme.primary} />
+              <ThemedText type="label" style={{ color: theme.primary }}>
+                {areaLabel
+                  ? `${shown.length} ${shown.length === 1 ? 'show' : 'shows'} within ${radiusMiles} mi`
+                  : `Within ${radiusMiles} mi`}
+              </ThemedText>
+            </View>
+            <View>
+              <ThemedText type="display" style={styles.hero}>
+                {areaLabel ? 'Live in' : `${shown.length} ${shown.length === 1 ? 'show' : 'shows'}`}
+              </ThemedText>
+              <ThemedText type="display" style={[styles.hero, { color: theme.primary }]}>
+                {areaLabel ? `${areaLabel}.` : 'near you.'}
               </ThemedText>
             </View>
             <View style={styles.radiusRow}>
@@ -295,7 +317,7 @@ export default function ExploreScreen() {
                       <Ionicons name="arrow-forward" size={15} color={theme.primary} />
                     </Pressable>
                   </View>
-                  <VenueMap pins={pins} locationLabel={cityLabel} withinMiles={nearestMiles} onExplore={goBrowse} />
+                  <VenueMap pins={pins} locationLabel={areaLabel} withinMiles={nearestMiles} onExplore={goBrowse} />
                 </>
               )}
 
@@ -388,7 +410,10 @@ const styles = StyleSheet.create({
   venuesTitle: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   accentBar: { width: 4, height: 34, borderRadius: 2 },
   viewAll: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: Spacing.two, paddingLeft: Spacing.three },
-  head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, gap: Spacing.two },
+  head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.four, gap: Spacing.two },
+  // Tighter than the 40/44 `display` default so two lines read as one block. The
+  // negative tracking is already in the type; this only pulls the leading in.
+  hero: { fontSize: 36, lineHeight: 38 },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 2 },
   radiusRow: { flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.one },
   chip: {

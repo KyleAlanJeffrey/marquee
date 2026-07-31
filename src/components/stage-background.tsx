@@ -8,10 +8,10 @@ import { useTheme } from '@/hooks/use-theme';
  * ramp toward the top.
  *
  * Deliberately colourless. Depth in this design comes from tonal layering and
- * glassmorphic surfaces, not from a hue thrown across the background — and lime
- * is the wrong accent to try it with. Purple could tint a whole screen and read
- * as atmosphere; lime at even 10% turns the entire surface olive and drags every
- * card and label toward it. So the light spill is a change in value, not colour.
+ * glassmorphic surfaces, not from a hue thrown across the background — and this
+ * accent is the wrong one to try it with. A purple could tint a whole screen and
+ * read as atmosphere; a green this saturated washes every card and label toward
+ * it even at 10%. So the light spill is a change in value, not colour.
  *
  * Purely decorative; sits behind all content.
  */

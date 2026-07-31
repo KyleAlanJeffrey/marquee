@@ -34,7 +34,7 @@ const CHARCOAL = '#131315';
 function mark(mono) {
   const c = mono
     ? { frame: '#ffffff', divider: '#ffffff', b1: '#ffffff', b2: '#ffffff', b3: '#ffffff', b4: '#ffffff' }
-    : { frame: 'url(#frame)', divider: '#00dbe9', b1: '#abd600', b2: '#c3f400', b3: '#00dbe9', b4: '#7df4ff' };
+    : { frame: 'url(#frame)', divider: '#00dbe9', b1: '#2ae05d', b2: '#2fff6a', b3: '#00dbe9', b4: '#7df4ff' };
   return `
     <rect x="6" y="9" width="52" height="46" rx="15" fill="none" stroke="${c.frame}" stroke-width="3.5"/>
     <line x1="32" y1="13" x2="32" y2="51" stroke="${c.divider}" stroke-width="3" stroke-linecap="round"/>
@@ -58,7 +58,7 @@ function icon({ size, scale, bg = null, glow = true, mono = false }) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   <defs>
     <linearGradient id="frame" x1="0" y1="0" x2="64" y2="0" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#c3f400"/><stop offset="1" stop-color="#00dbe9"/>
+      <stop offset="0" stop-color="#2fff6a"/><stop offset="1" stop-color="#00dbe9"/>
     </linearGradient>
     <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="${(inner / 64) * 2.2}"/>
