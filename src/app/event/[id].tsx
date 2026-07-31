@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AttendanceCard } from '@/components/attendance-card';
 import { ErrorState } from '@/components/error-state';
 import { GalleryStrip } from '@/components/gallery-strip';
 import { GlassCard } from '@/components/glass-card';
@@ -104,6 +105,12 @@ export default function EventScreen() {
   const time = (iso: string) => [formatTime(iso, tz), zoneLabel].filter(Boolean).join(' ');
   const buzz = socialLinks(e.artist.name, e.venue?.name);
   const support = lineup.data?.support ?? [];
+  // Compared against the start rather than an estimated end: a show is something
+  // you can say you were at from the moment it begins, and we don't know when it
+  // finished. An unparseable date counts as upcoming, so a bad row never invites
+  // somebody to log a gig that may not have happened.
+  const startedAt = Date.parse(e.starts_at);
+  const hasHappened = Number.isFinite(startedAt) && startedAt < Date.now();
 
   return (
     <View style={{ flex: 1 }}>
@@ -179,6 +186,32 @@ export default function EventScreen() {
             valueColor={hasTickets ? theme.cyan : theme.error}
           />
         </Animated.View>
+
+        {/* Was I there? Above the ticket links on purpose: for a show that has
+            already happened, buying a ticket is not the thing left to do. */}
+        {hasHappened ? (
+          <>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.accentBar, { backgroundColor: theme.cyan }]} />
+              <ThemedText type="title">Your Log</ThemedText>
+            </View>
+            <AttendanceCard
+              venueName={e.venue?.name ?? null}
+              show={{
+                eventId: e.id,
+                name: e.name,
+                startsAt: e.starts_at,
+                artistId: e.artist.id,
+                artistName: e.artist.name,
+                artistImageUrl: e.artist.image_url ?? null,
+                venueId: e.venue?.id ?? null,
+                venueName: e.venue?.name ?? null,
+                venueCity: e.venue?.city ?? null,
+                venueTimezone: tz,
+              }}
+            />
+          </>
+        ) : null}
 
         {/* Get Tickets */}
         <View style={styles.sectionTitleRow}>

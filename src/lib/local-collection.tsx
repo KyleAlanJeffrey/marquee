@@ -35,6 +35,20 @@ export type Collection<T, Ref> = {
   add: (item: T) => void;
   remove: (ref: Ref) => void;
   toggle: (item: T) => void;
+  /**
+   * Change an entry in place, leaving its position alone.
+   *
+   * The other three treat an entry as a membership — you follow an artist or you
+   * don't. An attendance isn't like that: you log a show, then rate it, then
+   * change your mind about the rating, and each of those is an edit rather than a
+   * re-add. Doing it as remove-then-add would move the row to the top of the list
+   * every time somebody adjusted a star.
+   *
+   * A ref that matches nothing is a no-op, not an insert: the caller asked to
+   * change something, and inventing a half-populated entry from a patch is how
+   * you get a log row with a rating and no show attached.
+   */
+  update: (ref: Ref, patch: Partial<T>) => void;
 };
 
 export type CollectionConfig<Ref, T extends Ref> = {
@@ -189,9 +203,23 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
       });
     }, [markTouched]);
 
+    const update = useCallback(
+      (ref: Ref, patch: Partial<T>) => {
+        markTouched();
+        setItems((prev) => {
+          const at = prev.findIndex((i) => matches(i, ref));
+          if (at === -1) return prev;
+          const next = [...prev];
+          next[at] = { ...next[at], ...patch };
+          return next;
+        });
+      },
+      [markTouched],
+    );
+
     const value = useMemo(
-      () => ({ items, ready, has, add, remove, toggle }),
-      [items, ready, has, add, remove, toggle],
+      () => ({ items, ready, has, add, remove, toggle, update }),
+      [items, ready, has, add, remove, toggle, update],
     );
 
     return <Context.Provider value={value}>{children}</Context.Provider>;

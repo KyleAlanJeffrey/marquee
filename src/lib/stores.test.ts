@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { isAttendance, sameAttendance, toRating, type Attendance } from './attendances-store';
 import { isFollowedVenue, sameFollowedVenue, type FollowedVenue } from './followed-venues-store';
 import { mergeStored } from './local-collection';
 import { isFollowedArtist, sameArtist, type FollowedArtist } from './follows-store';
@@ -136,5 +137,73 @@ describe('merging a stored list into memory', () => {
 
   it('drops malformed entries and keeps the rest of the list', () => {
     expect(merge([], [null, 'nope', { venueId: 'v3' }, venue])).toEqual([venue]);
+  });
+});
+
+// --- attendances -------------------------------------------------------------
+
+const attendance: Attendance = {
+  eventId: 'e1',
+  name: 'Interpol at the Fillmore',
+  startsAt: '2026-03-04T03:00:00Z',
+  artistId: 'a1',
+  artistName: 'Interpol',
+  artistImageUrl: null,
+  venueId: 'v1',
+  venueName: 'The Fillmore',
+  venueCity: 'San Francisco',
+  venueTimezone: 'America/Los_Angeles',
+  loggedAt: 1,
+  rating: 4,
+  venueRating: null,
+  note: null,
+};
+
+describe('isAttendance', () => {
+  it('accepts a well-formed entry, rated or not', () => {
+    expect(isAttendance(attendance)).toBe(true);
+    expect(isAttendance({ ...attendance, rating: null, venueRating: null })).toBe(true);
+    expect(isAttendance({ ...attendance, note: 'best gig of the year' })).toBe(true);
+  });
+
+  it('rejects a rating that is out of range or not whole', () => {
+    // These matter because a rating renders as a count of filled stars: a 6 draws
+    // nothing sensible, and a 3.5 draws three and a half of five.
+    for (const rating of [0, 6, -1, 3.5, '4', NaN]) {
+      expect(isAttendance({ ...attendance, rating }), String(rating)).toBe(false);
+    }
+  });
+
+  it('rejects an entry with no show attached to it', () => {
+    expect(isAttendance({ ...attendance, eventId: '' })).toBe(false);
+    const { startsAt: _dropped, ...noDate } = attendance;
+    expect(isAttendance(noDate)).toBe(false);
+    expect(isAttendance(null)).toBe(false);
+    expect(isAttendance('e1')).toBe(false);
+  });
+});
+
+describe('toRating', () => {
+  it('turns anything a star row can produce into something storable', () => {
+    expect(toRating(3)).toBe(3);
+    expect(toRating(null)).toBe(null);
+    expect(toRating(undefined)).toBe(null);
+    expect(toRating(NaN)).toBe(null);
+    // Out of range clamps rather than throwing: an off-by-one in the tap maths
+    // should cost the user nothing, and a 0 has to mean "cleared".
+    expect(toRating(0)).toBe(null);
+    expect(toRating(-2)).toBe(null);
+    expect(toRating(9)).toBe(5);
+    expect(toRating(3.6)).toBe(4);
+  });
+});
+
+describe('sameAttendance', () => {
+  it('matches on the event id, and never on an absent one', () => {
+    expect(sameAttendance(attendance, { eventId: 'e1' })).toBe(true);
+    expect(sameAttendance(attendance, { eventId: 'e2' })).toBe(false);
+    // A ref with no id must not match everything in the list.
+    expect(sameAttendance(attendance, {})).toBe(false);
+    expect(sameAttendance(attendance, { eventId: null })).toBe(false);
   });
 });

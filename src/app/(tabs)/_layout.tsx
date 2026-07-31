@@ -49,6 +49,17 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* Saved is what you plan to see; this is what you did. Sits next to it
+          because they are the same list either side of the night. */}
+      <Tabs.Screen
+        name="log"
+        options={{
+          title: 'Log',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? 'checkmark-done' : 'checkmark-done-outline'} size={size} color={color} />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="settings"
         options={{

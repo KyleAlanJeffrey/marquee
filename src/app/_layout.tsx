@@ -16,6 +16,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KyleBadge } from '@/components/kyle-badge';
 import { PageMeta } from '@/components/page-meta';
 import { Colors, Fonts } from '@/constants/theme';
+import { AttendancesProvider } from '@/lib/attendances-store';
 import { AuthProvider } from '@/lib/auth';
 import { FollowedVenuesProvider } from '@/lib/followed-venues-store';
 import { FollowsProvider } from '@/lib/follows-store';
@@ -42,7 +43,7 @@ const navTheme = {
 };
 
 /**
- * Everything the user owns lives on the device, so there are four of these and
+ * Everything the user owns lives on the device, so there are five of these and
  * they nest. Composed here rather than inline to keep the tree below readable.
  */
 function LocalStores({ children }: { children: React.ReactNode }) {
@@ -50,7 +51,9 @@ function LocalStores({ children }: { children: React.ReactNode }) {
     <FollowsProvider>
       <FollowedVenuesProvider>
         <SavedShowsProvider>
-          <PrefsProvider>{children}</PrefsProvider>
+          <AttendancesProvider>
+            <PrefsProvider>{children}</PrefsProvider>
+          </AttendancesProvider>
         </SavedShowsProvider>
       </FollowedVenuesProvider>
     </FollowsProvider>
