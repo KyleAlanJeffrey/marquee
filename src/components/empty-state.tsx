@@ -22,7 +22,7 @@ export function EmptyState({ icon, title, message, actionLabel, onAction }: Prop
       <View
         style={[
           styles.iconWrap,
-          { backgroundColor: theme.backgroundElevated, borderColor: 'rgba(236,178,255,0.3)' },
+          { backgroundColor: theme.backgroundElevated, borderColor: theme.primaryEdge },
           Glow.primary,
           { shadowOpacity: 0.25 },
         ]}>

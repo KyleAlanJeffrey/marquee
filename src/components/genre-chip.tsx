@@ -7,26 +7,21 @@ import { useTheme } from '@/hooks/use-theme';
 type Props = {
   label: string;
   /** Accent color family. */
-  tone?: 'purple' | 'cyan' | 'neutral';
+  tone?: 'primary' | 'cyan' | 'neutral';
 };
 
-/** Semi-transparent metadata chip for genres / tags. */
+/**
+ * Semi-transparent metadata chip for genres / tags — the spec's chip exactly:
+ * pill-shaped, accent text over a 12% fill of the same accent.
+ */
 export function GenreChip({ label, tone = 'neutral' }: Props) {
   const theme = useTheme();
   const color =
-    tone === 'purple' ? theme.primary : tone === 'cyan' ? theme.cyan : theme.textSecondary;
+    tone === 'primary' ? theme.primary : tone === 'cyan' ? theme.cyan : theme.textSecondary;
   const bg =
-    tone === 'purple'
-      ? 'rgba(236,178,255,0.12)'
-      : tone === 'cyan'
-        ? 'rgba(0,219,233,0.12)'
-        : 'rgba(255,255,255,0.06)';
+    tone === 'primary' ? theme.primaryFill : tone === 'cyan' ? theme.cyanFill : 'rgba(255,255,255,0.06)';
   const border =
-    tone === 'purple'
-      ? 'rgba(236,178,255,0.3)'
-      : tone === 'cyan'
-        ? 'rgba(0,219,233,0.3)'
-        : theme.border;
+    tone === 'primary' ? theme.primaryEdge : tone === 'cyan' ? theme.cyanEdge : theme.border;
 
   return (
     <View style={[styles.chip, { backgroundColor: bg, borderColor: border }]}>

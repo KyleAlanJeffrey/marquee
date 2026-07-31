@@ -33,7 +33,7 @@ export function SecondaryEventCard({
     <View
       style={[
         styles.card,
-        { backgroundColor: theme.backgroundElevated, borderColor: following ? 'rgba(0,219,233,0.35)' : theme.border },
+        { backgroundColor: theme.backgroundElevated, borderColor: following ? theme.cyanEdge : theme.border },
       ]}>
       <PressableScale onPress={onPress} style={styles.main}>
       <Image
@@ -68,7 +68,7 @@ export function SecondaryEventCard({
         </View>
         {distance && (
           <View style={styles.bottomRow}>
-            <View style={[styles.distChip, { backgroundColor: 'rgba(0,219,233,0.1)' }]}>
+            <View style={[styles.distChip, { backgroundColor: theme.cyanFill }]}>
               <Ionicons name="navigate" size={12} color={theme.cyan} />
               <ThemedText type="labelSm" style={{ color: theme.cyan }}>
                 {distance.toUpperCase()}

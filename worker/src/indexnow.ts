@@ -95,6 +95,35 @@ async function recordRun(db: DB, startedAt: string, r: IndexNowResult): Promise<
   });
 }
 
+/**
+ * Record a run that submitted nothing, and why.
+ *
+ * The reason this is not just a `console.log`: "key not bound" and "nothing new to
+ * announce" both used to return quietly, which made them indistinguishable — and
+ * that is precisely how the unbound key went unnoticed for a day. A row per hour
+ * on a misconfigured deploy is the signal, not noise.
+ *
+ * Never throws. This is bookkeeping at the tail of a cron invocation that has
+ * already done the crawl; it must not be what fails the run.
+ */
+async function recordNoop(db: DB, startedAt: string, reason: string): Promise<void> {
+  try {
+    await db.insert(ingestRuns).values({
+      id: crypto.randomUUID(),
+      source: 'indexnow',
+      kind: 'indexnow',
+      startedAt,
+      finishedAt: nowIso(),
+      scanned: 0,
+      inserted: 0,
+      failed: 0,
+      note: `noop ${reason}`,
+    });
+  } catch (err) {
+    console.warn('indexnow: could not record no-op run:', err);
+  }
+}
+
 /** The paths in `candidates` that aren't in the recently-announced set. */
 export function unannounced(candidates: string[], announced: Set<string>): string[] {
   return candidates.filter((p) => !announced.has(p));
@@ -157,16 +186,19 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
   // replaced the vars block with the one in wrangler.jsonc, and submissions stopped
   // with no 429, no error and no line in the log — indistinguishable from a run that
   // had nothing to announce.
+  const db = getDb(env.DB);
   if (!key || !host) {
-    console.log(`indexnow: off (${!key ? 'INDEXNOW_KEY' : 'PRIMARY_HOST'} not bound)`);
+    const missing = !key ? 'INDEXNOW_KEY' : 'PRIMARY_HOST';
+    console.log(`indexnow: off (${missing} not bound)`);
+    await recordNoop(db, since, `${missing} not bound`);
     return null;
   }
   if (!KEY_SHAPE.test(key)) {
     console.warn('indexnow: INDEXNOW_KEY is not 8–128 of [A-Za-z0-9-]; skipping');
+    await recordNoop(db, since, 'INDEXNOW_KEY malformed');
     return null;
   }
 
-  const db = getDb(env.DB);
   const rows = await db
     .select({
       id: events.id,
@@ -181,6 +213,7 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
 
   if (rows.length === 0) {
     console.log('indexnow: nothing new to announce');
+    await recordNoop(db, since, 'nothing new');
     return null;
   }
 

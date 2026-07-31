@@ -40,12 +40,18 @@ const stage = {
   primary: '#c3f400', // accent text / borders / active
   primaryVivid: '#abd600', // primary-fixed-dim — the slightly recessed lime
   onPrimary: '#161e00', // near-black, for text sitting on lime
+  // The two accent alphas the spec calls out by name: a 12% fill behind a chip,
+  // and the 30% edge that lifts a floating element without a drop shadow.
+  primaryFill: 'rgba(195,244,0,0.12)',
+  primaryEdge: 'rgba(195,244,0,0.30)',
 
   // Tertiary — electric cyan. Supporting accent, so the lime never saturates
   // the whole screen.
   cyan: '#7df4ff',
   cyanSoft: '#00dbe9',
   onCyan: '#00363a', // deep teal, for text and icons sitting on cyan
+  cyanFill: 'rgba(0,219,233,0.12)',
+  cyanEdge: 'rgba(0,219,233,0.30)',
 
   // Urgency / error
   orange: '#ffb4ab',

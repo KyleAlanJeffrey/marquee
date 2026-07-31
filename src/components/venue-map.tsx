@@ -31,7 +31,7 @@ export function VenueMap({ pins, locationLabel, withinMiles, onExplore }: Props)
       {/* Bottom overlay: location + distance + explore */}
       <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={styles.overlay}>
         <View style={styles.overlayRow}>
-          <View style={[styles.nearIcon, { backgroundColor: 'rgba(0,219,233,0.15)', borderColor: 'rgba(0,219,233,0.3)' }]}>
+          <View style={[styles.nearIcon, { backgroundColor: theme.cyanFill, borderColor: theme.cyanEdge }]}>
             <Ionicons name="navigate" size={18} color={theme.cyan} />
           </View>
           <View style={{ flex: 1 }}>

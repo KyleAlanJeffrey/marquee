@@ -32,7 +32,8 @@ export function GalleryStrip({ imageUrl }: { imageUrl: string | null }) {
             transition={200}
           />
           <LinearGradient
-            colors={i % 2 ? ['rgba(0,219,233,0.18)', 'transparent'] : ['rgba(189,0,255,0.18)', 'transparent']}
+            // Alternating accents, so a strip of stills doesn't read as one block.
+            colors={i % 2 ? [theme.cyanFill, 'transparent'] : [theme.primaryFill, 'transparent']}
             style={StyleSheet.absoluteFill}
             start={{ x: 0, y: 1 }}
             end={{ x: 1, y: 0 }}

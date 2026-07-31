@@ -325,6 +325,11 @@ npx wrangler d1 execute marquee --remote \
   --command "select started_at, scanned, inserted, failed, note from ingest_runs where source='indexnow' order by started_at desc limit 10"
 ```
 
+A run that submitted nothing writes a row too, with `note` starting `noop` and the
+reason after it — `noop nothing new` on a quiet hour, `noop INDEXNOW_KEY not bound`
+on a broken deploy. Those two used to be the same silent `return null`, which is
+exactly how the unbound key went unnoticed; distinguishing them is the point.
+
 ### Venue identity, and why a coordinate isn't enough
 
 Two sources agree on *where* long before they agree on what a room is called, so

@@ -27,7 +27,7 @@ export function VenueTile({ venue, onPress }: { venue: NearbyVenue; onPress: () 
       accessibilityRole="button"
       accessibilityLabel={`${venue.name}${place ? `, ${place}` : ''}, ${venue.upcoming} upcoming shows`}
       style={[styles.tile, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
-      <View style={[styles.tileIcon, { backgroundColor: 'rgba(0,219,233,0.1)' }]}>
+      <View style={[styles.tileIcon, { backgroundColor: theme.cyanFill }]}>
         <Ionicons name="business" size={20} color={theme.cyan} />
       </View>
       <ThemedText type="smallBold" numberOfLines={2} style={styles.tileName}>
@@ -81,7 +81,7 @@ export function VenueRow({
         accessibilityRole={onPress ? 'button' : undefined}
         accessibilityLabel={onPress ? `${name}${place ? `, ${place}` : ''}` : undefined}
         style={styles.rowMain}>
-        <View style={[styles.rowIcon, { backgroundColor: 'rgba(0,219,233,0.1)' }]}>
+        <View style={[styles.rowIcon, { backgroundColor: theme.cyanFill }]}>
           <Ionicons name="business" size={18} color={theme.cyan} />
         </View>
         <View style={{ flex: 1 }}>

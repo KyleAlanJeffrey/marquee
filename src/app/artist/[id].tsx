@@ -147,7 +147,7 @@ export default function ArtistScreen() {
                   {a.genres.length > 0 && (
                     <View style={styles.heroGenres}>
                       {a.genres.slice(0, 2).map((g, i) => (
-                        <GenreChip key={g} label={g} tone={i === 0 ? 'purple' : 'cyan'} />
+                        <GenreChip key={g} label={g} tone={i === 0 ? 'primary' : 'cyan'} />
                       ))}
                     </View>
                   )}
