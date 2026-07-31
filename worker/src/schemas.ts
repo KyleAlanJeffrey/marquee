@@ -217,6 +217,11 @@ export const reviewBody = z
     message: 'a review needs a rating or some words',
   });
 
+/** Going or interested — the only two answers an upcoming show asks for. */
+export const rsvpBody = z.object({
+  status: z.enum(['going', 'interested']),
+});
+
 /** A report: what's wrong, in the reporter's words. Required — an unexplained
  *  report can't be triaged, only counted. */
 export const reportBody = z.object({

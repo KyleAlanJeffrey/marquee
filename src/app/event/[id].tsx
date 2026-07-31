@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttendanceCard } from '@/components/attendance-card';
 import { ErrorState } from '@/components/error-state';
 import { ReviewSection } from '@/components/review-section';
+import { RsvpRow } from '@/components/rsvp-row';
 import { GalleryStrip } from '@/components/gallery-strip';
 import { GlassCard } from '@/components/glass-card';
 import { GradientButton } from '@/components/gradient-button';
@@ -238,6 +239,11 @@ export default function EventScreen() {
             </View>
           </>
         ) : null}
+
+        {/* Going / interested — the forward-looking half of the log, and the
+            first public count on an event page. Upcoming shows only; a show
+            that already happened asks "were you there?" above instead. */}
+        {!hasHappened && <RsvpRow eventId={e.id} />}
 
         {/* Get Tickets */}
         <View style={styles.sectionTitleRow}>

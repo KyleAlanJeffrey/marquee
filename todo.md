@@ -112,6 +112,12 @@ during A/B):
 
 ## P1 · Next
 
+- [x] **Going / interested on upcoming shows** (Kyle, 2026-07-31) — built the
+  same day: `event_rsvps` (migration 0015, one row per person per show),
+  `PUT/DELETE /api/events/:id/rsvp`, public counts + private `mine` on
+  `GET .../rsvps`, and two count-carrying pills on upcoming event pages behind
+  the write gate. Past shows 422 ("log it instead"). Counts name nobody.
+
 - [ ] **Let people add a show that isn't in the catalogue.** The backfill covers
   ~2014 onward for artists Bandsintown knows; this is the rest. Needs
   `sameShow`/`sameVenue` matching against typed input, private-by-default so it

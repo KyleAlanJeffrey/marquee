@@ -272,6 +272,20 @@ export const reports = sqliteTable(
   (t) => [index('reports_open_idx').on(t.resolvedAt), index('reports_target_idx').on(t.targetKind, t.targetId)],
 );
 
+/** Going/interested on upcoming shows — see migration 0015 for why it's a relation. */
+export const eventRsvps = sqliteTable(
+  'event_rsvps',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    eventId: text('event_id').notNull(),
+    status: text('status').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.eventId] }), index('event_rsvps_event_idx').on(t.eventId)],
+);
+
 /** Blocks — one direction per row; reads hide content in both directions. */
 export const userBlocks = sqliteTable(
   'user_blocks',

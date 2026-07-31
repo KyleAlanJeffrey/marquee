@@ -121,6 +121,53 @@ export function useFeed(enabled: boolean) {
   });
 }
 
+// --- going / interested -------------------------------------------------------
+
+export type RsvpStatus = 'going' | 'interested';
+export type EventRsvps = { counts: { going: number; interested: number }; mine: RsvpStatus | null };
+
+const rsvpKey = (eventId: string) => ['event-rsvps', eventId] as const;
+
+export function useEventRsvps(eventId: string, enabled = true) {
+  return useQuery({
+    queryKey: rsvpKey(eventId),
+    enabled: !!eventId && enabled,
+    queryFn: (): Promise<EventRsvps> => apiGet(`/events/${encodeURIComponent(eventId)}/rsvps`),
+  });
+}
+
+/**
+ * Set or clear your answer, optimistically: the button flips and the count
+ * moves before the server replies, and both roll back if it refuses — same
+ * policy as every other write in the app.
+ */
+export function useSetRsvp(eventId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (status: RsvpStatus | null) =>
+      status
+        ? apiPut(`/events/${encodeURIComponent(eventId)}/rsvp`, { status })
+        : apiDelete(`/events/${encodeURIComponent(eventId)}/rsvp`),
+    onMutate: async (status) => {
+      await queryClient.cancelQueries({ queryKey: rsvpKey(eventId) });
+      const previous = queryClient.getQueryData<EventRsvps>(rsvpKey(eventId));
+      queryClient.setQueryData<EventRsvps>(rsvpKey(eventId), (old) => {
+        if (!old) return old;
+        const counts = { ...old.counts };
+        if (old.mine) counts[old.mine] = Math.max(0, counts[old.mine] - 1);
+        if (status) counts[status] += 1;
+        return { counts, mine: status };
+      });
+      return { previous };
+    },
+    onError: (err, _status, context) => {
+      console.warn('rsvp failed:', err);
+      if (context?.previous) queryClient.setQueryData(rsvpKey(eventId), context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: rsvpKey(eventId) }),
+  });
+}
+
 export type RatingStats = { count: number; average: number | null };
 
 /** Reviews only headline a page once a few people agree — one rave is a rave. */

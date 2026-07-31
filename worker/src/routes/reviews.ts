@@ -6,8 +6,8 @@ import { callerFrom, ensureUser } from '../auth';
 import { nowIso } from '../data';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
-import { events, personFollows, reports, reviews, userBlocks, users } from '../schema';
-import { reportBody, reviewBody } from '../schemas';
+import { eventRsvps, events, personFollows, reports, reviews, userBlocks, users } from '../schema';
+import { reportBody, reviewBody, rsvpBody } from '../schemas';
 
 /**
  * Public reviews — phase B of docs/social.md.
@@ -238,6 +238,76 @@ reviewRoutes.post('/reviews/:id/report', zValidator('json', reportBody), async (
     createdAt: nowIso(),
   });
   return c.json({ ok: true });
+});
+
+// --- going / interested ------------------------------------------------------
+
+/**
+ * RSVPs: the forward-looking half of the social layer. A review says what a
+ * night was like; this says a night is going to matter. Counts are public and
+ * anonymous — "12 going" names nobody — and only the caller ever learns their
+ * own answer. The mirror-image rule to reviews applies: a show that has
+ * already started takes no RSVP, because "went" is what the log is for.
+ */
+reviewRoutes.get('/events/:id/rsvps', async (c) => {
+  const db = getDb(c.env.DB);
+  const eventId = c.req.param('id');
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+
+  const rows = await db
+    .select({ status: eventRsvps.status, n: sql<number>`count(*)` })
+    .from(eventRsvps)
+    .where(eq(eventRsvps.eventId, eventId))
+    .groupBy(eventRsvps.status);
+  const counts = { going: 0, interested: 0 };
+  for (const r of rows) counts[r.status as keyof typeof counts] = r.n;
+
+  const mine = userId
+    ? ((await db
+        .select({ status: eventRsvps.status })
+        .from(eventRsvps)
+        .where(and(eq(eventRsvps.userId, userId), eq(eventRsvps.eventId, eventId)))
+        .get())?.status ?? null)
+    : null;
+
+  return c.json({ counts, mine });
+});
+
+reviewRoutes.put('/events/:id/rsvp', zValidator('json', rsvpBody), async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+
+  const db = getDb(c.env.DB);
+  const eventId = c.req.param('id');
+  const event = await db
+    .select({ startsAt: events.startsAt })
+    .from(events)
+    .where(eq(events.id, eventId))
+    .get();
+  if (!event) return c.json({ error: 'not found' }, 404);
+  const now = nowIso();
+  if (event.startsAt <= now) {
+    return c.json({ error: 'this show has already started — log it instead' }, 422);
+  }
+
+  await ensureUser(db, userId);
+  const { status } = c.req.valid('json');
+  await db
+    .insert(eventRsvps)
+    .values({ userId, eventId, status, createdAt: now })
+    .onConflictDoUpdate({ target: [eventRsvps.userId, eventRsvps.eventId], set: { status } });
+  return c.json({ ok: true, mine: status });
+});
+
+/** Changing your mind all the way: no answer at all. Idempotent. */
+reviewRoutes.delete('/events/:id/rsvp', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+  const db = getDb(c.env.DB);
+  await db
+    .delete(eventRsvps)
+    .where(and(eq(eventRsvps.userId, userId), eq(eventRsvps.eventId, c.req.param('id'))));
+  return c.json({ ok: true, mine: null });
 });
 
 /**
