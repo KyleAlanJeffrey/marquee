@@ -161,3 +161,30 @@ export const indexnowLog = sqliteTable(
     submittedIdx: index('indexnow_log_submitted_idx').on(t.submittedAt),
   }),
 );
+
+/**
+ * A local mirror of the identity Clerk owns — see migration 0009.
+ *
+ * Clerk is authoritative for all of it; this table exists because attendances and
+ * reviews need a foreign key, and D1 cannot join against an API. The profile
+ * columns are denormalised so rendering somebody else's review doesn't cost a
+ * round trip per author.
+ */
+export const users = sqliteTable(
+  'users',
+  {
+    /** The Clerk user id (`user_2abc…`), not a uuid of ours. */
+    id: text('id').primaryKey(),
+    handle: text('handle'),
+    displayName: text('display_name'),
+    avatarUrl: text('avatar_url'),
+    createdAt: text('created_at').notNull(),
+    /** When this mirror was last refreshed, so a stale name has a known age. */
+    syncedAt: text('synced_at').notNull(),
+    /** Set when Clerk says the account is gone; the row stays, see the migration. */
+    deletedAt: text('deleted_at'),
+  },
+  (t) => ({
+    handleIdx: index('users_handle_lookup_idx').on(t.handle),
+  }),
+);

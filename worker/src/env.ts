@@ -29,6 +29,31 @@ export type Env = {
    * `PRIMARY_HOST` too: IndexNow rejects a URL list whose host it can't verify.
    */
   INDEXNOW_KEY?: string;
+  /**
+   * Clerk's secret key — the one that makes accounts exist at all.
+   *
+   * Unset is a supported state, not a broken one: every route resolves to
+   * "signed out", and signed out is exactly the app that shipped before accounts
+   * did. Local dev and forks run this way.
+   */
+  CLERK_SECRET_KEY?: string;
+  /**
+   * The PEM public key from the Clerk dashboard (API keys → Show JWT public key).
+   *
+   * Optional, and worth setting in production: with it, verifying a session is
+   * pure computation. Without it the SDK fetches the JWKS from Clerk's API on a
+   * cache miss, and a Worker's subrequest budget is shared with ingestion.
+   */
+  CLERK_JWT_KEY?: string;
+  /**
+   * Comma-separated origins allowed to have minted a session, e.g.
+   * `https://marquee.rocks,https://www.marquee.rocks`.
+   *
+   * Guards the subdomain-cookie-leak case only — a token from somebody else's
+   * Clerk instance already fails on its signature. Unset means the check is
+   * skipped, because an empty allowlist would reject every request instead.
+   */
+  CLERK_AUTHORIZED_PARTIES?: string;
 };
 
 /** Hono generics for typed `c.env` across the app. */

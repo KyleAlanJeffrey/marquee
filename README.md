@@ -189,6 +189,26 @@ a restart. Push/reminders need a dev or store build on a physical device.
 | Spotify client id/secret | developer.spotify.com | search-artists |
 | Bandsintown app id | see below | refresh-artist-events, admin backfill |
 | SeatGeek client id | seatgeek.com/account/develop | discover-events, admin discover-seatgeek |
+| Clerk publishable + secret key | dashboard.clerk.com | accounts, `/api/me`, anything that publishes |
+
+**Clerk** is the identity provider — see "Accounts" in `todo.md` for why it was
+bought rather than built. Three variables, and only the first two are needed:
+
+- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` (client, in `.env`) — publishable by design;
+  it names the Clerk instance and authorises nothing.
+- `CLERK_SECRET_KEY` (Worker, in `.dev.vars` / `wrangler secret put`).
+- `CLERK_JWT_KEY` (Worker, optional) — the PEM public key from **API keys → Show
+  JWT public key**. With it, verifying a session is pure computation; without it
+  the SDK fetches the JWKS from Clerk's API on a cache miss, and a Worker's
+  subrequest budget is shared with ingestion. Worth setting in production.
+- `CLERK_AUTHORIZED_PARTIES` (Worker, optional) — comma-separated origins allowed
+  to have minted a session. Guards the subdomain-cookie-leak case; a token from a
+  *different* Clerk instance already fails on its signature.
+
+**Leaving all of them unset is a supported configuration**, not a broken one: no
+provider is mounted, every request resolves to signed-out, and the app behaves
+exactly as it did before accounts existed. `GET /api/me` reports which state
+you're in — `{"signed_in":false,"configured":false}` means no keys are set.
 
 **Bandsintown** has far more of the club/DIY tier than Ticketmaster, and its API
 is gated: it's for "artists and anyone working on their behalf". If you manage an

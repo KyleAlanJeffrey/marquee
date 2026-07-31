@@ -16,6 +16,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KyleBadge } from '@/components/kyle-badge';
 import { PageMeta } from '@/components/page-meta';
 import { Colors, Fonts } from '@/constants/theme';
+import { AuthProvider } from '@/lib/auth';
 import { FollowedVenuesProvider } from '@/lib/followed-venues-store';
 import { FollowsProvider } from '@/lib/follows-store';
 import { useNotificationObserver } from '@/lib/notifications';
@@ -69,6 +70,9 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.background }}>
+      {/* Outside the query client, so a token is available to the first fetch it
+          makes. Renders its children untouched when there is no Clerk key. */}
+      <AuthProvider>
       <QueryClientProvider client={queryClient}>
         <LocalStores>
             <ThemeProvider value={navTheme}>
@@ -106,6 +110,7 @@ export default function RootLayout() {
             </ThemeProvider>
         </LocalStores>
       </QueryClientProvider>
+      </AuthProvider>
     </GestureHandlerRootView>
   );
 }

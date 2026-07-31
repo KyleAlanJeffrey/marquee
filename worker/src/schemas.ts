@@ -86,3 +86,15 @@ export const discoverBody = z.object({
 export const refreshArtistsBody = z.object({
   artists: z.array(artistRef.extend({ name: z.string().min(1) })).min(1),
 });
+
+/**
+ * The profile fields a client may push into the mirror row.
+ *
+ * Deliberately not including `handle`: it is public and goes in URLs, so it is the
+ * one field where a client's lie lands on somebody else. The lengths are caps
+ * against a junk body rather than product rules — Clerk enforces the real ones.
+ */
+export const profileBody = z.object({
+  displayName: z.string().trim().max(100).nullish(),
+  avatarUrl: z.string().trim().url().max(500).nullish(),
+});
