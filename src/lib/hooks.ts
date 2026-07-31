@@ -32,8 +32,12 @@ export function useNearbyEvents(coords: Coords | null, radiusMiles: number) {
     queryKey: ['nearby-events', coords, radiusMiles],
     enabled: coords != null,
     queryFn: async (): Promise<NearbyEvent[]> => {
-      const page = await apiGet<Page<NearbyEvent>>(
-        `/nearby?lat=${coords!.lat}&lng=${coords!.lng}&radius=${radiusMiles}&limit=400&offset=0`,
+      // POST body + anonymous: coordinates stay out of request logs and never
+      // travel with the session token. See RequestOpts in api.ts.
+      const page = await apiPost<Page<NearbyEvent>>(
+        '/nearby',
+        { lat: coords!.lat, lng: coords!.lng, radius: radiusMiles, limit: 400, offset: 0 },
+        { anonymous: true },
       );
       return page.items;
     },
@@ -47,8 +51,10 @@ export function useInfiniteNearby(coords: Coords | null, radiusMiles: number, pa
     enabled: coords != null,
     initialPageParam: 0,
     queryFn: ({ pageParam }): Promise<Page<NearbyEvent>> =>
-      apiGet(
-        `/nearby?lat=${coords!.lat}&lng=${coords!.lng}&radius=${radiusMiles}&limit=${pageSize}&offset=${pageParam}`,
+      apiPost(
+        '/nearby',
+        { lat: coords!.lat, lng: coords!.lng, radius: radiusMiles, limit: pageSize, offset: pageParam },
+        { anonymous: true },
       ),
     getNextPageParam: (last) => last.nextCursor,
   });
@@ -142,8 +148,10 @@ export function useNearbyVenues(coords: Coords | null, radiusMiles: number, limi
     queryKey: ['nearby-venues', coords, radiusMiles, limit],
     enabled: coords != null,
     queryFn: async (): Promise<NearbyVenue[]> => {
-      const data = await apiGet<{ items: NearbyVenue[] }>(
-        `/venues/nearby?lat=${coords!.lat}&lng=${coords!.lng}&radius=${radiusMiles}&limit=${limit}`,
+      const data = await apiPost<{ items: NearbyVenue[] }>(
+        '/venues/nearby',
+        { lat: coords!.lat, lng: coords!.lng, radius: radiusMiles, limit },
+        { anonymous: true },
       );
       return data.items ?? [];
     },
@@ -209,14 +217,19 @@ export function useFollowingEvents(
     enabled: artistIds.length + spotifyIds.length + venueIds.length > 0,
     placeholderData: (prev) => prev,
     queryFn: async (): Promise<FollowingEvent[]> => {
-      const data = await apiPost<{ items: FollowingEvent[] }>('/following', {
-        artistIds,
-        spotifyIds,
-        venueIds,
-        lat: coords?.lat ?? null,
-        lng: coords?.lng ?? null,
-        radiusMiles: radius,
-      });
+      const data = await apiPost<{ items: FollowingEvent[] }>(
+        '/following',
+        {
+          artistIds,
+          spotifyIds,
+          venueIds,
+          lat: coords?.lat ?? null,
+          lng: coords?.lng ?? null,
+          radiusMiles: radius,
+        },
+        // Carries coordinates, so no token — see RequestOpts in api.ts.
+        { anonymous: true },
+      );
       return data.items ?? [];
     },
   });

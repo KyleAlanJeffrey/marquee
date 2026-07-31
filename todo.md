@@ -962,15 +962,24 @@ Nothing else in this section depends on it.
   location only (`Location.Accuracy.Balanced`,
   `requestForegroundPermissionsAsync`), and Play review reads the manifest, not
   the intent.
-- [ ] **Privacy declarations.** Short and worth stating precisely rather than
-  waving at: local notifications only, no push tokens anywhere in `src/`; location
-  goes to our own API as `?lat=&lng=` and is used for app functionality, not
-  linked to an identity and not used for tracking. That query string does mean
-  coordinates land in Cloudflare's request logs — worth a POST body instead before
-  the declaration is signed.
-- [ ] **Store listing copy and screenshots**, plus a decision on `expo-updates`
-  (not installed today, so there is no OTA channel; adding it buys same-day JS
-  fixes at the cost of a runtime-version policy).
+- [x] **Privacy declarations — drafted, and the code changed to match**
+  (2026-07-31, `docs/privacy-declarations.md`). The draft's premise got an upgrade
+  before it was written down: coordinates used to travel as `?lat=&lng=` query
+  strings (request logs), and since accounts landed every request also carried the
+  bearer token — location and identity in one request. Both `/nearby` routes are
+  POSTs now, and every coordinate-carrying call goes out **anonymous** (no
+  Authorization header; `RequestOpts` in `src/lib/api.ts`), so the server cannot
+  link who to where even accidentally. The doc is the answer key for the Apple
+  nutrition label and Play Data Safety forms, claims verified by grep and named so
+  they can be re-checked at submission.
+  - [ ] Still blocking a signature: an in-app **account deletion** entry point
+    (required by both stores now that accounts exist) and a hosted **privacy
+    policy page** for the forms' URL field.
+- [x] **Store listing copy — drafted** (`docs/store-listing.md`): names, subtitle,
+  description, keywords, promo text, all inside the stores' limits.
+  - [ ] Screenshots (needs the simulator and seeded data), Play feature graphic,
+    and the `expo-updates` decision (not installed → no OTA channel; adding it
+    buys same-day JS fixes at the cost of a runtime-version policy).
 - [ ] **Then the website advertises the app**: store badges on `/`, and a smart
   banner on the web pages rather than "Open the app" pointing at a bundle the
   visitor is already inside.

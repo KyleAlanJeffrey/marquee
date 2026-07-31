@@ -47,24 +47,39 @@ async function authHeaders(): Promise<Record<string, string>> {
   }
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(url(path), { headers: await authHeaders() });
+/**
+ * `anonymous` sends the request with no Authorization header even when signed in.
+ *
+ * For the endpoints that carry the user's location. None of them read identity,
+ * and attaching the token anyway would put "who" and "where" in one request — the
+ * exact pairing the privacy declaration promises never leaves the device. What the
+ * server never receives, no log or breach can disclose.
+ */
+type RequestOpts = { anonymous?: boolean };
+
+export async function apiGet<T>(path: string, opts: RequestOpts = {}): Promise<T> {
+  const res = await fetch(url(path), { headers: opts.anonymous ? {} : await authHeaders() });
   if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
   return res.json() as Promise<T>;
 }
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  return send<T>('POST', path, body);
+export async function apiPost<T>(path: string, body: unknown, opts: RequestOpts = {}): Promise<T> {
+  return send<T>('POST', path, body, opts);
 }
 
-export async function apiPut<T>(path: string, body: unknown): Promise<T> {
-  return send<T>('PUT', path, body);
+export async function apiPut<T>(path: string, body: unknown, opts: RequestOpts = {}): Promise<T> {
+  return send<T>('PUT', path, body, opts);
 }
 
-async function send<T>(method: 'POST' | 'PUT', path: string, body: unknown): Promise<T> {
+async function send<T>(
+  method: 'POST' | 'PUT',
+  path: string,
+  body: unknown,
+  opts: RequestOpts = {},
+): Promise<T> {
   const res = await fetch(url(path), {
     method,
-    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    headers: { 'Content-Type': 'application/json', ...(opts.anonymous ? {} : await authHeaders()) },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);

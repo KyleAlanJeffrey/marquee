@@ -10,8 +10,9 @@ import { refreshVenue, venueInfo } from '../sources';
 export const venues = new Hono<AppEnv>();
 
 // Registered before `/:id`, which would otherwise match "nearby" as a venue id.
-venues.get('/nearby', zValidator('query', nearbyVenuesQuery), async (c) => {
-  const { lat, lng, radius, limit } = c.req.valid('query');
+// A POST like /nearby and /following: coordinates stay out of request logs.
+venues.post('/nearby', zValidator('json', nearbyVenuesQuery), async (c) => {
+  const { lat, lng, radius, limit } = c.req.valid('json');
   return c.json({ items: await nearbyVenues(getDb(c.env.DB), lat, lng, radius, limit) });
 });
 

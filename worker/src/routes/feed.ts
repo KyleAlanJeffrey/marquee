@@ -9,9 +9,12 @@ import { discover, refreshArtists } from '../sources';
 
 export const feed = new Hono<AppEnv>();
 
-// Read: upcoming shows near a point (bbox + haversine, cursor-paginated).
-feed.get('/nearby', zValidator('query', nearbyQuery), async (c) => {
-  const { lat, lng, radius, limit, offset } = c.req.valid('query');
+// Read: upcoming shows near a point (bbox + haversine, cursor-paginated). A POST
+// for the same reason /following is one — coordinates are somebody's location, and
+// a query string puts them in every request log between here and the client. The
+// body carries them; logs see only the path.
+feed.post('/nearby', zValidator('json', nearbyQuery), async (c) => {
+  const { lat, lng, radius, limit, offset } = c.req.valid('json');
   return c.json(await nearbyEvents(getDb(c.env.DB), lat, lng, radius, limit, offset));
 });
 

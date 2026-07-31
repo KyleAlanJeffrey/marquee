@@ -17,11 +17,12 @@ export type RefreshableArtist = {
  */
 export async function discoverEvents(coords: Coords, radiusMiles: number): Promise<number> {
   try {
-    const data = await apiPost<{ ingested?: number }>('/discover-events', {
-      lat: coords.lat,
-      lng: coords.lng,
-      radius: radiusMiles,
-    });
+    const data = await apiPost<{ ingested?: number }>(
+      '/discover-events',
+      { lat: coords.lat, lng: coords.lng, radius: radiusMiles },
+      // Carries coordinates, so no token — see RequestOpts in api.ts.
+      { anonymous: true },
+    );
     return data.ingested ?? 0;
   } catch {
     return 0;
