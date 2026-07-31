@@ -178,6 +178,10 @@ without any auth at all.
 
 ### The blocker nobody would guess: there is no past
 
+**Resolved 2026-07-31** — the ingest keeps past shows, and the on-demand Bandsintown
+backfill (`docs/historical-concerts.md`) fills roughly a decade of history for any
+artist somebody asks about. Kept below as the record of why it mattered.
+
 `sanitizeInputs` (`worker/src/data.ts`) drops any listing more than 24 hours old
 on the way in, and the comment says why — "one already past is dead weight in a
 table whose reads are all 'upcoming'". That was correct for a discovery app and it
@@ -347,9 +351,8 @@ it still verifies nothing and answers `configured:false`. A session would be rea
 in the app and invisible to the API. That is a *worse* state to leave sitting than
 having no keys at all, because the app would look signed-in while every write 401s.
 
-- [ ] **Still needed from Kyle:** `CLERK_SECRET_KEY` into `.dev.vars` for local dev
-  and `npx wrangler secret put CLERK_SECRET_KEY` for production. Until then, don't
-  build sign-in UI that implies the server knows who you are.
+- [x] `CLERK_SECRET_KEY` — landed 2026-07-31, both halves (`.dev.vars` + production
+  secret). The server has verified sessions ever since.
 
 #### Measured state of the deployment, 2026-07-31
 
@@ -453,9 +456,11 @@ reverted; dev-mode boot alone takes ~7s, which is why 6s wasn't enough to see it
 No silent write and no premature bounce, which are the two things being traded
 before. With the patch reverted, a cold load tapping Follow at 7.2s denies by 8.05s.
 
-- [ ] **Unverified half:** pending → *signed in* → the held write applies. It needs
-  a real session, and creating an account isn't something I can do. Sign in, then
-  tap Follow during a cold start and check the artist lands in Following.
+*(The "held write" described above was deleted later the same day with the rest of
+the local store — see "No local storage at all". `account-lists.tsx` keeps the
+`pending` state but simply refuses the write during the window instead of parking
+it, since there is no longer a local list to park it in. The verification item that
+sat here is moot.)*
 
 #### Why the deploy had no accounts in it, and the fix, 2026-07-31
 
@@ -606,85 +611,21 @@ than left tappable.
   real session and creating one isn't something I can do. Sign in, follow an artist,
   reload, and confirm it is still there; then check `/settings` remembers a radius.
 
-#### The lists follow the account now (2026-07-31, superseded above)
+#### The device-sync interlude (2026-07-31, built and deleted the same day)
 
-`GET` / `PUT /api/me/lists`, one `user_lists` row per `(user, kind)` holding the
-client's own JSON array, plus `src/lib/list-sync.tsx` on the device.
+For a few hours the lists lived on the device with a server copy synced behind them:
+a pull-once-per-device policy, a union merge for first sign-in, and a shared-phone
+branch. CodeRabbit reviewed it (five findings; the critical one — a stale closure
+that silently reverted writes made during the sync round trip — was real and got
+fixed) and then the whole layer was deleted when Kyle decided nothing lives locally.
+Two decisions from that interlude still stand:
 
-**Storage is a document, not four relational tables.** The job is portability — a
-lost phone is not a lost history — and not querying. Nothing asks "who follows this
-artist"; what gets asked is "give me my list back". That buys one table, one pair of
-routes, no column-per-field mapping to keep in step with four client types, and no
-working around SQLite's 999-variable statement limit when somebody with 400 follows
-signs in. `0010_user_lists.sql` records the point at which to stop: the moment a list
-has to be read by anyone but its owner. Public reviews (phase 3) and a friends feed
-(phase 4) both need real columns, and neither is a migration of this table — a review
-is a different object from a private log entry.
-
-**The sync policy: pull once per device, push on every change.** Three cases, decided
-by a `marquee.list-sync.v1` mark holding the last account synced on this device:
-
-| mark | meaning | what happens |
-| --- | --- | --- |
-| absent | lists built before any account | **union** local + remote, keep both |
-| ≠ this user | shared phone, or a second account | **adopt** the account's copy |
-| = this user | ordinary cold start | keep local, push it |
-
-The union is the migration this whole feature exists for, and `mergeLists` explains
-why adding up is the only answer that can't throw away something real. The
-*different account* case must not merge: it would push the previous person's follows
-and gig history into the new person's account, which on a shared phone is somebody
-else's private data ending up under your name.
-
-- [ ] **Two devices used in the same period will not see each other's changes** until
-  the second one's first sign-in. A union cannot express a deletion — that is asserted
-  as a test in `list-merge.test.ts` so it can't later be mistaken for a bug — so
-  merging on every start would resurrect everything anyone ever removed. Fixing it
-  properly means per-entry tombstones and versions. Pull-once is the honest version of
-  the small thing rather than a broken version of the big one.
-- [ ] **Not verified end to end**, because that needs a real session and creating an
-  account isn't something I can do. What *is* verified: both routes 401 without a
-  token, a follow with neither `artistId` nor `spotifyId` is 400, an empty body is
-  400, and signed out on web the app makes **zero** requests to `/me/lists` and
-  writes no sync mark. Sign in, add a follow, then sign in on another browser and
-  check it arrives.
-
-One trap avoided in `local-collection.tsx`: `replaceAll` sets a `superseded` flag, so
-a disk read still in flight stops merging its entries into the list afterwards.
-Without it the hydrate merge would re-add exactly what the sync had just resolved.
-
-#### CodeRabbit on the sync: five findings, three fixed, two declined
-
-**Fixed — and the critical one was a real bug I wrote.** `list-sync.tsx` read the
-local lists from a closure captured *before* two awaits, one of them a network round
-trip. Follow an artist during that window and `replaceAll` reverted it, then pushed
-the account a list without it: latency-dependent silent data loss, which is the worst
-kind to find later. Now a `latest` ref is refreshed every render and read after the
-awaits, and the run re-checks the account after each one — a sign-out or a switch
-mid-flight would otherwise stamp the mark with the wrong id and push one person's
-lists into the other's account.
-
-**Fixed — the four upserts weren't atomic.** Awaited one at a time, each committed
-alone, so a failure partway left the account holding some lists from this push and
-some from the last, with the client seeing only an error. Now one `db.batch`, which
-D1 runs as a single transaction. At most four statements, so nothing to chunk.
-
-**Fixed — nothing checked that the two validators agree.** The file claimed
-`listsBody` and `isFollowedArtist` describe one shape for two different reasons;
-that was a comment, not a test. Now 12 fixtures run through both, asserting the same
-verdict from each, so drift shows up as a failure naming which side moved.
-
-**Declined — revision tracking for concurrent writes.** This is the multi-device
-limitation already recorded above, and the half-measure is worse than the gap: a
-revision check would make the server 409, and the client has no merge-and-retry path,
-so a single-device user's push would start failing while multi-device stays broken.
-It needs the tombstones-and-versions work, as one piece, with the client.
-
-**Declined again — `.env.production` should carry a `pk_live_` key.** Second time
-this has been raised, so it goes here rather than being re-argued: there is *no*
-production Clerk instance to point at, and the advice as written ("block the
-production deployment") means taking the live site's accounts down. The underlying
-risk is real but it is about silence, which `src/lib/auth.tsx` now warns about.
+- `user_lists` **stores a JSON document per list, not four relational tables.** The
+  job is portability, not querying; `0010_user_lists.sql` records when to stop —
+  the moment a list is read by anyone but its owner. Reviews are a different table.
+- The multi-device story is now trivially correct *because* there is no local copy:
+  every device reads the same server row. The tombstones-and-versions work the sync
+  would have needed is no longer needed by anything.
 
 - [ ] **When a production Clerk instance exists:** put its `pk_live_` key in
   `.env.production` and delete the startup warning that exists to nag about not
@@ -774,16 +715,15 @@ Two consequences:
    tier allows 3 social connections; Apple + Google + Spotify was already exactly
    three. Facebook occupying a slot means something planned can't have one.
 
-- [ ] **Kyle, in the Clerk dashboard:** enable **Apple** and **Spotify**, and drop
-  **Facebook** unless you want it instead of Spotify. No code change either way —
-  the sign-in screen renders whatever the instance reports.
-
-Re-read the instance on 2026-07-31 after the last round of changes: still
-`oauth_facebook, oauth_google` only, first factor `email_address`, password
-required, CAPTCHA on. So neither Apple nor Spotify has been added yet. This is
-checkable any time without the dashboard —
-`GET https://kind-redfish-41.clerk.accounts.dev/v1/environment?__clerk_api_version=2025-04-10&_clerk_js_version=5.100.0`
-reports `user_settings.social` publicly.
+- [x] **Apple enabled** — Kyle added it 2026-07-31; re-read the instance and the live
+  sign-in card now renders `cl-button__apple` alongside Facebook and Google. The
+  guideline-4.8 blocker is cleared.
+- [ ] **Kyle, still open in the Clerk dashboard:** the free tier's three social slots
+  are now Apple + Facebook + Google. If Spotify is still wanted, Facebook has to go.
+  No code change either way — the sign-in screen renders whatever the instance
+  reports, which is checkable without the dashboard:
+  `GET https://kind-redfish-41.clerk.accounts.dev/v1/environment?__clerk_api_version=2025-04-10&_clerk_js_version=5.100.0`
+  → `user_settings.social`.
 
 Also visible and expected: "Secured by Clerk" and a "Development mode" badge. The
 first goes away on the $25/mo Pro plan, the second when a production instance
@@ -817,9 +757,10 @@ What *does* transfer directly: `<ClerkProvider publishableKey tokenCache>` at th
 root (already done, in `src/lib/auth.tsx` rather than `_layout.tsx` so the keyless
 path stays possible), and `useAuth` / `useUser` / `useClerk().signOut`.
 
-- [ ] **On day one with the secret key:** enable Apple + Google + Spotify in the
-  Clerk dashboard, set `CLERK_SECRET_KEY` on the Worker, and confirm a token minted
-  in Expo verifies in a Worker before building anything on top of it.
+- [x] **Day one with the secret key happened 2026-07-31:** `CLERK_SECRET_KEY` is on
+  the Worker, Apple + Google are enabled (Spotify pending a free slot — see above),
+  and the server verifies sessions. The one un-run confirmation is a token minted in
+  the *native* app verifying in the Worker; web is confirmed by construction.
 
 ### Moderation, because public writing invites it
 
@@ -868,16 +809,16 @@ cleaned up.
   there is no backfill to be had. Details above. The good news is that it was a
   day's reading rather than a month's integration, which is the whole reason this
   was a phase of its own.
-- [~] **Phase 1 — the past becomes first-class.** `sanitizeInputs` is loosened
-  (`71dff0d`) and every `starts_at > now` is now stated by the read path rather
-  than assumed by the writer. What's left is the page: a past show worth reading —
-  who played, the setlist if we have it, who else was there.
-- [~] **Phase 2 — accounts.** The plumbing is in (`78c7497`): Clerk, a verified
-  caller on the Worker, a `users` mirror in D1, `/api/me`. What's left needs the
-  keys — OAuth buttons, handles, deletion, privacy policy, terms — plus the one
-  piece that is ours either way: migrating a device's local log into a new account
-  on first sign-in. That is not an afterthought, it is the reward for signing up,
-  and phase 0's snapshot rows are already the right shape to upload.
+- [x] **Phase 1 — the past becomes first-class.** `sanitizeInputs` loosened per-call,
+  read paths state their own `starts_at > now`, and the history backfill fills the
+  past on demand. Residual: a past-show *page* worth reading (setlist, who else was
+  there) belongs to phase 3, not here.
+- [x] **Phase 2 — accounts.** Clerk end to end: verified caller on the Worker, a
+  `users` mirror, `/api/me`, the write gate, the four lists and both prefs on the
+  account, sign-in on web (Clerk components) and native (hosted flow), Apple +
+  Google live. The "migrate the device's log up on first sign-in" reward was
+  overtaken by events — there is no device log to migrate any more. Residual for
+  phase 3: handles, account deletion, privacy policy, terms.
 - [x] **Past-show discovery — built 2026-07-31.** `POST /api/artists/:id/history`,
   `GET /api/artists/:id/past-events` and `PastShowsPicker` on the artist page. See
   `docs/historical-concerts.md`; this is what took the catalogue from 19 days of history
