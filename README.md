@@ -192,7 +192,7 @@ a restart. Push/reminders need a dev or store build on a physical device.
 | Clerk publishable + secret key | dashboard.clerk.com | accounts, `/api/me`, anything that publishes |
 
 **Clerk** is the identity provider — see "Accounts" in `todo.md` for why it was
-bought rather than built. Three variables, and only the first two are needed:
+bought rather than built. Four variables, and only the first two are needed:
 
 - `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` (client, in `.env`) — publishable by design;
   it names the Clerk instance and authorises nothing.

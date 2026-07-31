@@ -170,21 +170,19 @@ export const indexnowLog = sqliteTable(
  * columns are denormalised so rendering somebody else's review doesn't cost a
  * round trip per author.
  */
-export const users = sqliteTable(
-  'users',
-  {
-    /** The Clerk user id (`user_2abc…`), not a uuid of ours. */
-    id: text('id').primaryKey(),
-    handle: text('handle'),
-    displayName: text('display_name'),
-    avatarUrl: text('avatar_url'),
-    createdAt: text('created_at').notNull(),
-    /** When this mirror was last refreshed, so a stale name has a known age. */
-    syncedAt: text('synced_at').notNull(),
-    /** Set when Clerk says the account is gone; the row stays, see the migration. */
-    deletedAt: text('deleted_at'),
-  },
-  (t) => ({
-    handleIdx: index('users_handle_lookup_idx').on(t.handle),
-  }),
-);
+export const users = sqliteTable('users', {
+  /** The Clerk user id (`user_2abc…`), not a uuid of ours. */
+  id: text('id').primaryKey(),
+  handle: text('handle'),
+  displayName: text('display_name'),
+  avatarUrl: text('avatar_url'),
+  createdAt: text('created_at').notNull(),
+  /** When this mirror was last refreshed, so a stale name has a known age. */
+  syncedAt: text('synced_at').notNull(),
+  /** Set when Clerk says the account is gone; the row stays, see the migration. */
+  deletedAt: text('deleted_at'),
+});
+// No index block: the one handles have is `users_handle_idx`, partial and on
+// `lower(handle)`, which Drizzle can't express — same as `artists_name_folded_idx`.
+// Declaring a second, plain index here would mean the schema described an index
+// the database has never had, and handle lookups are case-folded anyway.
