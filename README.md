@@ -326,9 +326,17 @@ npx wrangler d1 execute marquee --remote \
 ```
 
 A run that submitted nothing writes a row too, with `note` starting `noop` and the
-reason after it — `noop nothing new` on a quiet hour, `noop INDEXNOW_KEY not bound`
-on a broken deploy. Those two used to be the same silent `return null`, which is
-exactly how the unbound key went unnoticed; distinguishing them is the point.
+reason after it. There are four:
+
+| `note` | Means |
+| --- | --- |
+| `noop nothing new` | A quiet hour — the crawl wrote no future-dated shows. Normal. |
+| `noop INDEXNOW_KEY not bound` | The secret is missing. Nothing has been submitted since the deploy that dropped it. |
+| `noop PRIMARY_HOST not bound` | No canonical host, so there is no absolute URL to submit. |
+| `noop INDEXNOW_KEY malformed` | The key is set but isn't 8–128 of `[A-Za-z0-9-]`, so Bing would reject the list. |
+
+The first and the second used to be the same silent `return null`, which is exactly
+how the unbound key went unnoticed for a day; telling them apart is the point.
 
 ### Venue identity, and why a coordinate isn't enough
 
