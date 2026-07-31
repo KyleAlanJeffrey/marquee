@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AttendanceCard } from '@/components/attendance-card';
 import { ErrorState } from '@/components/error-state';
+import { ReviewSection } from '@/components/review-section';
 import { GalleryStrip } from '@/components/gallery-strip';
 import { GlassCard } from '@/components/glass-card';
 import { GradientButton } from '@/components/gradient-button';
@@ -226,6 +227,15 @@ export default function EventScreen() {
                 venueTimezone: tz,
               }}
             />
+            {/* Public reviews — a separate section and a separate act from the
+                log above it: the log is private, this is under your name. */}
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+              <ThemedText type="title">Reviews</ThemedText>
+            </View>
+            <View style={{ paddingHorizontal: Spacing.three }}>
+              <ReviewSection eventId={e.id} venueName={e.venue?.name ?? null} />
+            </View>
           </>
         ) : null}
 

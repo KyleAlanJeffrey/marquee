@@ -1,10 +1,12 @@
+import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
-import { sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import { crawlQueueStats, ingestStats, repairDuplicates } from '../data';
 import { getDb } from '../db';
 import type { AppEnv, Env } from '../env';
-import { artists, events } from '../schema';
+import { artists, events, reports, reviews } from '../schema';
+import { reportResolveBody } from '../schemas';
 import { backfillBandsintown, backfillCrawlQueue, crawlBandsintown, ingestSeatGeek } from '../sources';
 
 export const admin = new Hono<AppEnv>();
@@ -191,4 +193,61 @@ admin.post('/repair-duplicates', async (c) => {
     console.error('repair-duplicates failed:', err);
     return c.json({ error: 'repair failed' }, 500);
   }
+});
+
+/**
+ * The moderation queue (guideline 1.2's back half). Open reports, newest
+ * first, each carrying the reported review so triage doesn't need a second
+ * query per row.
+ */
+admin.get('/reports', async (c) => {
+  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+  const db = getDb(c.env.DB);
+  const open = await db
+    .select({
+      id: reports.id,
+      reason: reports.reason,
+      createdAt: reports.createdAt,
+      reporterId: reports.reporterId,
+      reviewId: reviews.id,
+      reviewBody: reviews.body,
+      reviewRating: reviews.rating,
+      reviewVisibility: reviews.visibility,
+      reviewAuthor: reviews.userId,
+      eventId: reviews.eventId,
+    })
+    .from(reports)
+    .innerJoin(reviews, eq(reviews.id, reports.targetId))
+    .where(isNull(reports.resolvedAt))
+    .orderBy(desc(reports.createdAt))
+    .limit(100);
+  return c.json({ open });
+});
+
+/**
+ * Resolve one report: hide the review or keep it, either way with an audit
+ * trail. Hiding is per-review, so other open reports against the same review
+ * are answered by the same act — they still get closed individually, which
+ * keeps each reporter's outcome recorded.
+ */
+admin.post('/reports/:id', zValidator('json', reportResolveBody), async (c) => {
+  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+  const db = getDb(c.env.DB);
+  const report = await db
+    .select({ id: reports.id, targetId: reports.targetId })
+    .from(reports)
+    .where(and(eq(reports.id, c.req.param('id')), isNull(reports.resolvedAt)))
+    .get();
+  if (!report) return c.json({ error: 'not found' }, 404);
+
+  const { action } = c.req.valid('json');
+  const now = new Date().toISOString().slice(0, 19) + 'Z';
+  const statements = [
+    db.update(reports).set({ resolvedAt: now, resolution: action }).where(eq(reports.id, report.id)),
+  ];
+  if (action === 'hide') {
+    statements.push(db.update(reviews).set({ visibility: 'hidden' }).where(eq(reviews.id, report.targetId)));
+  }
+  await db.batch(statements as [typeof statements[0], ...typeof statements]);
+  return c.json({ ok: true, action });
 });

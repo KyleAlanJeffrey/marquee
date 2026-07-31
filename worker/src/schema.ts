@@ -224,6 +224,70 @@ export const personFollows = sqliteTable(
 );
 
 /**
+ * Public reviews — a publication, not the private log; see migration 0014 for
+ * why they are different tables and what 'hidden' means.
+ */
+export const reviews = sqliteTable(
+  'reviews',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    eventId: text('event_id').notNull(),
+    artistId: text('artist_id'),
+    venueId: text('venue_id'),
+    rating: integer('rating'),
+    venueRating: integer('venue_rating'),
+    body: text('body'),
+    visibility: text('visibility').notNull().default('public'),
+    createdAt: text('created_at').notNull(),
+    editedAt: text('edited_at'),
+    deletedAt: text('deleted_at'),
+  },
+  (t) => [
+    unique().on(t.userId, t.eventId),
+    index('reviews_event_idx').on(t.eventId),
+    index('reviews_artist_idx').on(t.artistId),
+    index('reviews_venue_idx').on(t.venueId),
+    index('reviews_user_idx').on(t.userId),
+  ],
+);
+
+/** Reports against public content — guideline 1.2's report path. */
+export const reports = sqliteTable(
+  'reports',
+  {
+    id: text('id').primaryKey(),
+    reporterId: text('reporter_id')
+      .notNull()
+      .references(() => users.id),
+    targetKind: text('target_kind').notNull(),
+    targetId: text('target_id').notNull(),
+    reason: text('reason').notNull(),
+    createdAt: text('created_at').notNull(),
+    resolvedAt: text('resolved_at'),
+    resolution: text('resolution'),
+  },
+  (t) => [index('reports_open_idx').on(t.resolvedAt), index('reports_target_idx').on(t.targetKind, t.targetId)],
+);
+
+/** Blocks — one direction per row; reads hide content in both directions. */
+export const userBlocks = sqliteTable(
+  'user_blocks',
+  {
+    blockerId: text('blocker_id')
+      .notNull()
+      .references(() => users.id),
+    blockedId: text('blocked_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.blockerId, t.blockedId] }), index('user_blocks_blocked_idx').on(t.blockedId)],
+);
+
+/**
  * The four lists a person owns — follows, followed venues, saved shows, the
  * attendance log — one row per list, each holding the client's own JSON array.
  *

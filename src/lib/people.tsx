@@ -26,7 +26,7 @@ export type Profile = {
   user: PublicUser;
   counts: { followers: number; following: number };
   /** Null when the request went out signed out. */
-  viewer: { following: boolean; isSelf: boolean } | null;
+  viewer: { following: boolean; isSelf: boolean; blocked: boolean } | null;
 };
 
 export type FollowListEntry = PublicUser & { followedAt: string };

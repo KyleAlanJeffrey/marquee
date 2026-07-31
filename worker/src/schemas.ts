@@ -201,6 +201,33 @@ export const listsBody = z
  * is checked against the same options the UI offers rather than any positive number —
  * a value the picker cannot produce is a bug somewhere, not a preference.
  */
+/**
+ * A public review as the server will accept it. Both ratings and the body are
+ * optional, but not all at once — an entry with none of them says nothing, and
+ * "I was there" is what the private log is for. The body cap bounds the row,
+ * not the prose: nobody has ever needed a five-thousand-character verdict.
+ */
+export const reviewBody = z
+  .object({
+    rating: z.number().int().min(1).max(5).nullish(),
+    venueRating: z.number().int().min(1).max(5).nullish(),
+    body: z.string().trim().max(4000).nullish(),
+  })
+  .refine((v) => v.rating != null || v.venueRating != null || (v.body ?? '').length > 0, {
+    message: 'a review needs a rating or some words',
+  });
+
+/** A report: what's wrong, in the reporter's words. Required — an unexplained
+ *  report can't be triaged, only counted. */
+export const reportBody = z.object({
+  reason: z.string().trim().min(3).max(500),
+});
+
+/** Resolving a report: hide the content, or keep it and close the report. */
+export const reportResolveBody = z.object({
+  action: z.enum(['hide', 'keep']),
+});
+
 export const prefsBody = z
   .object({
     radiusMiles: z.number().int().min(1).max(1000).optional(),

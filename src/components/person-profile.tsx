@@ -12,7 +12,10 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api';
+import { StarRating } from '@/components/star-rating';
+import { formatEventDate } from '@/lib/format';
 import { personLabel, useFollowList, useFollowPerson, useProfile, type PublicUser } from '@/lib/people';
+import { useBlockPerson, useProfileReviews } from '@/lib/reviews';
 import { useWriteGate } from '@/lib/write-gate';
 
 /**
@@ -76,10 +79,12 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
   const gate = useWriteGate();
   const profile = useProfile(profileKey);
   const follow = useFollowPerson(profileKey);
+  const block = useBlockPerson(profileKey);
   const [tab, setTab] = useState<'followers' | 'following'>('followers');
   // Both directions mount lazily: the counts answer most visits, and each list
   // is only fetched the first time its tab is looked at.
   const list = useFollowList(profileKey, tab, profile.isSuccess);
+  const theirReviews = useProfileReviews(profileKey, profile.isSuccess);
 
   if (profile.isLoading) {
     return (
@@ -142,13 +147,28 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
             THIS IS WHAT OTHER PEOPLE SEE
           </ThemedText>
         )}
-        {!isSelf && (
+        {!isSelf && !viewer?.blocked && (
           <FollowButton
             following={viewer?.following ?? false}
             onToggle={onToggleFollow}
             icon={{ on: 'person-remove-outline', off: 'person-add-outline' }}
             subject={label}
           />
+        )}
+        {/* Block, quietly: signed-in viewers only, and never on yourself. The
+            server severs follows both ways and hides both parties' reviews
+            from each other — one tap does the whole estrangement. */}
+        {!isSelf && viewer && (
+          <PressableScale
+            haptic
+            accessibilityRole="button"
+            accessibilityLabel={viewer.blocked ? `Unblock ${label}` : `Block ${label}`}
+            onPress={() => block.mutate(!viewer.blocked)}
+            style={[styles.blockBtn, { borderColor: viewer.blocked ? theme.error : theme.border }]}>
+            <ThemedText type="labelSm" style={{ color: viewer.blocked ? theme.error : theme.textTertiary }}>
+              {viewer.blocked ? 'BLOCKED — TAP TO UNBLOCK' : 'BLOCK'}
+            </ThemedText>
+          </PressableScale>
         )}
       </GlassCard>
 
@@ -203,6 +223,50 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
           ))}
         </GlassCard>
       )}
+
+      {/* Their public reviews — the content profiles exist for. Absent rather
+          than empty while loading; an empty state only once the answer is real. */}
+      {theirReviews.isSuccess && (
+        <>
+          <ThemedText type="label" style={[styles.reviewsLabel, { color: theme.primary }]}>
+            {`REVIEWS · ${theirReviews.data.reviews.length}`}
+          </ThemedText>
+          {theirReviews.data.reviews.length === 0 ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.emptyNote}>
+              {isSelf
+                ? 'Nothing published yet. Open a show you went to and say what it was like.'
+                : 'No public reviews yet.'}
+            </ThemedText>
+          ) : (
+            <GlassCard style={styles.listCard}>
+              {theirReviews.data.reviews.map((r) => (
+                <PressableScale
+                  key={r.id}
+                  haptic={false}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${r.eventName}`}
+                  onPress={() => router.push(`/event/${encodeURIComponent(r.eventId)}`)}
+                  style={[styles.reviewRow, { borderColor: theme.border }]}>
+                  <View style={styles.reviewHead}>
+                    <ThemedText type="smallBold" numberOfLines={1} style={{ flex: 1 }}>
+                      {r.eventName}
+                    </ThemedText>
+                    {r.rating != null && <StarRating value={r.rating} size={13} subject="the performance" />}
+                  </View>
+                  <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                    {formatEventDate(r.startsAt, null).toUpperCase()}
+                  </ThemedText>
+                  {!!r.body && (
+                    <ThemedText type="small" themeColor="textSecondary" numberOfLines={3}>
+                      {r.body}
+                    </ThemedText>
+                  )}
+                </PressableScale>
+              ))}
+            </GlassCard>
+          )}
+        </>
+      )}
     </View>
   );
 }
@@ -232,4 +296,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   rowAvatar: { width: 36, height: 36, borderRadius: 18 },
+  blockBtn: {
+    paddingVertical: Spacing.one + 2,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  reviewsLabel: { letterSpacing: 1.5, marginTop: Spacing.two },
+  reviewRow: { gap: Spacing.one, padding: Spacing.two, borderRadius: Radius.lg, borderWidth: 1 },
+  reviewHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
 });

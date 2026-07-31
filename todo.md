@@ -60,11 +60,19 @@ History-backfill has landed, so **nothing below is blocked any more** except D o
    What keeps it `[~]`: no discovery surface yet — you reach a profile from
    settings or a shared link, nothing else, until reviews (B) put people on
    pages.
-2. [ ] **Phase B — public reviews.** `reviews` table (separate from the private
-   log, not a flag on it), per-entry `visibility`, opt-in and never retroactive
-   in bulk. Ships **with** the moderation minimum: report, block, filter,
-   published contact (the `/privacy` page covers contact). This phase and the
-   App Store submission are one project — guideline 1.2 gives no partial credit.
+2. [~] **Phase B — public reviews.** Built 2026-07-31: `reviews`, `reports` and
+   `user_blocks` (migration 0014, applied local + production, all soft-delete);
+   `PUT/DELETE /api/events/:id/review` (one per person per show, edits stamped,
+   future shows refused with 422, 20/day brake), `GET .../reviews` (author's own
+   rides separately so moderation-hidden reviews don't gaslight their author);
+   report → `GET/POST /api/admin/reports` queue (hide/keep with audit trail);
+   block severs follows both ways, refuses new ones, and empties both parties'
+   review reads of each other. Client: composer + list on past-event pages
+   (own form, nothing read from the private log), reviews + block button on
+   profiles. Verified against local D1 with a minted session token, every path.
+   Still open in B: Kyle's end-to-end pass in the UI; a content *filter* beyond
+   report/block/hide if store review demands one; and the store submission
+   itself, which this phase shares a deadline with (guideline 1.2).
 3. [ ] **Phase C — the roll-ups.** Artist live-reputation and venue-quality
    scores on `/artist/[id]` and `/venue/[id]`, which are already server-rendered
    and indexed. Highest-leverage phase: "is X good live" becomes a page that

@@ -2,9 +2,11 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { callerFrom, ensureUser, syncProfileFromClerk } from '../auth';
+import { nowIso } from '../data';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
-import { personFollows, users } from '../schema';
+import { events, personFollows, reviews, userBlocks, users } from '../schema';
+import { blockedEitherWay } from './reviews';
 
 /**
  * Public profiles and the person graph — phase A of docs/social.md.
@@ -114,14 +116,105 @@ people.get('/:key', async (c) => {
           .get())
       : false;
 
+  // Whether *you* blocked them — the block/unblock button's state. Being
+  // blocked by them is deliberately not surfaced: announcing it is how blocks
+  // start arguments.
+  const viewerBlocked =
+    userId && userId !== person.id
+      ? !!(await db
+          .select({ one: sql`1` })
+          .from(userBlocks)
+          .where(and(eq(userBlocks.blockerId, userId), eq(userBlocks.blockedId, person.id)))
+          .get())
+      : false;
+
   return c.json({
     user: person,
     counts: {
       followers: await countWhere(eq(personFollows.followeeId, person.id), personFollows.followerId),
       following: await countWhere(eq(personFollows.followerId, person.id), personFollows.followeeId),
     },
-    viewer: userId ? { following: viewerFollows, isSelf: userId === person.id } : null,
+    viewer: userId
+      ? { following: viewerFollows, isSelf: userId === person.id, blocked: viewerBlocked }
+      : null,
   });
+});
+
+/**
+ * Their public reviews — the profile's content, and the reason profiles exist.
+ * Estranged pairs (a block in either direction) see nothing rather than a
+ * filtered subset: guideline 1.2's block has to mean the person is gone.
+ */
+people.get('/:key/reviews', async (c) => {
+  const db = getDb(c.env.DB);
+  const person = await findByKey(db, c.req.param('key'));
+  if (!person) return c.json({ error: 'not found' }, 404);
+
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (userId && userId !== person.id && (await blockedEitherWay(db, userId, person.id))) {
+    return c.json({ reviews: [], limit: PROFILE_REVIEWS_MAX });
+  }
+
+  const rows = await db
+    .select({
+      id: reviews.id,
+      eventId: reviews.eventId,
+      eventName: events.name,
+      startsAt: events.startsAt,
+      rating: reviews.rating,
+      venueRating: reviews.venueRating,
+      body: reviews.body,
+      createdAt: reviews.createdAt,
+      editedAt: reviews.editedAt,
+    })
+    .from(reviews)
+    .innerJoin(events, eq(events.id, reviews.eventId))
+    .where(and(eq(reviews.userId, person.id), eq(reviews.visibility, 'public'), isNull(reviews.deletedAt)))
+    .orderBy(desc(reviews.createdAt))
+    .limit(PROFILE_REVIEWS_MAX);
+
+  return c.json({ reviews: rows, limit: PROFILE_REVIEWS_MAX });
+});
+
+const PROFILE_REVIEWS_MAX = 50;
+
+/**
+ * Block. Severs the relationship whole: existing follows go in both
+ * directions, and the read paths stop serving either party's reviews to the
+ * other. One tap has to do all of it — nobody blocks somebody and then wants
+ * to keep appearing in their feed.
+ */
+people.post('/:key/block', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+
+  const db = getDb(c.env.DB);
+  const person = await findByKey(db, c.req.param('key'));
+  if (!person) return c.json({ error: 'not found' }, 404);
+  if (person.id === userId) return c.json({ error: 'cannot block yourself' }, 400);
+
+  await ensureUser(db, userId);
+  await db.batch([
+    db.insert(userBlocks).values({ blockerId: userId, blockedId: person.id, createdAt: nowIso() }).onConflictDoNothing(),
+    db.delete(personFollows).where(and(eq(personFollows.followerId, userId), eq(personFollows.followeeId, person.id))),
+    db.delete(personFollows).where(and(eq(personFollows.followerId, person.id), eq(personFollows.followeeId, userId))),
+  ]);
+  return c.json({ ok: true, blocked: true });
+});
+
+/** Unblock. Follows do not come back — they were severed, not suspended. */
+people.delete('/:key/block', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+
+  const db = getDb(c.env.DB);
+  const person = await findByKey(db, c.req.param('key'));
+  if (!person) return c.json({ error: 'not found' }, 404);
+
+  await db
+    .delete(userBlocks)
+    .where(and(eq(userBlocks.blockerId, userId), eq(userBlocks.blockedId, person.id)));
+  return c.json({ ok: true, blocked: false });
 });
 
 /**
@@ -176,6 +269,11 @@ people.post('/:key/follow', async (c) => {
   const person = await findByKey(db, c.req.param('key'));
   if (!person) return c.json({ error: 'not found' }, 404);
   if (person.id === userId) return c.json({ error: 'cannot follow yourself' }, 400);
+  // A block in either direction closes the relationship to new follows too —
+  // otherwise blocking somebody only lasts until they tap Follow again.
+  if (await blockedEitherWay(db, userId, person.id)) {
+    return c.json({ error: 'not available' }, 403);
+  }
 
   // The follower may be writing for the first time; the followee necessarily
   // exists, because findByKey just read their row.

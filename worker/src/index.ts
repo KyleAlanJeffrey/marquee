@@ -9,6 +9,7 @@ import { feed } from './routes/feed';
 import { lists } from './routes/lists';
 import { me } from './routes/me';
 import { people } from './routes/people';
+import { reviewRoutes } from './routes/reviews';
 import { search } from './routes/search';
 import { venues } from './routes/venues';
 import { cityPage } from './cities';
@@ -34,6 +35,7 @@ api.route('/events', events);
 api.route('/me', me); // who the bearer token says this is
 api.route('/me/lists', lists); // the four on-device lists, kept for this account
 api.route('/users', people); // public profiles + the person graph (docs/social.md phase A)
+api.route('/', reviewRoutes); // public reviews + reports (phase B): /events/:id/review(s), /reviews/:id/report
 api.route('/admin', admin); // /health, /backfill-bandsintown
 
 // Root app: API first, then static assets for everything else.
