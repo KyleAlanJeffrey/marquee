@@ -155,7 +155,23 @@ during A/B):
   - [ ] A dash-separated billing ("PROGRESSIVE HOUSE NEVER DIED - Seattle") is
     not caught, deliberately — it reads exactly like "The Eastern-GA" to a
     string rule. Pinned as a known miss in `dedupe.test.ts`; wants a source-side
-    fix, not a blunter regex.
+    fix, not a blunter regex. **Measured on production (2026-07-31)** — the
+    `% - %` venue rows split five ways, and two tempting rules are both wrong:
+    `suffix == city` alone junks real rooms ("Fox Theater - Oakland", "The
+    Fillmore - San Francisco" — SeatGeek writes redundant city suffixes on
+    legitimate venues), and all-caps alone junks real French halls ("PALAIS DES
+    CONGRES - SALLE MAURICE RAVEL"). The billing class ("JOURNEY OF A LIFETIME -
+    MIAMI", "MGMT DJ SET - San Francisco", "TASHA UNSCRIPTED NIGHTS TOUR -
+    BOSTON") is separable only with the listing's own context: suffix ≈ city
+    AND (prefix contains the artist's name, `realVenueName`-style, OR
+    `looksLikeTourName(prefix)`). That catches everything measured except
+    "PROGRESSIVE HOUSE NEVER DIED" itself (a club-night brand with no artist
+    token — likely unwinnable). Implementation sketch: an optional junk marker
+    on `VenueRow` set in the Bandsintown mapping, OR'd into `persist`'s
+    `looksLikeEventTitle` junk-adoption check. Separate legacy repair: rows like
+    "YORK BARBICAN - A Happy Christmas Tour 2026" have the *real venue as
+    prefix* and the tour as suffix — a strip-the-tour-suffix repair could
+    recover ~11 UK rooms.
   - [ ] **240 venues render as their town** — no real name exists in the table
     to promote. Reverse-geocoding is the only route; same missing capability as
     the 29 placeholder-pinned rows.
