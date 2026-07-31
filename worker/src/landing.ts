@@ -3,7 +3,6 @@ import { alias } from 'drizzle-orm/sqlite-core';
 
 import { searchTowns } from './data';
 import { getDb } from './db';
-import { looksLikeTourName } from './dedupe';
 import type { Env } from './env';
 import {
   bulbs,
@@ -213,7 +212,7 @@ export async function landingData(env: Env): Promise<LandingData> {
       // Some sources file the tour title where the venue goes. It is a real room
       // to them and a lie on a listings page, so it gets dropped rather than
       // printed — the town beside it is still true.
-      venueName: realVenueName(r.venueName, r.artistName, looksLikeTourName),
+      venueName: realVenueName(r.venueName, r.artistName),
       place: placeOf(r.venueCity, r.venueRegion),
     })),
     cities: cities

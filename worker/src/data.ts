@@ -7,7 +7,7 @@ import {
   bestVenueMatch,
   hoursApart,
   isPlaceholderPoint,
-  looksLikeTourName,
+  looksLikeEventTitle,
   PLACEHOLDER_POINT_GROUPS,
   pointKey,
   sameVenue,
@@ -30,6 +30,28 @@ export const isoAt = (ms: number) => new Date(ms).toISOString().slice(0, 19) + '
 
 /** Sources send both `null` and `''` for "no region"; the UI only handles one. */
 const blankToNull = (v: string | null) => (v && v.trim() !== '' ? v : null);
+
+/**
+ * The venue name as the app is allowed to print it, or null when the row is named
+ * after an event rather than a place.
+ *
+ * Sources file the tour title, the bill, sometimes the whole announcement in the
+ * venue column, and the coordinates that come with it are real — so the row is
+ * worth keeping and its *name* is not. Measured on production: 1,054 of 7,340
+ * venue rows, and 283 of those are cluster heads with upcoming shows, which is the
+ * number that matters because a head is what gets displayed.
+ *
+ * Nulled rather than dropped or corrected. Every screen already renders the name
+ * through `formatVenue(name, city, region)`, which falls back to the town, so a
+ * null degrades to "Austin, TX" — true, useful, and not a claim about a room that
+ * doesn't exist. There is nowhere better to get the real name from: 240 of those
+ * 283 are alone in their cluster, meaning no other source filed a row within 50m
+ * of it, so there is no correct name in the table to promote.
+ */
+const publishedVenueName = (name: string | null): string | null => {
+  const n = blankToNull(name);
+  return n && looksLikeEventTitle(n) ? null : n;
+};
 
 export function parseGenres(text: unknown): string[] {
   if (typeof text !== 'string') return [];
@@ -159,6 +181,7 @@ export async function nearbyEvents(
     .map((r) => ({
       ...r,
       artist_genres: parseGenres(r.artist_genres),
+      venue_name: publishedVenueName(r.venue_name),
       // The zone the show actually happens in: a 23:00 gig in London is not a
       // 3pm gig, whatever the reader's own clock says.
       venue_timezone: zoneFor(r.venue_region, r.venue_country),
@@ -239,6 +262,11 @@ export async function nearbyVenues(
     .limit(NEARBY_VENUE_SCAN);
 
   return rows
+    // A row named after a tour is not a room. Nulling the name is right on an event
+    // card, where the town still tells you where to go, but a *venue* is the whole
+    // subject here — it's the thing being counted, followed and opened — so an
+    // unnameable one is dropped rather than listed as "Austin, TX · 3 shows".
+    .filter((r) => !looksLikeEventTitle(r.name))
     .map((r) => ({
       id: r.id,
       name: r.name,
@@ -339,6 +367,7 @@ export async function eventsByIds(db: DB, ids: string[]) {
   return rows.map((r) => ({
     ...r,
     artist_genres: parseGenres(r.artist_genres),
+    venue_name: publishedVenueName(r.venue_name),
     venue_timezone: zoneFor(r.venue_region, r.venue_country),
     distance_miles: null as number | null,
   }));
@@ -566,7 +595,11 @@ export async function artistEvents(db: DB, id: string) {
     .leftJoin(venues, eq(venues.id, events.venueId))
     .where(and(eq(events.artistId, id), gte(events.startsAt, nowIso())))
     .orderBy(events.startsAt);
-  return rows.map((r) => ({ ...r, venue_timezone: zoneFor(r.venue_region, r.venue_country) }));
+  return rows.map((r) => ({
+    ...r,
+    venue_name: publishedVenueName(r.venue_name),
+    venue_timezone: zoneFor(r.venue_region, r.venue_country),
+  }));
 }
 
 export async function eventById(db: DB, id: string) {
@@ -616,10 +649,13 @@ export async function eventById(db: DB, id: string) {
       image_url: r.a_image,
       genres: parseGenres(r.a_genres),
     },
-    venue: r.v_name
+    // Keyed on the id, not the name: a room we can place but can't name still has
+    // a town, a map pin and a page, and dropping the whole block over the name
+    // would take those with it.
+    venue: r.v_id
       ? {
           id: r.v_id,
-          name: r.v_name,
+          name: publishedVenueName(r.v_name),
           city: r.v_city,
           region: r.v_region,
           lat: r.v_lat,
@@ -710,7 +746,9 @@ export async function venueById(db: DB, id: string) {
     .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
     .where(eq(venues.id, id))
     .get();
-  return r ? { ...r, timezone: zoneFor(r.region, r.country) } : null;
+  return r
+    ? { ...r, name: publishedVenueName(r.name), timezone: zoneFor(r.region, r.country) }
+    : null;
 }
 
 /**
@@ -1417,12 +1455,17 @@ export function representative(
   onPlaceholderPoint?: (id: string) => boolean,
 ): string {
   const real = [...new Set(ids.filter((v): v is string => typeof v === 'string' && v !== ''))];
-  // A tour title costs the venue its name; a placeholder coordinate costs it its
+  // An event title costs the venue its name; a placeholder coordinate costs it its
   // position. Both are worth avoiding, and a real name outranks good coordinates
   // because the name is the venue's identity — the offset is at worst a few km
   // inside the right town. Either way this stays a total order over the cluster.
+  //
+  // Judged with `looksLikeEventTitle`, not the narrower tour-name test that governs
+  // merging: this only picks which member of an already-decided cluster supplies
+  // the displayed name, so the blunt rule is the right one. Measured on production,
+  // 38 clusters were headed by an event title while holding a real name.
   const rank = (id: string) =>
-    (looksLikeTourName(nameOf?.(id) ?? '') ? 2 : 0) + (onPlaceholderPoint?.(id) ? 1 : 0);
+    (looksLikeEventTitle(nameOf?.(id)) ? 2 : 0) + (onPlaceholderPoint?.(id) ? 1 : 0);
   return real.reduce((best, id) => {
     const rankedBest = rank(best);
     const rankedId = rank(id);

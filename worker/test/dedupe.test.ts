@@ -5,6 +5,7 @@ import {
   bestVenueMatch,
   guessUtcOffsetHours,
   isPlaceholderPoint,
+  looksLikeEventTitle,
   looksLikeTourName,
   mergeField,
   metersBetween,
@@ -94,6 +95,49 @@ describe('venue identity', () => {
       expect(venueNameTokens(junk).size, junk).toBe(0);
       expect(venueNamesConflict(junk, 'Paper Tiger'), junk).toBe(false);
       expect(sameVenue(at(junk, 37.7756, -122.4376), at('Paper Tiger', 37.7756, -122.4376)), junk).toBe(true);
+    }
+  });
+
+  it('refuses to publish an event title as a venue name', () => {
+    // Every one of these is a real production venue row, taken from the 1,054 that
+    // carry an event title. The first two are why this predicate exists at all:
+    // neither says "tour", so `looksLikeTourName` passes them straight through.
+    for (const junk of [
+      'Horse Jumper of Love: playing their Self Titled Debut in its entirety',
+      'Drops of Jupiter: 25 Years in the Atmosphere',
+      'The Constellation Tour: Thee Sacred Souls, LA LOM & The Womack Sisters',
+      'Billy Currington & Kip Moore: Live in Concert',
+      '"This Might Be Useful" Tour',
+    ]) {
+      expect(looksLikeEventTitle(junk), junk).toBe(true);
+    }
+  });
+
+  it('lets through an event title that is punctuated like a venue', () => {
+    // Pinned as a known miss, not an aspiration. This is a real row and it is
+    // plainly a billing, but it has no colon, no "tour" and no "presents" — it
+    // separates with a dash, and so do real rooms ("The Eastern-GA", "Stage AE -
+    // Outdoors"). A dash rule would cost more true names than it saves false ones,
+    // so this shape is left for a source-side fix rather than a string rule.
+    expect(looksLikeEventTitle('PROGRESSIVE HOUSE NEVER DIED - Seattle')).toBe(false);
+  });
+
+  it('publishes real venue names, festivals and long-but-plausible ones included', () => {
+    for (const real of [
+      'The Warfield',
+      'Paper Tiger',
+      'Golden Gate Park',
+      'Aftershock 2026',
+      // 61 characters — under the ceiling, and a genuine room.
+      'Infosys Theater at Madison Square Garden Entertainment Complex',
+      'MGM Music Hall at Fenway',
+      'Red Rocks Amphitheatre',
+    ]) {
+      expect(looksLikeEventTitle(real), real).toBe(false);
+    }
+    // Absent is not the same as wrong; callers handle the two differently.
+    for (const empty of [null, undefined, '', '   ']) {
+      expect(looksLikeEventTitle(empty), JSON.stringify(empty)).toBe(false);
     }
   });
 

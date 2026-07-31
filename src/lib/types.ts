@@ -104,7 +104,9 @@ export type NearbyVenue = {
 
 export type VenueDetail = {
   id: string;
-  name: string;
+  /** Null when the row is named after a tour rather than a room — the server
+   *  refuses to publish those, so the town is the honest heading. */
+  name: string | null;
   city: string | null;
   region: string | null;
   lat: number | null;

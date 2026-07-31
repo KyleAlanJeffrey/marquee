@@ -68,12 +68,24 @@ export default function VenueScreen() {
   }
 
   const place = [v.city, v.region].filter(Boolean).join(', ');
+  // A room the feed can place but not name: sources file the tour title in the
+  // venue column, and the server refuses to publish those, so the town is the
+  // heading. It is the truest thing we know about where this show is.
+  const title = v.name ?? place ?? 'Venue';
 
   return (
     <View style={{ flex: 1 }}>
       <PageMeta
-        title={`${v.name}${place ? ` — ${place}` : ''} tickets & upcoming shows`}
-        description={`Upcoming concerts at ${v.name}${place ? ` in ${place}` : ''} — full lineup, dates, prices and tickets.`}
+        title={
+          v.name
+            ? `${v.name}${place ? ` — ${place}` : ''} tickets & upcoming shows`
+            : `Upcoming concerts${place ? ` in ${place}` : ''}`
+        }
+        description={
+          v.name
+            ? `Upcoming concerts at ${v.name}${place ? ` in ${place}` : ''} — full lineup, dates, prices and tickets.`
+            : `Upcoming concerts${place ? ` in ${place}` : ''} — full lineup, dates, prices and tickets.`
+        }
       />
       <StageBackground />
       <FlatList
@@ -102,9 +114,10 @@ export default function VenueScreen() {
                 VENUE
               </ThemedText>
               <ThemedText type="display" numberOfLines={2} style={styles.name}>
-                {v.name}
+                {title}
               </ThemedText>
-              {place ? (
+              {/* Suppressed when the heading is already the town, or it says it twice. */}
+              {place && v.name ? (
                 <View style={styles.placeRow}>
                   <Ionicons name="location" size={15} color={theme.textSecondary} />
                   <ThemedText type="body" themeColor="textSecondary">
@@ -115,11 +128,11 @@ export default function VenueScreen() {
               <View style={styles.followRow}>
                 <FollowButton
                   following={isFollowingVenue({ venueId: v.id })}
-                  subject={v.name}
+                  subject={title}
                   onToggle={() =>
                     toggleVenue({
                       venueId: v.id,
-                      name: v.name,
+                      name: title,
                       city: v.city,
                       region: v.region,
                       lat: v.lat,
@@ -133,7 +146,7 @@ export default function VenueScreen() {
                   <PressableScale
                     key={link.key}
                     accessibilityRole="link"
-                    accessibilityLabel={`${link.label.toLowerCase()} for ${v.name}`}
+                    accessibilityLabel={`${link.label.toLowerCase()} for ${title}`}
                     onPress={() => Linking.openURL(link.url)}
                     style={[styles.linkChip, { borderColor: theme.cyan }]}>
                     <Ionicons name={link.icon as never} size={14} color={theme.cyan} />

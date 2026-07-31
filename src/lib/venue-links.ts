@@ -12,7 +12,9 @@
  */
 
 export type VenuePlace = {
-  name: string;
+  /** Nullable: a room we can place but can't name has nothing to search for, and
+   *  `venueLinks` returns nothing rather than searching Yelp for a tour title. */
+  name: string | null;
   city?: string | null;
   region?: string | null;
   lat?: number | null;

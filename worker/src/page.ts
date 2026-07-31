@@ -11,6 +11,8 @@
  * JavaScript, and a separate request for it would cost more than it saves.
  */
 
+import { looksLikeEventTitle } from './dedupe';
+
 const NAME = 'Marquee';
 
 /**
@@ -91,34 +93,20 @@ export function when(iso: string, zone: string | null): { day: string; time: str
 export const placeOf = (city: string | null, region: string | null) =>
   [city, region].filter((s) => s && s.trim()).join(', ');
 
-/** Past this a "venue name" is a sentence, and rooms are not named in sentences. */
-const VENUE_NAME_MAX = 64;
-
 /**
- * The venue name, or nothing if it clearly isn't one.
+ * The venue name, or nothing if it clearly isn't one — with tonight's act known.
  *
- * Sources file the tour title, the bill, even the whole announcement in the venue
- * column. `looksLikeTourName` catches the obvious shapes ("… Tour", "… 2026
- * Tour"); these three rules catch what reached the page anyway:
+ * `looksLikeEventTitle` catches the shapes that are wrong on their own (a tour
+ * title, a colon, a sentence). Knowing who is playing catches one more: the
+ * performer's own name inside it, as in "YE (Kanye West) - LIVE IN SPAIN". No room
+ * is named after tonight's act, so that string is the billing, not the address.
  *
- * - the performer's own name in it ("YE (Kanye West) - LIVE IN SPAIN") — no room
- *   is named after tonight's act;
- * - a colon ("Horse Jumper of Love: playing their Self Titled Debut in its
- *   entirety") — venues don't introduce themselves;
- * - longer than a name gets.
- *
- * Display only, and deliberately more aggressive than dedupe.ts: dropping a real
- * name costs a line of detail, printing a fake one makes the listing a lie. The
- * town beside it is true either way.
+ * Display only. Dropping a real name costs a line of detail; printing a fake one
+ * makes the listing a lie. The town beside it is true either way.
  */
-export function realVenueName(
-  venueName: string | null,
-  artistName: string,
-  isTourName: (s: string) => boolean,
-): string | null {
+export function realVenueName(venueName: string | null, artistName: string): string | null {
   const name = venueName?.trim();
-  if (!name || name.length > VENUE_NAME_MAX || isTourName(name)) return null;
-  if (name.includes(':')) return null;
+  if (!name || looksLikeEventTitle(name)) return null;
   const act = artistName.trim().toLowerCase();
   if (act.length > 2 && name.toLowerCase().includes(act)) return null;
   return name;

@@ -78,6 +78,34 @@ export function looksLikeTourName(name: string): boolean {
   return TOUR_NAME_PATTERNS.some((re) => re.test(name));
 }
 
+/** Past this a "venue name" is a sentence, and rooms are not named in sentences. */
+export const VENUE_NAME_MAX = 64;
+
+/**
+ * Does this "venue name" name an event rather than a place?
+ *
+ * A superset of `looksLikeTourName`, answering a different question: not "may this
+ * name vouch for a venue's identity?" but "may it be shown to somebody as a
+ * venue?". Two shapes reach the table that the tour patterns miss, both counted on
+ * the live one:
+ *
+ * - a colon — 222 rows, e.g. "Horse Jumper of Love: playing their Self Titled
+ *   Debut in its entirety", "Drops of Jupiter: 25 Years in the Atmosphere". Venues
+ *   don't introduce themselves;
+ * - longer than a name gets — 67 rows.
+ *
+ * Deliberately not folded into `looksLikeTourName`. That one governs *clustering*,
+ * where a false positive quietly merges two rooms and loses shows, so it stays
+ * narrow. This one only governs what gets printed, where a false positive costs a
+ * line of detail and a false negative prints a lie — so it can afford to be blunt.
+ */
+export function looksLikeEventTitle(name: string | null | undefined): boolean {
+  const n = name?.trim();
+  // Absent is a different problem from wrong, and callers handle it differently.
+  if (!n) return false;
+  return n.length > VENUE_NAME_MAX || n.includes(':') || looksLikeTourName(n);
+}
+
 export function venueNameTokens(name: string): Set<string> {
   // A tour title vouches for nothing, so it gets no tokens: it cannot agree with a
   // name, and it cannot conflict with one either.
