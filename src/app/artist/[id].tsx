@@ -248,6 +248,7 @@ export default function ArtistScreen() {
                         key={t.id}
                         haptic={false}
                         disabled={!t.url}
+                        edgeAccent={!!t.url}
                         onPress={() => t.url && openUrl(t.url)}
                         style={[
                           styles.trackRow,
