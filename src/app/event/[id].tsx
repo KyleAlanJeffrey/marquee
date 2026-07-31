@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,6 +26,20 @@ import { formatEventDate, formatTime, formatVenue, formatZoneLabel } from '@/lib
 import { socialLinks } from '@/lib/social';
 import { ticketSources } from '@/lib/tickets';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+
+/**
+ * Now, read once per mount rather than on every render.
+ *
+ * `Date.now()` in a component body is impure — two renders of identical props can
+ * disagree — which `react-hooks/purity` flags and is right to. A lazy `useState`
+ * initializer is the sanctioned way to read something external exactly once, and
+ * once is all this needs: the only thing it decides is whether a show has started,
+ * and a page open across that moment can say so on its next mount.
+ */
+function useNow(): number {
+  const [now] = useState(() => Date.now());
+  return now;
+}
 
 function InfoRow({
   icon,
@@ -64,6 +79,7 @@ export default function EventScreen() {
   const lineup = useEventLineup(id);
   const { isFollowing, toggle } = useFollows();
   const { isSaved, toggleSaved } = useSavedShows();
+  const now = useNow();
 
   if (event.isLoading) {
     return (
@@ -110,7 +126,7 @@ export default function EventScreen() {
   // finished. An unparseable date counts as upcoming, so a bad row never invites
   // somebody to log a gig that may not have happened.
   const startedAt = Date.parse(e.starts_at);
-  const hasHappened = Number.isFinite(startedAt) && startedAt < Date.now();
+  const hasHappened = now != null && Number.isFinite(startedAt) && startedAt < now;
 
   return (
     <View style={{ flex: 1 }}>

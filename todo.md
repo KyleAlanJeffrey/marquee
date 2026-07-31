@@ -533,11 +533,13 @@ Same entry points, same gate, same copy — different last mile, because Clerk s
 different tools for each. Everything else about accounts is now identical by
 construction, since there is no longer a branch that could differ.
 
-- [ ] **Pre-existing lint error, untouched:** `src/app/event/[id].tsx:113` —
-  `Date.now()` in render trips `react-hooks/purity`. It arrived with the attendance
-  log in `d2c1dd1` and is the only thing `expo lint` reports. Left alone because
-  fixing it changes when "has this show happened" is evaluated, which deserves its
-  own look rather than a drive-by.
+- [x] **Lint error fixed**, `src/app/event/[id].tsx` — `Date.now()` in the component
+  body tripped `react-hooks/purity`. Now a `useNow()` hook with a lazy `useState`
+  initializer, so the clock is read once per mount. Two wrong turns on the way,
+  both worth remembering: an effect calling `setNow` trades `purity` for
+  `react-hooks/set-state-in-effect`, and moving the call into a module function
+  only hides it from the linter without making it pure. `expo lint` now reports
+  nothing at all, which it hadn't for a while.
 
 #### The gate: browse open, keeping gated (decided by Kyle 2026-07-31)
 
