@@ -41,7 +41,18 @@ export function StarRating({ value, onChange, size = 28, subject = 'this show', 
   };
 
   return (
-    <View style={styles.row}>
+    <View
+      style={styles.row}
+      // Read-only stars are bare glyphs with nothing to read out, so the row has
+      // to carry the value itself. The interactive branch doesn't need this — each
+      // star is a labelled button — and a label here would shadow them.
+      {...(readOnly
+        ? {
+            accessible: true,
+            accessibilityLabel:
+              value == null ? `${subject}, not rated` : `${subject}, rated ${value} out of ${RATING_MAX}`,
+          }
+        : null)}>
       {stars.map((star) => {
         const filled = value != null && star <= value;
         const label = value === star ? `clear your rating of ${subject}` : `rate ${subject} ${star} of ${RATING_MAX}`;
@@ -59,7 +70,10 @@ export function StarRating({ value, onChange, size = 28, subject = 'this show', 
             key={star}
             accessibilityRole="button"
             accessibilityLabel={label}
-            accessibilityState={{ selected: filled }}
+            // `filled`, not `selected`: four of five stars are lit at a rating of
+            // four, but only one of them *is* the rating. Reporting all four as
+            // selected reads as a multi-select with four things chosen.
+            accessibilityState={{ selected: value === star }}
             hitSlop={6}
             onPress={() => press(star)}>
             {icon}

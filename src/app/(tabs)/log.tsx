@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -30,6 +30,18 @@ const yearOf = (iso: string) => iso.slice(0, 4);
 export default function LogScreen() {
   const theme = useTheme();
   const { attended, ready, unlog, rate } = useAttendances();
+
+  /**
+   * Which row's remove button is armed, if any.
+   *
+   * Removing is destructive and there is no undo — the rating goes with it — so
+   * it takes two taps. Not `Alert.alert`: react-native-web ships that as
+   * `static alert() {}`, so a confirm dialog would silently do nothing on the
+   * web build and the button would appear broken. `open-url.ts` already branches
+   * around the same hole. Arming in place works everywhere and shows the
+   * consequence rather than describing it.
+   */
+  const [armed, setArmed] = useState<string | null>(null);
 
   /** Rows with a year header inserted wherever the year changes. */
   const rows = useMemo(() => {
@@ -102,6 +114,7 @@ export default function LogScreen() {
             }
             const show = item.show;
             const where = [show.venueName, show.venueCity].filter(Boolean).join(' · ');
+            const isArmed = armed === show.eventId;
             return (
               <Animated.View entering={FadeInDown.delay(Math.min(index * 35, 300)).duration(340)}>
                 <View style={[styles.row, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
@@ -113,7 +126,12 @@ export default function LogScreen() {
                     <PressableScale
                       accessibilityRole="button"
                       accessibilityLabel={`Open ${show.artistName ?? show.name}`}
-                      onPress={() => router.push(`/event/${show.eventId}`)}
+                      onPress={() => {
+                        // Leaving with a row still armed would mean one tap
+                        // deletes it on the way back in.
+                        setArmed(null);
+                        router.push(`/event/${show.eventId}`);
+                      }}
                       style={styles.rowTitle}>
                       <ThemedText type="smallBold" numberOfLines={1}>
                         {show.artistName ?? show.name}
@@ -126,10 +144,32 @@ export default function LogScreen() {
                     <PressableScale
                       haptic
                       accessibilityRole="button"
-                      accessibilityLabel={`Remove ${show.artistName ?? show.name} from your log`}
-                      onPress={() => unlog({ eventId: show.eventId })}
-                      style={[styles.remove, { borderColor: theme.border }]}>
-                      <Ionicons name="close" size={15} color={theme.textTertiary} />
+                      accessibilityLabel={
+                        isArmed
+                          ? `Confirm removing ${show.artistName ?? show.name} from your log`
+                          : `Remove ${show.artistName ?? show.name} from your log`
+                      }
+                      onPress={() => {
+                        if (isArmed) {
+                          unlog({ eventId: show.eventId });
+                          setArmed(null);
+                        } else {
+                          setArmed(show.eventId);
+                        }
+                      }}
+                      style={[
+                        styles.remove,
+                        isArmed
+                          ? { borderColor: theme.error, backgroundColor: theme.error, paddingHorizontal: Spacing.two }
+                          : { borderColor: theme.border },
+                      ]}>
+                      {isArmed ? (
+                        <ThemedText type="labelSm" style={{ color: theme.background }}>
+                          REMOVE
+                        </ThemedText>
+                      ) : (
+                        <Ionicons name="close" size={15} color={theme.textTertiary} />
+                      )}
                     </PressableScale>
                   </View>
                   {/* Rateable in place: the whole reason to reopen the log is to
@@ -188,8 +228,10 @@ const styles = StyleSheet.create({
   },
   rowHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   rowTitle: { flex: 1 },
+  // minWidth rather than width: armed, it holds the word REMOVE instead of a
+  // glyph, and the pill has to grow to fit it.
   remove: {
-    width: 30,
+    minWidth: 30,
     height: 30,
     borderRadius: Radius.pill,
     borderWidth: 1,
