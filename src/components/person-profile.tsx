@@ -1,0 +1,235 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+
+import { ErrorState } from '@/components/error-state';
+import { FollowButton } from '@/components/follow-button';
+import { GlassCard } from '@/components/glass-card';
+import { PressableScale } from '@/components/pressable-scale';
+import { ThemedText } from '@/components/themed-text';
+import { Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
+import { ApiError } from '@/lib/api';
+import { personLabel, useFollowList, useFollowPerson, useProfile, type PublicUser } from '@/lib/people';
+import { useWriteGate } from '@/lib/write-gate';
+
+/**
+ * A person, as everyone sees them: identity, join date, the two follow counts
+ * and their lists, and a follow button when they aren't you.
+ *
+ * One component on purpose. It renders `/user/[key]` for other people and sits
+ * at the top of the Profile tab for yourself — so "your profile" and "what
+ * other people see" are the same pixels reading the same endpoint, and the tab
+ * can never quietly show you something the public page wouldn't.
+ *
+ * Deliberately *no* log data: everything in the log was written under a
+ * "visible to nobody else" promise, and publishing any of it is phase B's
+ * per-entry opt-in (docs/social.md).
+ */
+
+/** "Since July 2026" — the profile's only date, so a local helper, not format.ts. */
+function joinedLine(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'On Marquee';
+  // In UTC, matching the stamp: a July 1st account read from west of Greenwich
+  // would otherwise say June.
+  return `On Marquee since ${d.toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })}`;
+}
+
+function PersonRow({ person }: { person: PublicUser }) {
+  const theme = useTheme();
+  const label = personLabel(person);
+  return (
+    <PressableScale
+      haptic={false}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${label}'s profile`}
+      // Handle when they have one — the URL worth sharing — id otherwise.
+      onPress={() => router.push(`/user/${encodeURIComponent(person.handle ?? person.id)}`)}
+      style={[styles.personRow, { borderColor: theme.border }]}>
+      {person.avatarUrl ? (
+        <Image source={{ uri: person.avatarUrl }} style={styles.rowAvatar} />
+      ) : (
+        <View style={[styles.rowAvatar, styles.avatarFallback, { backgroundColor: theme.backgroundHigh }]}>
+          <Ionicons name="person" size={16} color={theme.textTertiary} />
+        </View>
+      )}
+      <View style={{ flex: 1 }}>
+        <ThemedText type="smallBold" numberOfLines={1}>
+          {label}
+        </ThemedText>
+        {person.handle && person.displayName && (
+          <ThemedText type="labelSm" style={{ color: theme.textTertiary }} numberOfLines={1}>
+            @{person.handle}
+          </ThemedText>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
+    </PressableScale>
+  );
+}
+
+export function PersonProfile({ profileKey }: { profileKey: string }) {
+  const theme = useTheme();
+  const gate = useWriteGate();
+  const profile = useProfile(profileKey);
+  const follow = useFollowPerson(profileKey);
+  const [tab, setTab] = useState<'followers' | 'following'>('followers');
+  // Both directions mount lazily: the counts answer most visits, and each list
+  // is only fetched the first time its tab is looked at.
+  const list = useFollowList(profileKey, tab, profile.isSuccess);
+
+  if (profile.isLoading) {
+    return (
+      <View style={styles.centreBlock}>
+        <ActivityIndicator color={theme.primary} />
+      </View>
+    );
+  }
+
+  if (profile.isError || !profile.data) {
+    // "Doesn't exist" and "couldn't load" are different answers: a stale link or
+    // deleted account gets the first, a network hiccup must not — telling someone
+    // an account is gone because their wifi dropped is the wrong kind of wrong.
+    const gone = profile.error instanceof ApiError && profile.error.status === 404;
+    return (
+      <View style={styles.centreBlock}>
+        <ErrorState
+          message={gone ? "This profile doesn't exist — the account may have been deleted." : undefined}
+          onRetry={gone ? undefined : () => profile.refetch()}
+        />
+      </View>
+    );
+  }
+
+  const { user, counts, viewer } = profile.data;
+  const label = personLabel(user);
+  const isSelf = viewer?.isSelf ?? false;
+
+  const onToggleFollow = () => {
+    if (!gate.allowed) {
+      if (!gate.pending) gate.deny('follow people');
+      return;
+    }
+    follow.mutate(!(viewer?.following ?? false));
+  };
+
+  return (
+    <View style={styles.stack}>
+      <GlassCard style={styles.headerCard}>
+        {user.avatarUrl ? (
+          <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback, { backgroundColor: theme.backgroundHigh }]}>
+            <Ionicons name="person" size={36} color={theme.textTertiary} />
+          </View>
+        )}
+        <ThemedText type="headline" style={{ textAlign: 'center' }}>
+          {label}
+        </ThemedText>
+        {user.handle && user.displayName && (
+          <ThemedText type="small" style={{ color: theme.textTertiary }}>
+            @{user.handle}
+          </ThemedText>
+        )}
+        <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+          {joinedLine(user.createdAt).toUpperCase()}
+        </ThemedText>
+        {isSelf && (
+          <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+            THIS IS WHAT OTHER PEOPLE SEE
+          </ThemedText>
+        )}
+        {!isSelf && (
+          <FollowButton
+            following={viewer?.following ?? false}
+            onToggle={onToggleFollow}
+            icon={{ on: 'person-remove-outline', off: 'person-add-outline' }}
+            subject={label}
+          />
+        )}
+      </GlassCard>
+
+      {/* The two counts are the tabs: tapping one is asking to see the list. */}
+      <View style={styles.tabsRow}>
+        {(['followers', 'following'] as const).map((t) => {
+          const active = t === tab;
+          const n = counts[t];
+          return (
+            <PressableScale
+              key={t}
+              haptic={false}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              onPress={() => setTab(t)}
+              style={[
+                styles.tab,
+                active
+                  ? { backgroundColor: theme.primary, borderColor: theme.primary }
+                  : { backgroundColor: theme.backgroundElevated, borderColor: theme.border },
+              ]}>
+              <ThemedText type="label" style={{ color: active ? theme.onPrimary : theme.text }}>
+                {`${n} ${(n === 1 ? t.replace(/s$/, '') : t).toUpperCase()}`}
+              </ThemedText>
+            </PressableScale>
+          );
+        })}
+      </View>
+
+      {list.isLoading ? (
+        <View style={styles.centreBlock}>
+          <ActivityIndicator color={theme.primary} />
+        </View>
+      ) : list.isError ? (
+        <View style={styles.centreBlock}>
+          <ErrorState onRetry={() => list.refetch()} />
+        </View>
+      ) : (list.data?.people.length ?? 0) === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.emptyNote}>
+          {tab === 'followers'
+            ? isSelf
+              ? 'Nobody follows you yet. Share your profile link to change that.'
+              : 'Nobody follows them yet.'
+            : isSelf
+              ? "You aren't following anyone yet. Open a friend's profile to follow them."
+              : "They aren't following anyone yet."}
+        </ThemedText>
+      ) : (
+        <GlassCard style={styles.listCard}>
+          {list.data!.people.map((p) => (
+            <PersonRow key={p.id} person={p} />
+          ))}
+        </GlassCard>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  stack: { gap: Spacing.three },
+  headerCard: { alignItems: 'center', gap: Spacing.two, padding: Spacing.four },
+  avatar: { width: 88, height: 88, borderRadius: 44 },
+  avatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  tabsRow: { flexDirection: 'row', gap: Spacing.two },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  centreBlock: { alignItems: 'center', padding: Spacing.four },
+  emptyNote: { textAlign: 'center', paddingVertical: Spacing.three },
+  listCard: { gap: Spacing.two, padding: Spacing.two + 2 },
+  personRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two + 2,
+    padding: Spacing.two,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+  },
+  rowAvatar: { width: 36, height: 36, borderRadius: 18 },
+});

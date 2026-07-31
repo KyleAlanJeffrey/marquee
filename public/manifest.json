@@ -1,7 +1,7 @@
 {
   "name": "Marquee — Find concerts near you",
   "short_name": "Marquee",
-  "description": "Marquee is a live music radar: discover upcoming concerts near you, follow the artists you love, and get a reminder before their next nearby show. No account needed.",
+  "description": "Marquee is a live music radar: discover upcoming concerts near you, follow the artists you love, and get a reminder before their next nearby show. No account needed to browse.",
   "start_url": "/explore",
   "scope": "/",
   "display": "standalone",

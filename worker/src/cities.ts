@@ -484,7 +484,7 @@ function cityFaq(d: CityData): Faq[] {
     },
     {
       q: `Can I get told when an artist announces a ${where} date?`,
-      a: `Yes. Open the app, set your radius around ${d.town.city} and follow the acts you care about. Marquee re-checks your follows against the listings and collects every date they announce inside that radius for the next year. No account, and your follows stay on your device.`,
+      a: `Yes. Open the app, set your radius around ${d.town.city} and follow the acts you care about. Marquee re-checks your follows against the listings and collects every date they announce inside that radius for the next year. Following takes a free account, and what you follow is private to you.`,
     },
   ];
 }

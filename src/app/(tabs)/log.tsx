@@ -69,7 +69,7 @@ export default function LogScreen() {
     <View style={{ flex: 1 }}>
       <PageMeta
         title="Your concert log"
-        description="Every show you've been to, and what you thought of it. Kept on your own device."
+        description="Every show you've been to, and what you thought of it. Private to your account."
       />
       <StageBackground />
       <TopBar onSearchPress={() => router.push('/search')} />
@@ -84,7 +84,7 @@ export default function LogScreen() {
         <EmptyState
           icon="checkmark-done-outline"
           title="No shows logged yet"
-          message="Open a gig you went to and tap “Were you there?”. Your log stays on this device — nobody else can see it."
+          message="Open a gig you went to and tap “Were you there?”. Your log is private to your account — nobody else can see it."
           actionLabel="Find shows"
           onAction={() => router.push('/explore')}
         />
@@ -100,7 +100,7 @@ export default function LogScreen() {
               <ThemedText type="small" themeColor="textSecondary">
                 {attended.length} {attended.length === 1 ? 'show' : 'shows'}
                 {average ? ` · ${average} average` : ''}
-                {' · only on this device'}
+                {' · private to you'}
               </ThemedText>
             </View>
           }

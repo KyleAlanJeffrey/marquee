@@ -48,7 +48,7 @@ const NAME = 'Marquee';
 const TITLE = 'Concerts Near You — Every Upcoming Show in One Place · Marquee';
 // Kept inside DESC_MAX — a snippet that overflows is copy no search result shows.
 export const DESCRIPTION =
-  'Find concerts near you: upcoming shows, tour dates and tickets from Ticketmaster, SeatGeek and Bandsintown in one listing. No account needed.';
+  'Find concerts near you: upcoming shows, tour dates and tickets from Ticketmaster, SeatGeek and Bandsintown in one listing. No account needed to browse.';
 
 /** How far ahead the page counts, matching the app's own horizon. */
 const HORIZON_DAYS = 365;
@@ -250,7 +250,7 @@ const FAQ: Faq[] = [
   },
   {
     q: 'Do I need an account?',
-    a: 'No. There is no sign-up and no password. The artists and venues you follow, the shows you save and your search radius are stored on your own device, which is also why nothing you follow is visible to anyone else.',
+    a: 'Not to browse — search, the map and every listing work without one. An account is for keeping things: the artists and venues you follow, the shows you save and the concerts you log live on it, private to you, so they survive a lost phone and follow you between devices.',
   },
   {
     q: 'Is it free?',
@@ -375,14 +375,14 @@ export function landingHtml(origin: string, d: LandingData): string {
   ${bulbs(48)}
   <div class="hero">
     <div class="rise">
-      <p class="eyebrow">No account needed</p>
+      <p class="eyebrow">No account needed to browse</p>
       <h1>Every concert<br>near you, <span class="lit">in one place.</span></h1>
       <p class="lede">Marquee pulls the listings from Ticketmaster, SeatGeek and Bandsintown, throws away the duplicates, and shows you what is actually on — tonight, this weekend, or any time in the next year.</p>
       <div class="buttons">
         <a class="btn" href="/explore">Open the app</a>
         <a class="btn ghost" href="/map">See the map</a>
       </div>
-      <p class="tagline">No sign-up, no email, no password. The artists you follow and the shows you save stay on your own device.</p>
+      <p class="tagline">Browse everything without signing up. An account keeps what you follow, save and log — private to you, on every device you use.</p>
     </div>
     <div class="stub rise" style="animation-delay:.12s">
       <p class="eyebrow" style="color:var(--cyan)">On sale right now</p>

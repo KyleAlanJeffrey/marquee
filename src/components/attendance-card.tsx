@@ -19,10 +19,10 @@ type Props = {
 /**
  * "Were you there?" — the whole of reviews phase 0, on one card.
  *
- * Deliberately not a review form. There is no account, nothing here is published,
- * and the point of the phase is to find out whether people log shows at all
- * before any of that is built. So the ask is one tap, the ratings are optional,
- * and nothing is ever required.
+ * Deliberately not a review form. Nothing here is published — the log is private
+ * to the account — and the point of the phase is to find out whether people log
+ * shows at all before public reviews are built. So the ask is one tap, the
+ * ratings are optional, and nothing is ever required.
  *
  * Only rendered for shows that have already started — see `hasHappened` at the
  * call site. Logging attendance at a gig that hasn't happened is either a mistake
@@ -58,7 +58,7 @@ export function AttendanceCard({ show, venueName }: Props) {
         <View style={{ flex: 1 }}>
           <ThemedText type="smallBold">{logged ? 'You were at this show' : 'Were you there?'}</ThemedText>
           <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-            {logged ? 'IN YOUR LOG · ONLY ON THIS DEVICE' : 'ADD IT TO YOUR LOG'}
+            {logged ? 'IN YOUR LOG · PRIVATE TO YOU' : 'ADD IT TO YOUR LOG'}
           </ThemedText>
         </View>
       </PressableScale>

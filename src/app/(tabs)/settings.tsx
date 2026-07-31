@@ -6,6 +6,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-na
 
 import { GlassCard } from '@/components/glass-card';
 import { PageMeta } from '@/components/page-meta';
+import { PersonProfile } from '@/components/person-profile';
 import { PressableScale } from '@/components/pressable-scale';
 import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
@@ -68,7 +69,17 @@ export default function ProfileScreen() {
           Profile
         </ThemedText>
 
-        {/* First, because it is what the rest depends on: following and saving
+        {/* Your profile *is* the public one — same component, same endpoint as
+            /user/[key] — so this tab can never show you something other people
+            wouldn't see. Signed out there is no profile to show, and the
+            account card below is the way in. */}
+        {signedIn && userId && (
+          <View style={styles.profileBlock}>
+            <PersonProfile profileKey={userId} />
+          </View>
+        )}
+
+        {/* Next, because it is what the rest depends on: following and saving
             need an account. */}
         <Label>ACCOUNT</Label>
         <GlassCard style={styles.card}>
@@ -93,23 +104,6 @@ export default function ProfileScreen() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
           </PressableScale>
-          {signedIn && userId && (
-            <PressableScale
-              haptic
-              accessibilityRole="button"
-              accessibilityLabel="Open your public profile"
-              onPress={() => router.push(`/user/${encodeURIComponent(userId)}`)}
-              style={styles.row}>
-              <Ionicons name="id-card-outline" size={26} color={theme.textTertiary} />
-              <View style={{ flex: 1 }}>
-                <ThemedText type="smallBold">Your profile</ThemedText>
-                <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                  WHAT OTHER PEOPLE SEE
-                </ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
-            </PressableScale>
-          )}
         </GlassCard>
 
         <Label>REMINDERS</Label>
@@ -221,7 +215,7 @@ export default function ProfileScreen() {
         )}
 
         <ThemedText type="labelSm" style={[styles.footer, { color: theme.textTertiary }]}>
-          MARQUEE · FOLLOWING STORED ON THIS DEVICE
+          MARQUEE · YOUR LISTS LIVE ON YOUR ACCOUNT
         </ThemedText>
       </ScrollView>
     </View>
@@ -231,6 +225,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   content: { padding: Spacing.three, paddingBottom: Spacing.six, gap: Spacing.one },
   title: { marginBottom: Spacing.two },
+  profileBlock: { marginBottom: Spacing.two },
   sectionLabel: { letterSpacing: 1.5, marginTop: Spacing.three, marginBottom: Spacing.two },
   card: { padding: Spacing.three, gap: Spacing.two },
   listCard: { padding: 0, overflow: 'hidden' },

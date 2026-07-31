@@ -121,8 +121,11 @@ export function ProfileSync() {
     synced.current = userId;
     apiPost('/me', {})
       .then(() => {
-        // `/api/me` reads the mirror row this just rewrote.
+        // `/api/me` and every profile read come off the mirror row this just
+        // rewrote — the own-profile card on the Profile tab in particular may
+        // have 404ed moments ago, before the row existed.
         queryClient.invalidateQueries({ queryKey: ['me'] });
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
       })
       .catch((err) => {
         // Cleared so the next auth change retries, instead of one failed sync
