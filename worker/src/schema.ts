@@ -205,6 +205,25 @@ export const users = sqliteTable('users', {
 // the database has never had, and handle lookups are case-folded anyway.
 
 /**
+ * The person graph: who follows whom, one direction per row (see migration 0013).
+ * A real relation rather than a `user_lists` document because it is read from
+ * both ends — your following list is yours, but your follower count is theirs.
+ */
+export const personFollows = sqliteTable(
+  'person_follows',
+  {
+    followerId: text('follower_id')
+      .notNull()
+      .references(() => users.id),
+    followeeId: text('followee_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.followerId, t.followeeId] }), index('person_follows_followee_idx').on(t.followeeId)],
+);
+
+/**
  * The four lists a person owns — follows, followed venues, saved shows, the
  * attendance log — one row per list, each holding the client's own JSON array.
  *

@@ -19,7 +19,7 @@
  *    request slower.
  */
 
-import { verifyToken } from '@clerk/backend';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import { eq } from 'drizzle-orm';
 
 import type { DB } from './db';
@@ -134,36 +134,45 @@ export async function ensureUser(db: DB, userId: string): Promise<void> {
     });
 }
 
-/** Refresh the denormalised profile from what the client says Clerk told it. */
-export async function syncProfile(
-  db: DB,
-  userId: string,
-  profile: { handle?: string | null; displayName?: string | null; avatarUrl?: string | null },
-): Promise<void> {
-  const now = nowIso();
+/**
+ * Refresh the denormalised profile from Clerk itself, not from the client.
+ *
+ * This used to accept a display name and avatar in the request body — bounded
+ * trust, since the identity still came from the token — but the handle could
+ * never join them: it is public, it goes in URLs, and it is the one field where
+ * a lie lands on somebody else. Once *one* field has to come from Clerk's
+ * Backend API anyway, fetching all three from the same answer costs nothing
+ * extra and deletes the trust question entirely.
+ *
+ * The subrequest is paid once per sign-in (the client calls `POST /me` when a
+ * session appears), not per request — reads come from the mirror row.
+ *
+ * `username` is null for everyone today: the instance has usernames disabled
+ * (checked 2026-07-31 via `/v1/environment`). Handle policy is an open decision
+ * in docs/social.md; the day usernames are switched on, handles start filling in
+ * here with no code change.
+ */
+export async function syncProfileFromClerk(env: Env, db: DB, userId: string): Promise<void> {
+  const clerk = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
+  const account = await clerk.users.getUser(userId);
+
   const blankToNull = (s: string | null | undefined) => {
     const t = s?.trim();
     return t ? t : null;
   };
+  const profile = {
+    handle: blankToNull(account.username),
+    displayName: blankToNull(account.fullName ?? account.username),
+    avatarUrl: blankToNull(account.imageUrl),
+  };
+
+  const now = nowIso();
   await db
     .insert(users)
-    .values({
-      id: userId,
-      handle: blankToNull(profile.handle),
-      displayName: blankToNull(profile.displayName),
-      avatarUrl: blankToNull(profile.avatarUrl),
-      createdAt: now,
-      syncedAt: now,
-    })
+    .values({ id: userId, ...profile, createdAt: now, syncedAt: now })
     .onConflictDoUpdate({
       target: users.id,
-      set: {
-        handle: blankToNull(profile.handle),
-        displayName: blankToNull(profile.displayName),
-        avatarUrl: blankToNull(profile.avatarUrl),
-        syncedAt: now,
-        deletedAt: null,
-      },
+      set: { ...profile, syncedAt: now, deletedAt: null },
     });
 }
 

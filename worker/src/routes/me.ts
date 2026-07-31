@@ -2,11 +2,11 @@ import { zValidator } from '@hono/zod-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 
-import { callerFrom, ensureUser, findUser, syncProfile } from '../auth';
+import { callerFrom, ensureUser, findUser, syncProfileFromClerk } from '../auth';
 import { getDb } from '../db';
 import { users } from '../schema';
 import type { AppEnv } from '../env';
-import { prefsBody, profileBody } from '../schemas';
+import { prefsBody } from '../schemas';
 
 /**
  * Who am I, according to the server.
@@ -38,25 +38,20 @@ me.get('/', async (c) => {
 });
 
 /**
- * Create or refresh the mirror row from what Clerk told the client.
+ * Create or refresh the mirror row from Clerk itself.
  *
- * Trusting the client for the display name and avatar is deliberate and bounded:
- * the *identity* is not taken from the body — `userId` comes from the verified
- * token and nothing else — so the worst a tampered request can do is put a silly
- * name on its own account. The alternative is a Clerk API call inside a request
- * the person is waiting on, to fetch data the client is already holding.
- *
- * The handle is not accepted here for exactly that reason: it is public, it goes
- * in URLs, and it is the one field where a lie affects somebody else. It stays
- * Clerk's, read back from the token's claims or the Backend API when the profile
- * screen is built.
+ * Takes no body at all. It used to accept the display name and avatar from the
+ * client — bounded trust, the identity still came from the token — but a profile
+ * is public the moment other people can open it, so every field now comes from
+ * Clerk's Backend API, keyed by the verified token's subject and nothing else
+ * (`syncProfileFromClerk` for the reasoning and the cost). The client calls this
+ * once when a session appears; there is nothing in the request left to lie about.
  */
-me.post('/', zValidator('json', profileBody), async (c) => {
+me.post('/', async (c) => {
   const { userId } = await callerFrom(c.env, c.req.header('authorization'));
   if (!userId) return c.json({ error: 'sign in required' }, 401);
   const db = getDb(c.env.DB);
-  const body = c.req.valid('json');
-  await syncProfile(db, userId, body);
+  await syncProfileFromClerk(c.env, db, userId);
   return c.json({ ok: true, user: await findUser(db, userId) });
 });
 

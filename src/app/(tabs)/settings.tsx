@@ -29,7 +29,7 @@ function Label({ children }: { children: string }) {
 export default function ProfileScreen() {
   const theme = useTheme();
   const { follows, unfollow } = useFollows();
-  const { signedIn, displayName, loading } = useAuth();
+  const { signedIn, displayName, loading, userId } = useAuth();
   const { radiusMiles, setRadiusMiles, remindersEnabled, setRemindersEnabled, persisted } = usePrefs();
   const [toggling, setToggling] = useState(false);
 
@@ -93,6 +93,23 @@ export default function ProfileScreen() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
           </PressableScale>
+          {signedIn && userId && (
+            <PressableScale
+              haptic
+              accessibilityRole="button"
+              accessibilityLabel="Open your public profile"
+              onPress={() => router.push(`/user/${encodeURIComponent(userId)}`)}
+              style={styles.row}>
+              <Ionicons name="id-card-outline" size={26} color={theme.textTertiary} />
+              <View style={{ flex: 1 }}>
+                <ThemedText type="smallBold">Your profile</ThemedText>
+                <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                  WHAT OTHER PEOPLE SEE
+                </ThemedText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+            </PressableScale>
+          )}
         </GlassCard>
 
         <Label>REMINDERS</Label>

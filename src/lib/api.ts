@@ -71,6 +71,16 @@ export async function apiPut<T>(path: string, body: unknown, opts: RequestOpts =
   return send<T>('PUT', path, body, opts);
 }
 
+/** No body — a DELETE names its target in the path, same as the routes expect. */
+export async function apiDelete<T>(path: string, opts: RequestOpts = {}): Promise<T> {
+  const res = await fetch(url(path), {
+    method: 'DELETE',
+    headers: opts.anonymous ? {} : await authHeaders(),
+  });
+  if (!res.ok) throw new Error(`DELETE ${path} → ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
 async function send<T>(
   method: 'POST' | 'PUT',
   path: string,

@@ -18,6 +18,7 @@ import { PageMeta } from '@/components/page-meta';
 import { Colors, Fonts } from '@/constants/theme';
 import { AuthProvider } from '@/lib/auth';
 import { useNotificationObserver } from '@/lib/notifications';
+import { ProfileSync } from '@/lib/people';
 import { WriteGateProvider } from '@/lib/write-gate-provider';
 
 const queryClient = new QueryClient({
@@ -69,6 +70,8 @@ export default function RootLayout() {
               <StatusBar style="light" />
               {/* Default document metadata; screens override it with their own. */}
               <PageMeta />
+              {/* Refreshes the server's mirror of this account from Clerk on sign-in. */}
+              <ProfileSync />
               {fontsLoaded && (
                 <Stack
                   screenOptions={{
@@ -106,6 +109,7 @@ export default function RootLayout() {
                   <Stack.Screen name="artist/[id]" />
                   <Stack.Screen name="event/[id]" />
                   <Stack.Screen name="venue/[id]" />
+                  <Stack.Screen name="user/[key]" />
                   <Stack.Screen name="browse" />
                 </Stack>
               )}

@@ -12,9 +12,9 @@ import { createContext, useContext } from 'react';
  * ninth that gets written later by somebody who never read this file.
  *
  * **This module deliberately imports nothing but React.** It is consumed by
- * `local-collection.tsx`, which the store specs exercise for its pure merge logic;
- * an import of `expo-router` or `@clerk/expo` here drags the whole router and SDK
- * into those specs and they fail on untranspiled TSX in a transitive dependency.
+ * `account-lists.tsx`, whose schemas the store specs exercise; an import of
+ * `expo-router` or `@clerk/expo` here drags the whole router and SDK into those
+ * specs and they fail on untranspiled TSX in a transitive dependency.
  * The wiring — who is signed in, and where "sign in" goes — lives in
  * `write-gate-provider.tsx`, which is imported only from the app tree.
  */
