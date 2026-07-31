@@ -97,7 +97,10 @@ export default function VenueScreen() {
   // A room the feed can place but not name: sources file the tour title in the
   // venue column, and the server refuses to publish those, so the town is the
   // heading. It is the truest thing we know about where this show is.
-  const title = v.name ?? place ?? 'Venue';
+  // `||`, not `??`: `place` is a join, so it is `''` rather than null when we know
+  // neither town nor region — and `??` would let that empty string through as the
+  // heading, the follow-button label and the saved-venue name.
+  const title = v.name || place || 'Venue';
 
   return (
     <View style={{ flex: 1 }}>
@@ -217,20 +220,28 @@ export default function VenueScreen() {
 
             <StatGrid stats={statCells} />
 
-            {description ? (
+            {/*
+              Gated on either half, not on the prose: a photo currently only ever
+              arrives with an article, but that invariant lives in another file, and
+              if it ever slips the failure is a hero image with its attribution
+              silently unrendered. Cheaper to not depend on it.
+            */}
+            {description || photo ? (
               <View style={styles.about}>
-                <View style={styles.sectionTitleRow}>
-                  <View style={[styles.accentBar, { backgroundColor: theme.cyan }]} />
-                  <ThemedText type="title">About This Room</ThemedText>
-                </View>
-                <ThemedText type="body" themeColor="textSecondary" style={styles.prose}>
-                  {description}
-                </ThemedText>
+                {description ? (
+                  <>
+                    <View style={styles.sectionTitleRow}>
+                      <View style={[styles.accentBar, { backgroundColor: theme.cyan }]} />
+                      <ThemedText type="title">About This Room</ThemedText>
+                    </View>
+                    <ThemedText type="body" themeColor="textSecondary" style={styles.prose}>
+                      {description}
+                    </ThemedText>
+                  </>
+                ) : null}
                 {/*
                   Not decoration: the extract is CC BY-SA and the photograph is CC BY
-                  or CC BY-SA, and both licences require attribution. The server
-                  won't send a photo it can't credit, so if one rendered above, its
-                  credit renders here.
+                  or CC BY-SA, and both licences require attribution.
                 */}
                 <View style={styles.creditRow}>
                   {info.data?.description_url ? (

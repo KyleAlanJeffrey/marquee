@@ -1158,9 +1158,13 @@ export async function venueInfo(env: Env, venueId: string) {
   return {
     description: enrichment.description,
     description_url: enrichment.descriptionUrl,
-    // A free-licensed photo without its credit is a licence breach, so the two
-    // travel together or neither is published.
-    photo: enrichment.photoUrl && enrichment.photoLicense
+    // The comment used to promise this and the guard didn't keep it: a photo went
+    // out on the licence alone, which renders as "PHOTO · CC BY-SA 4.0" — a credit
+    // line with nobody in it. Stricter than CC strictly requires (attribution is of
+    // the author "if supplied"), and deliberately so: an image is decoration and a
+    // licence question on a public site is not. Costs nothing measurable — all four
+    // enriched venues in production carry a credit.
+    photo: enrichment.photoUrl && enrichment.photoLicense && enrichment.photoCredit
       ? {
           url: enrichment.photoUrl,
           credit: enrichment.photoCredit,

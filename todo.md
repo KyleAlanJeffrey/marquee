@@ -101,8 +101,9 @@ without any auth at all.
 `sanitizeInputs` (`worker/src/data.ts`) drops any listing more than 24 hours old
 on the way in, and the comment says why — "one already past is dead weight in a
 table whose reads are all 'upcoming'". That was correct for a discovery app and it
-is fatal for this one. Measured on production today: **17,742 upcoming events, 627
-past ones, and the earliest is 2026-07-12** — about two and a half weeks of
+is fatal for this one. Measured on production D1 on **2026-07-30** (`select count(*)
+from events` split on `starts_at` against now, plus `min(starts_at)`): **17,742
+upcoming events, 627 past ones, and the earliest is 2026-07-12** — about two and a half weeks of
 history, and only because those rows aged out after being ingested while still
 upcoming. Nothing deletes them, so history accumulates from here; but there is no
 back-catalogue and no source currently wired that could provide one. You could not
@@ -200,17 +201,26 @@ Anonymise-and-keep is the norm and is much kinder to the aggregate scores.
 - Rate limits per account and per IP on writes, plus a minimum account age.
 - Report → queue → hide/remove, with an audit trail. `ADMIN_TOKEN` already gates
   the mutating admin routes, so the queue has somewhere to live.
-- A **verified attendance** signal is the strongest quality lever available and it
-  is nearly free: a review from somebody who logged the show before it happened,
-  or who was inside the venue's radius that night, is worth flagging as such.
+- A **verified attendance** signal is the strongest quality lever available, and
+  only one of the two ways to get it is cheap. Logging the show *before* it
+  happened is free and already implied by the data model — a timestamp comparison,
+  nothing new collected. Being *inside the venue's radius that night* is not: it
+  needs background location from an app whose entire pitch is that it collects
+  nothing, it is trivially spoofed by anyone who cares to, and it would need
+  explicit opt-in, a stated retention window, deletion on request and a coarse
+  enough precision that the log isn't a movement history. Ship the first, and
+  treat the second as a separate decision with its own privacy write-up — not as a
+  free upgrade to it. Either way "verified" must mean one specific thing on screen,
+  because a badge whose meaning is vague is worse than no badge.
 - Reviews of shows that haven't happened yet must be refused outright.
 
 ### SEO, which this is very good for
 
 This is the first content on the site that is genuinely unique rather than
 assembled from feeds, which is exactly what the ranking work has been missing.
-`Review` and `AggregateRating` JSON-LD are well supported and would put stars in
-results. Two hard rules: the markup must describe real reviews (fabricated or
+`Review` and `AggregateRating` JSON-LD are well supported and make a page *eligible*
+for review rich results — eligibility is all any markup buys; whether stars are
+drawn is Google's call, per page, and it changes. Two hard rules: the markup must describe real reviews (fabricated or
 self-serving review markup is a manual-action category, not a ranking nudge), and
 review pages with no reviews yet must be `noindex` like the other thin pages
 already are, or this adds thousands of empty URLs to a sitemap that was just
@@ -285,8 +295,10 @@ crawl multiplies duplicates instead of coverage.
 - [ ] **Watch the first production crawl runs for CPU/subrequest limits** (the free
   plan is tight) and raise `CRAWL_BATCH` if there's headroom. The same look
   decides whether `SG_MAX_PAGES` can go past 3 — a sweep is 3 pages × 100 events
-  soonest-first while a dense metro has ~600 concerts within 25 miles, so SeatGeek
-  coverage is complete near-term and lags for the far future.
+  soonest-first while a dense metro has ~600 concerts within 25 miles, so a sweep
+  reaches the soonest ~300 and everything past that is invisible until it comes
+  closer. Where the cut-off lands in *time* isn't known and depends on the metro —
+  worth measuring before deciding 3 pages is enough.
 - [ ] **`time_unknown` column.** SeatGeek fills an unannounced set time with 03:30
   local, so `time_tbd` events are skipped entirely — two SF festival passes were
   stored "starting" at half three before it was caught. Because SeatGeek co-owns
@@ -344,8 +356,9 @@ crawl multiplies duplicates instead of coverage.
   Measured: from a laptop, `/` alone, three hubs announced ~96×/day for days, and
   a reconstruction of the cron's exact 154-URL payload all returned 200 — minutes
   after the Worker's own 153-URL payload was refused. Every CLI request succeeded,
-  every Worker request failed, which leaves a per-IP limit on Cloudflare's shared
-  Worker egress addresses. Next: Bing's authenticated URL Submission API (per-site
+  every Worker request failed — which rules out the payload and is consistent with
+  an origin-level limit on Cloudflare's shared Worker egress addresses, though
+  nothing here proves that is the mechanism. Next: Bing's authenticated URL Submission API (per-site
   quota, not per-IP), or accept that Bing discovery comes via the sitemap. The 24h
   listing throttle stays either way — it's correct behaviour, just not a remedy
   for this.
