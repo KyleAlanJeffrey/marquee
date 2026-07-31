@@ -13,6 +13,7 @@ import { venues } from './routes/venues';
 import { cityPage } from './cities';
 import { submitFresh } from './indexnow';
 import { landingPage } from './landing';
+import { privacyPage } from './policy';
 import { injectSeo, pageSeo, robotsTxt, robotsTxtOffBrand, sitemapChild, sitemapIndex } from './seo';
 import { crawlBandsintown } from './sources';
 
@@ -135,6 +136,11 @@ app.get('/', async (c) =>
 
 /** Where the landing page used to live. Its links and its indexing belong to `/`. */
 app.get('/concerts', (c) => c.redirect('/', 301));
+
+// The privacy policy and published contact — the URL three store forms ask for.
+app.get('/privacy', (c) =>
+  c.html(privacyPage(siteOrigin(c)), 200, { 'Cache-Control': PAGE_CACHE }),
+);
 
 app.get('/concerts/:slug', async (c) => {
   const found = await cityPage(c.env, siteOrigin(c), c.req.param('slug'));

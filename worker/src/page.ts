@@ -152,6 +152,7 @@ export function pageFooter(extra = ''): string {
     <a href="/following">Artists you follow</a>
     <a href="/saved">Saved shows</a>
     <a href="/sitemap.xml">Sitemap</a>
+    <a href="/privacy">Privacy &amp; contact</a>
   </nav>
   ${extra}
   <p>Marquee is a free live-music radar built by Kyle Jeffrey. Listings come from Ticketmaster, SeatGeek and Bandsintown; artist detail from Spotify, Deezer and Wikipedia. Tickets are sold by those sites, not by us.</p>
