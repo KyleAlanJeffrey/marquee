@@ -190,6 +190,14 @@ export const users = sqliteTable('users', {
   syncedAt: text('synced_at').notNull(),
   /** Set when Clerk says the account is gone; the row stays, see the migration. */
   deletedAt: text('deleted_at'),
+  /**
+   * Preferences, on the account because nothing lives on the device any more.
+   * Null means never chosen, which is different from zero — the client applies its
+   * own defaults, so a new account behaves like a new install.
+   */
+  radiusMiles: integer('radius_miles'),
+  /** SQLite has no boolean: 0 or 1, null for never asked. */
+  remindersEnabled: integer('reminders_enabled'),
 });
 // No index block: the one handles have is `users_handle_idx`, partial and on
 // `lower(handle)`, which Drizzle can't express — same as `artists_name_folded_idx`.

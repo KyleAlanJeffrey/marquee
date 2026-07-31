@@ -178,6 +178,8 @@ export async function findUser(db: DB, userId: string) {
         avatarUrl: users.avatarUrl,
         createdAt: users.createdAt,
         deletedAt: users.deletedAt,
+        radiusMiles: users.radiusMiles,
+        remindersEnabled: users.remindersEnabled,
       })
       .from(users)
       .where(eq(users.id, userId))

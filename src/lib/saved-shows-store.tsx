@@ -1,75 +1,32 @@
-import type { ReactNode } from 'react';
-
-import { createCollection, isNullableString } from './local-collection';
+import { createCollection } from './account-lists';
+import { isSavedShow, sameSavedShow, type SavedShow, type ShowRef } from './list-schemas';
 
 /**
- * A show the user put aside for later, stored on-device.
+ * Shows you put aside for later, on your account.
  *
- * The snapshot is what makes the Saved tab open instantly and work offline, but
- * it is a copy of a row that can move: doors get pushed back, shows get
- * cancelled. So it is a *starting* value only — the screen revalidates the ids
- * against the server and prefers what comes back. Showing a stale door time
- * would be the one failure that actually costs somebody their evening.
+ * The shape and its validators live in `list-schemas.ts` — a module that imports
+ * nothing, so the specs and the Worker can share them without dragging
+ * `react-native` into a Node test run — and are re-exported here so every existing
+ * import path still resolves.
  */
-export type SavedShow = {
-  eventId: string;
-  name: string;
-  startsAt: string;
-  artistId: string | null;
-  artistName: string | null;
-  artistImageUrl: string | null;
-  venueId: string | null;
-  venueName: string | null;
-  venueCity: string | null;
-  venueTimezone: string | null;
-  priceFrom: number | null;
-  savedAt: number;
-};
-
-export type ShowRef = { eventId?: string | null };
-
-export function isSavedShow(v: unknown): v is SavedShow {
-  if (typeof v !== 'object' || v === null) return false;
-  const a = v as Record<string, unknown>;
-  return (
-    typeof a.eventId === 'string' &&
-    a.eventId !== '' &&
-    typeof a.name === 'string' &&
-    typeof a.startsAt === 'string' &&
-    isNullableString(a.artistId) &&
-    isNullableString(a.artistName) &&
-    isNullableString(a.artistImageUrl) &&
-    isNullableString(a.venueId) &&
-    isNullableString(a.venueName) &&
-    isNullableString(a.venueCity) &&
-    isNullableString(a.venueTimezone) &&
-    (a.priceFrom === null || typeof a.priceFrom === 'number') &&
-    typeof a.savedAt === 'number'
-  );
-}
-
-export const sameSavedShow = (s: SavedShow, ref: ShowRef) => !!ref.eventId && s.eventId === ref.eventId;
+export { isSavedShow, sameSavedShow };
+export type { SavedShow, ShowRef };
 
 const collection = createCollection<ShowRef, SavedShow>({
-  storageKey: 'marquee.saved-shows.v1',
+  kind: 'saved',
   label: 'saved shows',
   requiresAccount: 'save shows',
   isValid: isSavedShow,
   matches: sameSavedShow,
 });
 
-export function SavedShowsProvider({ children }: { children: ReactNode }) {
-  return <collection.Provider>{children}</collection.Provider>;
-}
 
 type NewSavedShow = Omit<SavedShow, 'savedAt'>;
 
 export function useSavedShows() {
-  const { items, ready, has, add, remove, toggle, replaceAll } = collection.useCollection();
+  const { items, ready, has, add, remove, toggle } = collection.useCollection();
   return {
     saved: items,
-    /** For the account sync only — see `list-sync.tsx`. */
-    replaceAll,
     ready,
     isSaved: has,
     save: (show: NewSavedShow) => add({ ...show, savedAt: Date.now() }),

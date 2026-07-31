@@ -1,63 +1,32 @@
-import type { ReactNode } from 'react';
-
-import { createCollection, isNullableString } from './local-collection';
+import { createCollection } from './account-lists';
+import { isFollowedVenue, sameFollowedVenue, type FollowedVenue, type VenueRef } from './list-schemas';
 
 /**
- * A followed venue, stored on-device. Unlike an artist there is only ever one
- * identity — our own canonical venue id — because no upstream venue id survives
- * the cross-source merge. The rest is a snapshot so the list renders before any
- * request lands.
+ * Venues you follow, on your account.
+ *
+ * The shape and its validators live in `list-schemas.ts` — a module that imports
+ * nothing, so the specs and the Worker can share them without dragging
+ * `react-native` into a Node test run — and are re-exported here so every existing
+ * import path still resolves.
  */
-export type FollowedVenue = {
-  venueId: string;
-  name: string;
-  city: string | null;
-  region: string | null;
-  lat: number | null;
-  lng: number | null;
-  followedAt: number;
-};
-
-export type VenueRef = { venueId?: string | null };
-
-export function isFollowedVenue(v: unknown): v is FollowedVenue {
-  if (typeof v !== 'object' || v === null) return false;
-  const a = v as Record<string, unknown>;
-  const num = (k: string) => a[k] === null || typeof a[k] === 'number';
-  return (
-    typeof a.venueId === 'string' &&
-    a.venueId !== '' &&
-    typeof a.name === 'string' &&
-    isNullableString(a.city) &&
-    isNullableString(a.region) &&
-    num('lat') &&
-    num('lng') &&
-    typeof a.followedAt === 'number'
-  );
-}
-
-export const sameFollowedVenue = (v: FollowedVenue, ref: VenueRef) => !!ref.venueId && v.venueId === ref.venueId;
+export { isFollowedVenue, sameFollowedVenue };
+export type { FollowedVenue, VenueRef };
 
 const collection = createCollection<VenueRef, FollowedVenue>({
-  storageKey: 'marquee.followed-venues.v1',
+  kind: 'venues',
   label: 'followed venues',
   requiresAccount: 'follow venues',
   isValid: isFollowedVenue,
   matches: sameFollowedVenue,
 });
 
-export function FollowedVenuesProvider({ children }: { children: ReactNode }) {
-  return <collection.Provider>{children}</collection.Provider>;
-}
 
 type NewFollowedVenue = Omit<FollowedVenue, 'followedAt'>;
 
 export function useFollowedVenues() {
-  const { items, ready, has, add, remove, toggle, replaceAll } = collection.useCollection();
+  const { items, ready, has, add, remove, toggle } = collection.useCollection();
   return {
     venues: items,
-    /** For the account sync only — see `list-sync.tsx`. */
-    replaceAll,
     ready,
     isFollowingVenue: has,
     followVenue: (venue: NewFollowedVenue) => add({ ...venue, followedAt: Date.now() }),

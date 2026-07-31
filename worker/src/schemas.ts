@@ -205,3 +205,17 @@ export const listsBody = z
     attendances: z.array(attendance).max(ATTENDANCE_MAX).optional(),
   })
   .refine((b) => Object.keys(b).length > 0, { message: 'send at least one list' });
+
+/**
+ * The two preferences that live on the account.
+ *
+ * Both optional so a client can set one without restating the other, and the radius
+ * is checked against the same options the UI offers rather than any positive number —
+ * a value the picker cannot produce is a bug somewhere, not a preference.
+ */
+export const prefsBody = z
+  .object({
+    radiusMiles: z.number().int().min(1).max(1000).optional(),
+    remindersEnabled: z.boolean().optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, { message: 'send at least one preference' });

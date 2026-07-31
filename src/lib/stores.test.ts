@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
-import { isAttendance, sameAttendance, toRating, type Attendance } from './attendances-store';
-import { isFollowedVenue, sameFollowedVenue, type FollowedVenue } from './followed-venues-store';
-import { mergeStored } from './local-collection';
-import { isFollowedArtist, sameArtist, type FollowedArtist } from './follows-store';
-import { isSavedShow, sameSavedShow, type SavedShow } from './saved-shows-store';
+// The pure module, deliberately: the stores are React hooks that reach
+// `react-native`, which does not parse in a Node test run.
+import {
+  isAttendance,
+  isFollowedArtist,
+  isFollowedVenue,
+  isSavedShow,
+  sameArtist,
+  sameAttendance,
+  sameFollowedVenue,
+  sameSavedShow,
+  toRating,
+  type Attendance,
+  type FollowedArtist,
+  type FollowedVenue,
+  type SavedShow,
+} from './list-schemas';
+
+
+
+
+
 
 /**
  * These guard the boundary between the device's stored JSON and the UI. A partial
@@ -114,31 +131,12 @@ describe('saved shows', () => {
   });
 });
 
-describe('merging a stored list into memory', () => {
-  const merge = (current: FollowedVenue[], stored: unknown[], dropped: { venueId?: string | null }[] = []) =>
-    mergeStored(current, stored, dropped, isFollowedVenue, sameFollowedVenue);
-
-  const other: FollowedVenue = { ...venue, venueId: 'v2', name: 'The Fillmore' };
-
-  it('keeps what is already in memory ahead of what was on disk', () => {
-    expect(merge([other], [venue]).map((v) => v.venueId)).toEqual(['v2', 'v1']);
-  });
-
-  it('skips entries the user removed before the read landed', () => {
-    // The window between mount and the disk read is real: a follow toggled off in
-    // it would otherwise come straight back.
-    expect(merge([], [venue, other], [{ venueId: 'v1' }]).map((v) => v.venueId)).toEqual(['v2']);
-  });
-
-  it('does not duplicate an entry present in both, or twice on disk', () => {
-    expect(merge([venue], [{ ...venue, name: 'stale name' }])).toEqual([venue]);
-    expect(merge([], [venue, { ...venue, name: 'stale name' }])).toEqual([venue]);
-  });
-
-  it('drops malformed entries and keeps the rest of the list', () => {
-    expect(merge([], [null, 'nope', { venueId: 'v3' }, venue])).toEqual([venue]);
-  });
-});
+/*
+ * The `mergeStored` suite that lived here is gone with the local-first store. There is
+ * no disk copy to fold into memory any more: the account is the only copy, so there is
+ * nothing to merge and no pre-hydration removal window to defend against. The
+ * validators below still matter — they are what keeps a bad row off a screen.
+ */
 
 // --- attendances -------------------------------------------------------------
 

@@ -16,14 +16,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KyleBadge } from '@/components/kyle-badge';
 import { PageMeta } from '@/components/page-meta';
 import { Colors, Fonts } from '@/constants/theme';
-import { AttendancesProvider } from '@/lib/attendances-store';
 import { AuthProvider } from '@/lib/auth';
-import { FollowedVenuesProvider } from '@/lib/followed-venues-store';
-import { FollowsProvider } from '@/lib/follows-store';
-import { ListSync } from '@/lib/list-sync';
 import { useNotificationObserver } from '@/lib/notifications';
-import { PrefsProvider } from '@/lib/prefs-store';
-import { SavedShowsProvider } from '@/lib/saved-shows-store';
 import { WriteGateProvider } from '@/lib/write-gate-provider';
 
 const queryClient = new QueryClient({
@@ -44,34 +38,14 @@ const navTheme = {
   },
 };
 
-/**
- * Everything the user owns lives on the device, so there are five of these and
- * they nest. Composed here rather than inline to keep the tree below readable.
- *
- * `WriteGateProvider` wraps them because four of the five ask it whether the user
- * is allowed to add to their lists, and it in turn reads `AuthProvider`. The order
- * auth → gate → stores is load-bearing, not stylistic.
+/*
+ * There used to be five nested store providers and a sync component here, because
+ * everything the user owned lived on the device. Nothing does now — the lists and the
+ * preferences are read straight off the account through React Query (see
+ * `account-lists.tsx`), so the providers, the AsyncStorage hydration and the merge
+ * policy are all gone. `WriteGateProvider` is the only one left: it still answers
+ * "may this write happen", which is now simply "are you signed in".
  */
-function LocalStores({ children }: { children: React.ReactNode }) {
-  return (
-    <WriteGateProvider>
-    <FollowsProvider>
-      <FollowedVenuesProvider>
-        <SavedShowsProvider>
-          <AttendancesProvider>
-            <PrefsProvider>
-              {/* Inside all four, because it reads and replaces every one of them.
-                  Renders nothing; it is here for the effects. */}
-              <ListSync />
-              {children}
-            </PrefsProvider>
-          </AttendancesProvider>
-        </SavedShowsProvider>
-      </FollowedVenuesProvider>
-    </FollowsProvider>
-    </WriteGateProvider>
-  );
-}
 
 export default function RootLayout() {
   useNotificationObserver();
@@ -90,7 +64,7 @@ export default function RootLayout() {
           makes. Renders its children untouched when there is no Clerk key. */}
       <AuthProvider>
       <QueryClientProvider client={queryClient}>
-        <LocalStores>
+        <WriteGateProvider>
             <ThemeProvider value={navTheme}>
               <StatusBar style="light" />
               {/* Default document metadata; screens override it with their own. */}
@@ -138,7 +112,7 @@ export default function RootLayout() {
               {!fontsLoaded && <View style={{ flex: 1, backgroundColor: theme.background }} />}
               <KyleBadge />
             </ThemeProvider>
-        </LocalStores>
+        </WriteGateProvider>
       </QueryClientProvider>
       </AuthProvider>
     </GestureHandlerRootView>

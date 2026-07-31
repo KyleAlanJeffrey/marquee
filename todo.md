@@ -533,7 +533,80 @@ Same entry points, same gate, same copy — different last mile, because Clerk s
 different tools for each. Everything else about accounts is now identical by
 construction, since there is no longer a branch that could differ.
 
-#### The lists follow the account now (2026-07-31)
+#### No local storage at all: everything is account-bound (Kyle, 2026-07-31)
+
+> "Don't have any local storage, make all of it account bound. It doesn't need to be
+> backwards accountible"
+
+**This supersedes the sync design in the section below.** That section is left standing
+because the reasoning is worth keeping — it is why this decision is an improvement and
+not just a different shape — but the pull-once policy, the union merge and the
+device/account reconciliation described there no longer exist.
+
+**Deleted, not refactored:**
+
+| gone | it existed to |
+| --- | --- |
+| `local-collection.tsx` | hydrate lists from AsyncStorage and defend the read window |
+| `list-sync.tsx` | reconcile a device copy with the account copy |
+| `list-merge.ts` + its spec | union two copies without losing anything |
+| the `mergeStored` suite in `stores.test.ts` | pin that union |
+| five store providers + `<ListSync />` in `_layout.tsx` | hold all of the above |
+| the `@react-native-async-storage/async-storage` dependency | be the disk |
+
+Also gone with them: `replaceAll`, the `superseded` flag, `dropped`, `readOk`,
+`writable`, the "a failed read must not be treated as an empty list" guard, and the
+whole class of bug where a device and an account disagreed about what you had.
+
+**What replaced it.** `account-lists.tsx`: one React Query entry (`['me-lists']`) that
+`GET /api/me/lists` fills, so a cold start costs **one** round trip for all four lists
+rather than four. Writes are optimistic — a follow button that waits for a round trip
+feels broken — and roll back on failure, because a silent optimistic failure is worse
+than a visible one: the user believes it saved. Each write `PUT`s only its own key, and
+the route writes only the keys it is given, so two lists changing at once cannot clobber
+each other.
+
+Prefs moved too, since they were the last thing on disk: `radius_miles` and
+`reminders_enabled` are columns on `users` (migration 0012) rather than another
+`user_lists` row, because they are two scalars and not a list — and `kind` in
+`user_lists` is a CHECK constraint SQLite can't extend without rebuilding the table.
+
+**The trade, stated rather than discovered later:** the lists now need a network and an
+account. Offline reads and instant cold starts are gone. Browsing, search, town pages
+and every detail page are untouched — none of them were ever account-bound — so what
+you *keep* needs somewhere to keep it, and what you *look at* does not.
+
+**One import trap, hit for the second time and now fixed properly.** The store files
+became React hooks reaching `@/lib/auth` → `@clerk/expo` → `react-native`, which does
+not parse in a Node test run, so `stores.test.ts` and `worker/test/lists.test.ts` both
+failed on `Unexpected token 'typeof'`. No vitest config fixes it — the offending module
+is `react-native` itself. The shapes and validators now live in **`list-schemas.ts`,
+which imports nothing**, and the stores re-export them so no call site changed. Same
+split as `write-gate.tsx`, and the reason is written at the top of the file this time.
+
+Verified in the browser with stale local data seeded on purpose:
+
+| check | result |
+| --- | --- |
+| signed out, `/settings` | **zero** `/api/` requests |
+| seeded `marquee.prefs.v1` of 10 miles | ignored — shows the 50-mile default |
+| seeded `marquee.follows.v1` entry | invisible on `/following`, still on disk |
+| radius pills signed out | all four `disabled`, with a note saying why |
+| `npm run build` | succeeds; bundle contains **0** references to async-storage |
+
+A signed-out control that silently does nothing is the failure this session kept
+avoiding, so the pills and the reminders switch are disabled with an explanation rather
+than left tappable.
+
+- [ ] **Sign-in has no first-run reward now.** Previously signing in merged a month of
+  local use into the new account. There is nothing to migrate any more, so a new account
+  starts empty by design — worth knowing before writing onboarding copy that promises
+  otherwise.
+- [ ] **Not verified end to end**, same reason as before: writing to the account needs a
+  real session and creating one isn't something I can do. Sign in, follow an artist,
+  reload, and confirm it is still there; then check `/settings` remembers a radius.
+
+#### The lists follow the account now (2026-07-31, superseded above)
 
 `GET` / `PUT /api/me/lists`, one `user_lists` row per `(user, kind)` holding the
 client's own JSON array, plus `src/lib/list-sync.tsx` on the device.

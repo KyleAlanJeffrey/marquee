@@ -1,10 +1,12 @@
 import { zValidator } from '@hono/zod-validator';
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { callerFrom, ensureUser, findUser, syncProfile } from '../auth';
 import { getDb } from '../db';
+import { users } from '../schema';
 import type { AppEnv } from '../env';
-import { profileBody } from '../schemas';
+import { prefsBody, profileBody } from '../schemas';
 
 /**
  * Who am I, according to the server.
@@ -67,4 +69,28 @@ me.post('/ensure', async (c) => {
   if (!userId) return c.json({ error: 'sign in required' }, 401);
   await ensureUser(getDb(c.env.DB), userId);
   return c.json({ ok: true });
+});
+
+/**
+ * Search radius and the reminders switch.
+ *
+ * On the account because nothing lives on the device any more. A partial update, so
+ * flipping the reminders switch does not have to restate the radius — and `undefined`
+ * has to mean "leave it" rather than "clear it", which is why the set object is built
+ * conditionally instead of spread wholesale.
+ */
+me.put('/prefs', zValidator('json', prefsBody), async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+  const db = getDb(c.env.DB);
+  await ensureUser(db, userId);
+  const body = c.req.valid('json');
+  await db
+    .update(users)
+    .set({
+      ...(body.radiusMiles !== undefined ? { radiusMiles: body.radiusMiles } : {}),
+      ...(body.remindersEnabled !== undefined ? { remindersEnabled: body.remindersEnabled ? 1 : 0 } : {}),
+    })
+    .where(eq(users.id, userId));
+  return c.json({ ok: true, user: await findUser(db, userId) });
 });

@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { isAttendance } from '../../src/lib/attendances-store';
-import { isFollowedVenue } from '../../src/lib/followed-venues-store';
-import { isFollowedArtist } from '../../src/lib/follows-store';
-import { isSavedShow } from '../../src/lib/saved-shows-store';
+// The pure schema module, not the stores: those are React hooks that reach
+// `react-native`, which a Node test run cannot parse.
+import {
+  isAttendance,
+  isFollowedArtist,
+  isFollowedVenue,
+  isSavedShow,
+} from '../../src/lib/list-schemas';
 import { ATTENDANCE_MAX, LIST_MAX, listsBody } from '../src/schemas';
 
 /**
