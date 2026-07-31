@@ -92,16 +92,22 @@ export function PastShowsPicker({
         ) : shows.length === 0 ? (
           <View style={styles.centre}>
             <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
-              {history.isError
-                ? "Couldn't reach the history source just now."
-                : `No past ${artistName} shows on file. Our history goes back to about 2014.`}
+              {/* Two different failures and one real answer, kept apart. Reading the
+                  list can fail on its own — the fetch may have worked and the GET
+                  still 500 — and reporting that as "no shows on file" would be a
+                  wrong answer rather than a missing one. */}
+              {past.isError
+                ? "Couldn't load their past shows just now."
+                : history.isError
+                  ? "Couldn't reach the history source just now."
+                  : `No past ${artistName} shows on file. Our history goes back to about 2014.`}
             </ThemedText>
-            {history.isError && (
+            {(history.isError || past.isError) && (
               <PressableScale
                 haptic
                 accessibilityRole="button"
                 accessibilityLabel="Try looking up past shows again"
-                onPress={() => history.mutate()}
+                onPress={() => (past.isError ? past.refetch() : history.mutate())}
                 style={[styles.retry, { borderColor: theme.border }]}>
                 <ThemedText type="labelSm" style={{ color: theme.primary }}>
                   TRY AGAIN

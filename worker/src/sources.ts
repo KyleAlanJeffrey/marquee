@@ -371,8 +371,12 @@ export type ArtistHistory = {
   artist_id: string;
   /** False when this answer came from the stored stamp instead of upstream. */
   fetched: boolean;
-  /** Whether Bandsintown recognised the artist at all, as opposed to having no dates. */
-  found: boolean;
+  /**
+   * Whether Bandsintown recognised the artist at all, as opposed to having no dates.
+   * Null when this call didn't ask — the stored stamp doesn't record the outcome, and
+   * a guess here would read as fact.
+   */
+  found: boolean | null;
   /** Newly written rows. Zero on a second call is success, not failure. */
   ingested: number;
   /** Past events on file for this artist afterwards, however they got there. */
@@ -426,16 +430,46 @@ export async function fetchArtistHistory(
         .get()
     )?.n ?? 0;
 
+  const cached = (fetchedAt: string) => ({
+    artist_id: row.id,
+    fetched: false,
+    // Not `true`. Whether Bandsintown recognised them is only known by the call that
+    // asked, and that outcome isn't stored — so claiming it here would be inventing
+    // an answer. Null means "didn't ask this time", which is the truth.
+    found: null,
+    ingested: 0,
+    fetched_at: fetchedAt,
+  });
+
   // Already asked. History doesn't change, so there is nothing to gain by asking again.
   if (row.fetchedAt && !opts.force) {
-    return {
-      artist_id: row.id,
-      fetched: false,
-      found: true,
-      ingested: 0,
-      past_on_file: await countPast(),
-      fetched_at: row.fetchedAt,
-    };
+    return { ...cached(row.fetchedAt), past_on_file: await countPast() };
+  }
+
+  /*
+   * Claim the fetch before making it, so two requests for the same artist don't both
+   * go upstream.
+   *
+   * The read above and the write below are separate statements, so without this a
+   * second caller arriving in between saw `fetchedAt` still null and made the same
+   * third-party request. Stamping first and checking what the update touched turns the
+   * check into the claim: `where past_events_fetched_at is null` means exactly one
+   * caller can win it. `force` skips the guard because that is what it is for.
+   */
+  const claimedAt = nowIso();
+  const claim = await db
+    .update(artists)
+    .set({ pastEventsFetchedAt: claimedAt })
+    .where(
+      opts.force
+        ? eq(artists.id, row.id)
+        : sql`${artists.id} = ${row.id} and ${artists.pastEventsFetchedAt} is null`,
+    );
+  // D1 reports how many rows the statement changed. Nothing changed means somebody
+  // else claimed it first, so this caller reads their result instead of duplicating it.
+  const claimed = (claim as unknown as { meta?: { changes?: number } })?.meta?.changes ?? 1;
+  if (!claimed && !opts.force) {
+    return { ...cached(claimedAt), past_on_file: await countPast() };
   }
 
   const keys = lookupKeys({
@@ -457,16 +491,14 @@ export async function fetchArtistHistory(
     ).length;
   }
 
-  const fetchedAt = nowIso();
-  await db.update(artists).set({ pastEventsFetchedAt: fetchedAt }).where(eq(artists.id, row.id));
-
   return {
     artist_id: row.id,
     fetched: true,
     found: lookup.found,
     ingested,
     past_on_file: await countPast(),
-    fetched_at: fetchedAt,
+    // The stamp went down before the request, not after — see the claim above.
+    fetched_at: claimedAt,
   };
 }
 

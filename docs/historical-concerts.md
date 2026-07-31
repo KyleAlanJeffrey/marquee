@@ -107,23 +107,31 @@ and it is the answer.
 (`date=2015-01-01,2016-12-31`) all return past events. Measured against **eight
 artists drawn at random from our own `artists` table**, not hand-picked:
 
-| artist | past events | range | with coordinates |
+| artist | past events | earliest | with coordinates |
 | --- | --- | --- | --- |
-| Big Richard | 308 | 2022-02 → 2026-09 | 308 |
-| Bilmuri | 235 | 2018-08 → 2026-10 | 235 |
-| KANA-BOON | 240 | 2017-10 → 2026-10 | 240 |
-| Radiohead | 101 | 2014-07 → 2025-12 | 98 |
-| Alex Isley | 70 | 2015-12 → 2026-09 | 70 |
-| Takuya Nakamura | 69 | 2016-10 → 2026-11 | 68 |
-| boygenius | 49 | 2018-11 → 2023-10 | 49 |
-| Marti Jones | 20 | 2014-07 → 2019-10 | 20 |
+| Big Richard | 308 | 2022-02 | 308 |
+| Bilmuri | 235 | 2018-08 | 235 |
+| KANA-BOON | 240 | 2017-10 | 240 |
+| Radiohead | 101 | 2014-07 | 98 |
+| Alex Isley | 70 | 2015-12 | 70 |
+| Takuya Nakamura | 69 | 2016-10 | 68 |
+| boygenius | 49 | 2018-11 | 49 |
+| Marti Jones | 20 | 2014-07 | 20 |
+
+The counts came from `date=all` filtered to dates in the past, so the earlier draft of
+this table also printed a *latest* column — which showed future dates and made it look
+as though a history fetch could ingest upcoming shows. It can't, and the column is gone
+because it was measuring `date=all` while the route uses `date=past`. Re-checked
+directly: **`date=past` returned 308 rows for Big Richard and 235 for Bilmuri, of which
+zero are in the future** (latest 2026-07-25 and 2026-06-30, against a clock of
+2026-07-31). That is why the route can write what it gets without filtering.
 
 **8 of 8 returned history**, including the obscure ones — Marti Jones is not a name
 anybody would have cherry-picked. Mean ~137 past events per artist.
 
 Three properties that matter more than the counts:
 
-1. **Coordinates on ~99.6% of past events** (1,088 of 1,091). That is the join. Our
+1. **Coordinates on ~99.6% of past events** (1,088 of 1,092). That is the join. Our
    2,891 venue clusters are deduped by proximity, so a past event with lat/lng lands
    in an existing cluster through the same `sameVenue` path the live crawl already
    uses. No new matching logic.
@@ -176,9 +184,14 @@ refresh them.
 
 ### The fallback: user contribution, for pre-2014 and the missing tail
 
-Still needed, but now for a much smaller job: gigs before Bandsintown's 2014 horizon,
-and rooms it does not know. That is where the three-picker flow below belongs, and
-scoping it to the residue rather than the whole problem is what keeps it small.
+Still needed, but now for a much smaller job: gigs before Bandsintown's horizon.
+
+Note the limit honestly, because the earlier draft of this section overclaimed: three
+pickers over *existing* catalogue entities cannot express a room we have no row for. A
+gig at a venue that closed before any ticketing feed knew it needs venue *creation*,
+which is free-text, which is the moderation queue this design exists to avoid. So the
+fallback covers **pre-horizon dates at venues we already know**, and anything else stays
+out of scope until there is a reason to open that door.
 
 The key observation for that path is that Marquee is not missing the hard parts. A
 concert is mostly a pointer at three things:

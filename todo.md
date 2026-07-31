@@ -878,6 +878,10 @@ cleaned up.
   piece that is ours either way: migrating a device's local log into a new account
   on first sign-in. That is not an afterthought, it is the reward for signing up,
   and phase 0's snapshot rows are already the right shape to upload.
+- [x] **Past-show discovery — built 2026-07-31.** `POST /api/artists/:id/history`,
+  `GET /api/artists/:id/past-events` and `PastShowsPicker` on the artist page. See
+  `docs/historical-concerts.md`; this is what took the catalogue from 19 days of history
+  to roughly a decade.
 - [ ] **Phase 3 — public reviews.** Write, edit, report, moderate; verified
   attendance; aggregates with a confidence floor; the three read surfaces.
 - [ ] **Phase 4 — the social part.** Follow people, a feed of what friends saw,
@@ -895,9 +899,10 @@ out to rest on a fact worth its own writeup:
   **Then the cheap experiment got run, and it changed the plan.** Bandsintown answers
   for past dates — `date=past`, `date=all`, explicit ranges — and across **eight
   artists drawn at random from our own `artists` table, 8 of 8 returned history**,
-  averaging ~137 past events each, back to a hard floor at 2014. Obscure ones
+  averaging ~137 past events each, back to a floor around 2014 — RUSH came back with a
+  2013 show, so the horizon moves per artist. Obscure ones
   included: Marti Jones, 20 shows, 2014–2019. Crucially **~99.6% carry coordinates**
-  (1,088 of 1,091), so they join to our 2,891 venue clusters through the same
+  (1,088 of 1,092), so they join to our 2,891 venue clusters through the same
   proximity path the live crawl already uses, and Bandsintown keys by *name* — so the
   23%-MBID problem that sank Setlist.fm doesn't apply here. Checked for a silent cap
   and found none: Radiohead reads 0 for both 2015 and 2019, which is correct rather
