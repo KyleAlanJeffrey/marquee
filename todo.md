@@ -18,22 +18,50 @@ to the diff that acted on it. This file is only what's left.
 Today a venue page is a name, a map and a list of dates. It should convey what the
 room is actually like. Reference: `stitch_concert_compass/souls_of_mischief_venue_details/`.
 
-- [ ] **Photos.** No current source publishes venue imagery — Ticketmaster and
-  SeatGeek return their own venue pages, Bandsintown has no field. Options, in
-  order of what they cost:
-  - **Wikimedia Commons** by venue name + city — free, licence-clean, needs
-    attribution, and will miss the whole club tier.
-  - **Google Places Photos** — needs a billing account, but it's the same Place
-    Details call already costed for ratings below, so one integration buys photos,
-    ratings *and* the venue's own website.
-  - **Artist photos from shows in that room** as a stand-in — free and already in
-    the table, honest if labelled as such, but it isn't the room.
-- [ ] **Description.** Wikipedia extract for rooms that have an article, via the
-  same `worker/src/sources.ts` path the artist bio uses. Venue name + city is a
-  much weaker key than an artist name, so this needs a disambiguation guard
-  (a "The Fillmore" article about the neighbourhood is worse than no article).
-  For everything else, compose from what the data already knows: how often it
-  books, which genres actually play there, what's coming up.
+**Wikipedia is viable for both prose and a photo, but only behind a guard — and
+that was measured, not assumed.** Sampled 22 real venue rows against the REST
+summary endpoint: 14 direct title hits, 6 rescued by a search fallback, 2 with no
+article. The failures were the dangerous kind, confidently wrong rather than
+absent: "Blue Note" (NYC) returned **Blue Note Records**, the record label;
+"Riviera" (Burgos) returned an article about the Italian word for coastline;
+"Mohawk" (Austin) returned "Music of Austin, Texas"; "Grenswerk" and "Prescott
+Park" both returned their *town's* article. Printing any of those as a venue
+description is worse than printing nothing.
+
+Two guards fix it, and together they were exactly right on the sample — **14 kept,
+all correct; 5 dropped, all correctly dropped**:
+
+1. **The article must carry coordinates within ~25 km of the venue.** This is what
+   kills the label, the dictionary word and the city-music article: none of them
+   are places, so none have coordinates. The radius is deliberately generous
+   because *our* coordinate is sometimes a source's town centroid — Red Rocks sits
+   7.6 km from its own article, and that's our error, not Wikipedia's.
+2. **The article title must share a distinguishing word with the venue name.** This
+   is what kills the town articles, which do have coordinates and are genuinely
+   nearby: "Portsmouth, New Hampshire" shares nothing with "Prescott Park".
+
+- [ ] **Description** from the Wikipedia extract behind those two guards, plus a
+  minimum length so a one-line stub doesn't become a "description" ("The Showbox"
+  returns 109 characters). CC BY-SA, so it keeps the "via Wikipedia" attribution
+  the artist bio already uses. Cache it on the venue row — this is 2 subrequests
+  and must not run per page view.
+- [ ] **Photo** from the same article's lead image. Checked the licence on 13 of
+  them and **all 13 were free** — CC BY, CC BY-SA or public domain — but every one
+  of those requires **attribution**, so the photographer and licence have to render
+  with the image. That's one more API call (`prop=imageinfo&iiprop=extmetadata`)
+  and it is not optional: a non-free logo would otherwise get republished as a
+  hero. 18 of 21 articles had a lead image.
+- [ ] **Known soft spot:** "Showbox SoDo" keeps the article for "The Showbox", a
+  different room 2.3 km away run by the same operator. Both guards pass. Needs a
+  rule about differently-named sibling rooms, or accept it.
+- [ ] **For everything without an article** — which is the whole club tier, and the
+  two misses in the sample were both small European rooms — compose from what the
+  data already knows: how often it books, which genres actually play there, what's
+  coming up. This is the only path that covers every venue, so it should be built
+  first and Wikipedia should be the enrichment on top.
+- [ ] **Google Places** stays the paid alternative: one Place Details call buys
+  photos, ratings *and* the venue's own website (see the costing further down).
+  Worth it only if a billing account is ever justified.
 - [ ] **Stats worth showing**, in the reference's oversized-numeral treatment:
   upcoming show count, distinct acts, busiest month, first and next show on
   record. All derivable from existing rows, no new source.
@@ -41,23 +69,24 @@ room is actually like. Reference: `stitch_concert_compass/souls_of_mischief_venu
 
 ## Now — bugs
 
-- [ ] **Artist and tour names are stored as venue names.** Measured on production:
-  **7,340 venue rows, 1,054** carrying a colon, a "tour" and/or over 64
-  characters — and **265 of those are cluster heads with upcoming shows**, which
-  is what the app actually renders. Samples: "Horse Jumper of Love: playing their
-  Self Titled Debut in its entirety", "Drops of Jupiter: 25 Years in the
-  Atmosphere", "The Constellation Tour: Thee Sacred Souls, LA LOM & The Womack
-  Sisters". Two separate problems behind it:
-  1. **Ingestion accepts them.** `looksLikeTourName` (`worker/src/dedupe.ts`)
-     already recognises these well enough to withhold name tokens from clustering,
-     but nothing stops the string being written as the venue's name.
-  2. **Only the server pages filter them.** `realVenueName` (`worker/src/page.ts`)
-     rejects a name containing the act's own name, a colon, or over 64 characters
-     — but it's display-only, and the app's venue list and venue screen don't use
-     it. The same row therefore looks clean on a hub page and wrong in the app.
-  The fix wants to be at ingestion (prefer the real venue when a feed puts the
-  tour title in the venue column), with the display guard kept as a backstop for
-  rows already written, plus a repair pass over the 265.
+- [~] **Artist and tour names stored as venue names — fixed on display, not at the
+  source.** Handled in `195912b`: `looksLikeEventTitle` nulls the name wherever one
+  leaves the Worker, and drops the row where a venue is the subject rather than a
+  detail (the nearby rail, the city hub's venue list, which also fed the hub FAQ).
+  Measured first, because it decided the approach: 7,340 venue rows, 1,054 carrying
+  an event title, 283 of them cluster heads with upcoming shows — and **240 of
+  those 283 are alone in their cluster**, so there is no correct name in the table
+  to promote and no repair pass that could recover one. What's left:
+  - [ ] **Ingestion still writes them.** Nothing rejects the string on the way in,
+    so the count grows. The real fix is per-source: when a feed puts the tour title
+    in the venue column, find the venue it actually means.
+  - [ ] **A dash-separated billing is not caught** and deliberately so —
+    "PROGRESSIVE HOUSE NEVER DIED - Seattle" reads exactly like "The Eastern-GA" to
+    a string rule. Pinned as a known miss in `dedupe.test.ts`; wants a source-side
+    fix, not a blunter regex.
+  - [ ] **A name we can't publish is a room we can't name.** 240 venues now render
+    as their town. Reverse-geocoding the coordinates is the only route to a real
+    name, and it's the same missing capability as the 29 placeholder-pinned rows.
 - [ ] **A town's own name still counts as distinguishing**, so "Metro Chicago" and
   "Radius Chicago" agree on "chicago" and can merge. Fix is to drop name tokens
   matching the venue's city. Accounts for most of the ~45 remaining clusters that
@@ -75,6 +104,179 @@ room is actually like. Reference: `stitch_concert_compass/souls_of_mischief_venu
   per incoming show on the hot ingest path. Resolve cluster members once per
   distinct venue id (two indexed lookups, as `clusterVenueIds` does) and bind an
   `in (...)`.
+
+## Pivot — concerts you've been to, and what you thought
+
+The direction: log the shows you've been to, rate them, and let other people
+review the same show, artist and room. Goodreads for concerts and bands. This is
+additive to discovery, not a replacement — the reason to open Marquee becomes
+"what did I see, and what was it like" as well as "what's on".
+
+This section is a writeup, not a plan that's been started. Nothing below is built.
+
+### The positioning problem, first
+
+"No account needed" is not a nice-to-have here: it's the tagline on `/`, the
+description in `manifest.json`, and the thing that was explicitly asked for when
+the design language was set. Reviews need durable identity, so this is in genuine
+tension with it — and the resolution has to be a decision, not a drift.
+
+The one that keeps both: **an account is only ever needed to publish.** Everything
+that works today keeps working with no account — browsing, following, saving,
+reminders, and *privately* logging and rating what you went to, all still
+on-device. Signing in is what lets your review carry your name and be seen by
+somebody else. The tagline becomes "no account needed to browse", which is still
+true and still unusual, and signing up becomes a deliberate upgrade with an
+obvious reason rather than a toll gate on the front door.
+
+That framing also decides the build order below: the whole first phase ships
+without any auth at all.
+
+### The blocker nobody would guess: there is no past
+
+`sanitizeInputs` (`worker/src/data.ts`) drops any listing more than 24 hours old
+on the way in, and the comment says why — "one already past is dead weight in a
+table whose reads are all 'upcoming'". That was correct for a discovery app and it
+is fatal for this one. Measured on production today: **17,742 upcoming events, 627
+past ones, and the earliest is 2026-07-12** — about two and a half weeks of
+history, and only because those rows aged out after being ingested while still
+upcoming. Nothing deletes them, so history accumulates from here; but there is no
+back-catalogue and no source currently wired that could provide one. You could not
+log a gig you went to last year, which is most of what somebody would want to log
+on day one.
+
+Three ways out, and the choice shapes the product:
+
+1. **Setlist.fm.** The right answer, and worth checking early. It is specifically
+   an archive of *past* concerts — per artist, per venue, per date — with a free
+   API key, MusicBrainz ids to join on, and the actual setlist, which is both the
+   back-catalogue and a genuinely good reason to open a past show's page. Risks to
+   check before committing: rate limits, terms on storing their data, and how well
+   its venue identity joins to ours (our clustering is coordinate-led, theirs is
+   name-led, and it publishes no coordinates).
+2. **Let people add a show that isn't in the catalogue.** Unavoidable as a
+   fallback — no source has everything, especially the DIY tier this app already
+   struggles to cover. But a user-created event is a duplicate waiting to happen
+   and a moderation surface, so it needs the same `sameShow`/`sameVenue` matching
+   the ingest path uses, run against what the user typed.
+3. **Only let people log shows Marquee already knew about.** Cheapest, ships
+   soonest, and quietly says "your history starts now" — which for a brand-new
+   product is more defensible than it sounds, and is what phase 1 does.
+
+Either way `sanitizeInputs` needs to stop treating the past as garbage, and the
+`starts_at > now` filter that is currently *everywhere* in the read paths has to
+become a deliberate per-query choice rather than an assumption.
+
+### What gets rated, and what aggregates
+
+The atom is a **show you attended**, not an artist and not a venue. That is the
+thing a person has an opinion about, it is dated, and it is the only one they can
+have actually been to. Artist and venue scores are then *derived* from show
+reviews rather than being separately rated — "how good are they live" is the
+average of nights people saw them, which is a more honest number than a standalone
+star rating and it needs no extra UI.
+
+That gives three read surfaces from one write: the show's own page, "X live" on the
+artist page, and "what it's like here" on the venue page. It also means an artist
+with one glowing review doesn't outrank one with two hundred — the aggregate needs
+a confidence floor, or the leaderboards are noise.
+
+Worth separating, because people conflate them and then argue in the comments: the
+**performance** and the **room**. A brilliant set in a venue with bad sound and a
+90-minute bar queue is two different verdicts. Two sub-scores on one review, both
+optional, is probably the whole of it.
+
+### Data model sketch
+
+- `users` — id, handle (unique, public), display name, avatar, created_at,
+  deleted_at. No email column unless the auth choice below needs one.
+- `sessions` — token hash, user_id, created_at, last_seen_at, expires_at,
+  user_agent. Hashed, never the raw token.
+- `attendances` — user_id, event_id, unique on the pair. "I was there" is a
+  separate, lighter act than reviewing, and most people will do only this.
+- `reviews` — user_id, event_id, rating, optional venue_rating, body, created_at,
+  edited_at, deleted_at, plus `visibility`. Unique on (user_id, event_id): one
+  review per person per show, editable.
+- `review_reactions` — user_id, review_id, kind. Needed for ordering by anything
+  other than recency.
+- Aggregates: **not** computed on read. A denormalised `rating_count` /
+  `rating_sum` on events, artists and venues, updated on write, because D1 is
+  SQLite and an artist page averaging over every review of every show they ever
+  played is a table scan on the hot path.
+- Reports/moderation: `review_reports` (review_id, reporter, reason, state).
+
+### Accounts, concretely
+
+Three constraints narrow this fast: no server to run (Workers only), no email
+infrastructure (MailChannels stopped being free for Workers, so magic links mean
+paying Resend/Postmark and owning deliverability), and App Store rules — if you
+offer any third-party sign-in you must also offer Sign in with Apple, and you must
+provide in-app account deletion.
+
+Recommended: **OAuth only, no passwords, no email.** Apple (required anyway),
+Google, and **Spotify** — which is thematically right, already has credentials in
+this project, and lets a new account arrive with taste data attached. Sessions as
+an opaque random token in an httpOnly, Secure, SameSite=Lax cookie on web and in
+`expo-secure-store` on native, with the hash in D1. No password reset flow, no
+verification emails, no password storage, which removes most of the ways a small
+app leaks user data.
+
+Passkeys are the tempting alternative and the recovery story is the problem: lose
+the device, lose the account, unless there's a second factor — which means email,
+which is the thing this avoids. Worth revisiting once there's a reason to hold
+addresses.
+
+Also needed the moment accounts exist, and they are not optional: a privacy
+policy, terms, in-app account deletion (Apple requires it), and a decision about
+what happens to a deleted user's public reviews — anonymise and keep, or remove.
+Anonymise-and-keep is the norm and is much kinder to the aggregate scores.
+
+### Moderation, because public writing invites it
+
+- Rate limits per account and per IP on writes, plus a minimum account age.
+- Report → queue → hide/remove, with an audit trail. `ADMIN_TOKEN` already gates
+  the mutating admin routes, so the queue has somewhere to live.
+- A **verified attendance** signal is the strongest quality lever available and it
+  is nearly free: a review from somebody who logged the show before it happened,
+  or who was inside the venue's radius that night, is worth flagging as such.
+- Reviews of shows that haven't happened yet must be refused outright.
+
+### SEO, which this is very good for
+
+This is the first content on the site that is genuinely unique rather than
+assembled from feeds, which is exactly what the ranking work has been missing.
+`Review` and `AggregateRating` JSON-LD are well supported and would put stars in
+results. Two hard rules: the markup must describe real reviews (fabricated or
+self-serving review markup is a manual-action category, not a ranking nudge), and
+review pages with no reviews yet must be `noindex` like the other thin pages
+already are, or this adds thousands of empty URLs to a sitemap that was just
+cleaned up.
+
+### Build order
+
+- [ ] **Phase 0 — prove the interaction with no accounts and no new tables.**
+  "I was there" + a private rating, stored on-device in the existing
+  `local-collection` store next to follows and saved shows. A "Been to" tab that
+  is a personal log. Ships in days, needs no auth, no moderation and no legal
+  page, and it answers the only question that matters — whether people log shows
+  at all — before anything irreversible is built.
+- [ ] **Phase 0.5 — check Setlist.fm properly** before designing around it: key,
+  limits, terms, and how many of our venues and artists it can actually join to.
+  Everything about the back-catalogue depends on the answer.
+- [ ] **Phase 1 — the past becomes first-class.** Loosen `sanitizeInputs`, make
+  every `starts_at > now` an explicit choice, and give a past show a page worth
+  reading (who played, the setlist if we have it, who else was there).
+- [ ] **Phase 2 — accounts.** OAuth, sessions, handles, deletion, privacy policy,
+  terms. Migrating a device's local log into a new account on first sign-in is
+  part of this phase, not an afterthought — it is the reward for signing up.
+- [ ] **Phase 3 — public reviews.** Write, edit, report, moderate; verified
+  attendance; aggregates with a confidence floor; the three read surfaces.
+- [ ] **Phase 4 — the social part.** Follow people, a feed of what friends saw,
+  year-in-review. Only worth it once phase 3 has content in it.
+
+Interacts with the website/app split below, and the order matters: review pages
+are server-rendered public content, so they belong on the web side. Decide the
+split first, or these get built twice.
 
 ## Next — split the website from the app
 
