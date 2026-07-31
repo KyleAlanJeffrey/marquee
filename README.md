@@ -28,7 +28,7 @@ worker/
   src/routes/     per-resource Hono routers (artists, venues, events, feed, search, admin,
                   me + lists — the account mirror and its four private lists,
                   people — profiles/follows/blocks, reviews — reviews/reports/RSVPs/feed,
-                  curated — public lists)
+                  curated — shareable lists, public and private)
   src/data.ts     D1 repository (reads/writes) via Drizzle
   src/sources.ts  external APIs (Ticketmaster, Bandsintown, SeatGeek, Spotify, Bluesky)
   src/dedupe.ts   cross-source venue/show identity · src/crawl.ts crawl scheduling
@@ -112,7 +112,7 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/nearby` | upcoming shows near a point (bbox + haversine). A POST, and sent without a session token: coordinates are somebody's location, and they stay out of request logs and never travel with identity |
 | `GET /api/artists/:id` · `GET /api/artists/:id/events` | artist + their upcoming shows |
 | `GET /api/events/:id` | event detail |
-| `POST /api/following` | upcoming shows for the on-device follow lists — a year ahead, no radius, one row per show (POST so the follow list stays out of request logs) |
+| `POST /api/following` | upcoming shows for a posted snapshot of the follow lists — a year ahead, no radius, one row per show (POST so the follow list stays out of request logs) |
 | `POST /api/events/by-ids` | the saved list, revalidated — upcoming shows only, soonest first (POST so a saved list stays out of request logs) |
 | `POST /api/venues/nearby` | venues with upcoming shows near a point, busiest first, one row per canonical venue |
 | `GET /api/venues/:id` · `GET /api/venues/:id/events` | venue + its upcoming shows; any member id of a cluster resolves to the canonical venue |
@@ -128,7 +128,7 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/curated-lists` (+ `GET/PUT/DELETE /:id`, `POST/DELETE /:id/items…`) | curated lists of artists, venues and events |
 | `POST /api/search-artists` | Spotify artist search |
 | `POST /api/discover-events` | pull nearby shows from Ticketmaster + SeatGeek (throttled per area) |
-| `POST /api/refresh-artist-events` | pull shows for the on-device follow list (Ticketmaster + Bandsintown) |
+| `POST /api/refresh-artist-events` | pull shows for a posted follow list (Ticketmaster + Bandsintown) |
 | `GET /api/towns?q=` | towns with upcoming shows (busiest first when `q` is empty) |
 | `GET /api/admin/health` | configured sources, event counts per source, sources yielding nothing, crawl queue depth |
 | `GET /api/admin/stats?days=` | ingest runs per source, what they produced, coverage per town (needs `ADMIN_TOKEN`) |
@@ -456,7 +456,7 @@ against its URL, so without a new URL an existing share keeps showing the old on
   reviews with report/block/hide moderation, going/interested RSVPs, a feed of
   what the people you follow reviewed, and curated lists. The private log stays
   private: publishing a review is its own act, never a flag on a log entry.
-- **Near Me** — the home feed calls `GET /nearby` for the device's location and
+- **Near Me** — the home feed calls `POST /nearby` for the device's location and
   auto-triggers `POST /discover-events` (server-throttled per area) to keep the
   area fresh. A Nearby/Following toggle filters to followed artists.
 - **Following** — the app POSTs its follow list to `refresh-artist-events` on

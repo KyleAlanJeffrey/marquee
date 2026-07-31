@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 
 import { callerFrom, ensureUser } from '../auth';
 import { nowIso } from '../data';
+import { blockedEitherWay } from './reviews';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
 import { artists, events, listItems, lists, venues } from '../schema';
@@ -94,6 +95,11 @@ curated.get('/:id', async (c) => {
   const { userId } = await callerFrom(c.env, c.req.header('authorization'));
   const list = await visibleList(db, c.req.param('id'), userId);
   if (!list) return c.json({ error: 'not found' }, 404);
+  // A block empties both parties' reads of each other — the shelf is already
+  // gone from the profile, so the direct URL answers the same way.
+  if (userId && userId !== list.userId && (await blockedEitherWay(db, userId, list.userId))) {
+    return c.json({ error: 'not found' }, 404);
+  }
 
   const rows = await db
     .select()

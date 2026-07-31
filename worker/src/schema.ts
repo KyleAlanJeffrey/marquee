@@ -308,7 +308,7 @@ export const listItems = sqliteTable(
   {
     listId: text('list_id')
       .notNull()
-      .references(() => lists.id),
+      .references(() => lists.id, { onDelete: 'cascade' }),
     refKind: text('ref_kind').notNull(),
     refId: text('ref_id').notNull(),
     position: integer('position').notNull(),

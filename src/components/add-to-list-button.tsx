@@ -24,7 +24,9 @@ export function AddToListButton({ refKind, refId, subject }: { refKind: ListItem
   const { userId } = useAuth();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
-  const [addedTo, setAddedTo] = useState<string | null>(null);
+  // Every shelf it landed on this visit, not just the last — adding to two
+  // lists should leave two checkmarks.
+  const [addedTo, setAddedTo] = useState<ReadonlySet<string>>(new Set());
   const shelves = usePersonLists(userId ?? '', open && !!userId);
   const add = useAddToList();
   const create = useCreateList();
@@ -38,7 +40,7 @@ export function AddToListButton({ refKind, refId, subject }: { refKind: ListItem
   };
 
   const addTo = (listId: string) => {
-    add.mutate({ listId, refKind, refId }, { onSuccess: () => setAddedTo(listId) });
+    add.mutate({ listId, refKind, refId }, { onSuccess: () => setAddedTo((prev) => new Set(prev).add(listId)) });
   };
 
   const createAndAdd = () => {
@@ -77,7 +79,7 @@ export function AddToListButton({ refKind, refId, subject }: { refKind: ListItem
             </ThemedText>
           )}
           {shelves.data?.lists.map((l) => {
-            const done = addedTo === l.id;
+            const done = addedTo.has(l.id);
             return (
               <PressableScale
                 key={l.id}
