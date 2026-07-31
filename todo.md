@@ -118,10 +118,13 @@ during A/B):
   `GET .../rsvps`, and two count-carrying pills on upcoming event pages behind
   the write gate. Past shows 422 ("log it instead"). Counts name nobody.
 
-- [ ] **Let people add a show that isn't in the catalogue.** The backfill covers
-  ~2014 onward for artists Bandsintown knows; this is the rest. Needs
-  `sameShow`/`sameVenue` matching against typed input, private-by-default so it
-  needs no moderation on day one.
+- [x] **Add a show that isn't in the catalogue** (2026-07-31). A hand-entered
+  log entry with a `manual-` id and no catalogue references — possible because
+  the log renders purely from its own snapshot. Private by design: the entry
+  never becomes a shared event, so the day-one version needs no `sameShow`
+  matching and no moderation. Rateable like any other night; its row doesn't
+  navigate (there is no event page to open). Promotion to a shared object stays
+  an open decision in docs/social.md, with the matching work attached to it.
 - [ ] **App-store prep** — mine except the builds and submissions:
   - [ ] **Blocked on Kyle:** the EAS project id (`a9540056-…`) belongs to an
     account `eas whoami` isn't a member of. Either `eas login` as its owner or

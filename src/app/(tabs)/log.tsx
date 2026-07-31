@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
+import { AddShowForm } from '@/components/add-show-form';
 import { EmptyState } from '@/components/empty-state';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
@@ -81,13 +82,19 @@ export default function LogScreen() {
           <ActivityIndicator color={theme.primary} />
         </View>
       ) : attended.length === 0 ? (
-        <EmptyState
-          icon="checkmark-done-outline"
-          title="No shows logged yet"
-          message="Open a gig you went to and tap “Were you there?”. Your log is private to your account — nobody else can see it."
-          actionLabel="Find shows"
-          onAction={() => router.push('/explore')}
-        />
+        <View style={{ flex: 1 }}>
+          <EmptyState
+            icon="checkmark-done-outline"
+            title="No shows logged yet"
+            message="Open a gig you went to and tap “Were you there?”. Your log is private to your account — nobody else can see it."
+            actionLabel="Find shows"
+            onAction={() => router.push('/explore')}
+          />
+          {/* The other way in: a show the catalogue never listed. */}
+          <View style={styles.addForm}>
+            <AddShowForm />
+          </View>
+        </View>
       ) : (
         <FlatList
           data={rows}
@@ -102,6 +109,7 @@ export default function LogScreen() {
                 {average ? ` · ${average} average` : ''}
                 {' · private to you'}
               </ThemedText>
+              <AddShowForm />
             </View>
           }
           renderItem={({ item, index }) => {
@@ -126,6 +134,10 @@ export default function LogScreen() {
                     <PressableScale
                       accessibilityRole="button"
                       accessibilityLabel={`Open ${show.artistName ?? show.name}`}
+                      // A hand-added show has no event page to open — its id is
+                      // `manual-…` and resolves to nothing. The row stays; only
+                      // the navigation goes.
+                      disabled={show.eventId.startsWith('manual-')}
                       onPress={() => {
                         // Leaving with a row still armed would mean one tap
                         // deletes it on the way back in.
@@ -209,6 +221,7 @@ export default function LogScreen() {
 }
 
 const styles = StyleSheet.create({
+  addForm: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.four },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.three },
   content: { paddingBottom: Spacing.six + Spacing.four },
   head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, paddingBottom: Spacing.three, gap: 2 },
