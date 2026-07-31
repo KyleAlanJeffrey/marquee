@@ -1044,10 +1044,12 @@ crawl multiplies duplicates instead of coverage.
   masthead with real nav, full-bleed hero, two-column body, footer with columns.
   Survives the cancelled split — the hubs and the landing page are desktop pages
   either way.
-- [ ] **Keep one palette.** `src/constants/theme.ts` and the `:root` block in
-  `worker/src/page.ts` hold the same values twice and have already drifted once.
-  Generate the CSS variables from the TS tokens, or the two surfaces will diverge
-  exactly when they're meant to look related.
+- [x] **One palette, one source** (2026-07-31). The colours moved to
+  `src/constants/palette.ts` — a module that imports nothing — and both consumers
+  build from it: `theme.ts` for the app, `worker/src/page.ts` interpolating the
+  `:root` block for the server pages. Wrangler bundles the cross-boundary import
+  fine. The move caught the drift it exists to prevent: `--line-str` had already
+  slipped to `.18` against the app's `0.20` borderTop.
 
 ## Operational — not fixable in this repo (Kyle's, not mine)
 

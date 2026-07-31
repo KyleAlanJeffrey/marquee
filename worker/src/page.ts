@@ -11,6 +11,8 @@
  * JavaScript, and a separate request for it would cost more than it saves.
  */
 
+// The app's own palette — see the note inside `css` below.
+import { stage } from '../../src/constants/palette';
 import { looksLikeEventTitle } from './dedupe';
 
 const NAME = 'Marquee';
@@ -158,15 +160,18 @@ export function pageFooter(extra = ''): string {
 
 export const css = `
 :root{
-  /* Charcoal, never #000 — pure black gives tonal layering nothing to sit on. */
-  --bg:#131315; --bg-low:#0e0e10; --card:#201f21; --card-high:#2a2a2c;
-  --line:rgba(255,255,255,.10); --line-str:rgba(255,255,255,.18);
-  --ink:#e5e1e4; --ink-2:#c3cbc6; --ink-3:#879089;
+  /* One palette, one source: these interpolate from src/constants/palette.ts, the
+     same module the app's theme builds from. They were literals until 2026-07-31,
+     by which point --line-str had already drifted (.18 here, .20 in the app) —
+     which is the whole argument. */
+  --bg:${stage.background}; --bg-low:${stage.backgroundLowest}; --card:${stage.backgroundElevated}; --card-high:${stage.backgroundHigh};
+  --line:${stage.border}; --line-str:${stage.borderTop};
+  --ink:${stage.text}; --ink-2:${stage.textSecondary}; --ink-3:${stage.textTertiary};
   /* The neon green is the only dominant accent; cyan supports so it never saturates.
      --on-accent is the near-black that has to sit on top of lime — lime is far
      too bright to carry white text. */
-  --accent:#2fff6a; --accent-vivid:#2ae05d; --on-accent:#00230f;
-  --cyan:#7df4ff; --warm:#ffb4ab;
+  --accent:${stage.primary}; --accent-vivid:${stage.primaryVivid}; --on-accent:${stage.onPrimary};
+  --cyan:${stage.cyan}; --warm:${stage.error};
   /* One typeface. The hierarchy is carried by weight and tracking, not by a
      second family — so these are role names over a single stack. */
   --font:'Anybody',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
