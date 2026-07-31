@@ -11,6 +11,24 @@ Production: **https://marquee.rocks**.
 Finished work isn't kept here — it's in the git log, where the reasoning sits next
 to the diff that acted on it. This file is only what's left.
 
+## What's being worked on right now
+
+In this order, decided 2026-07-30:
+
+1. **The reviews pivot, phase 0** — the on-device "been to" log and private
+   rating. No accounts, no new tables, no moderation. See the build order below.
+2. **Stop throwing the past away** (`sanitizeInputs`), because every day it stays
+   is a day of history that can never be recovered. Cheap, and it compounds.
+3. **App-store prep** — everything that doesn't need Kyle's Apple/Google
+   credentials. Kyle runs the builds and submissions.
+
+Auth is **decided but not started**: Clerk, keys arriving 2026-07-31. It gates
+phase 2, not phase 0, so it does not block the work above.
+
+**Cancelled 2026-07-30: the website/app split.** The two items under it that stand
+on their own — a desktop layout for the server-rendered pages, and one palette
+rather than two — moved to "Later". Everything else there is dropped.
+
 ---
 
 ## Venue pages — what's left after `ea978b9`
@@ -170,7 +188,7 @@ optional, is probably the whole of it.
   played is a table scan on the hot path.
 - Reports/moderation: `review_reports` (review_id, reporter, reason, state).
 
-### Accounts, concretely
+### Accounts — Clerk (decided 2026-07-30, keys arriving 2026-07-31)
 
 Three constraints narrow this fast: no server to run (Workers only), no email
 infrastructure (MailChannels stopped being free for Workers, so magic links mean
@@ -178,23 +196,46 @@ paying Resend/Postmark and owning deliverability), and App Store rules — if yo
 offer any third-party sign-in you must also offer Sign in with Apple, and you must
 provide in-app account deletion.
 
-Recommended: **OAuth only, no passwords, no email.** Apple (required anyway),
-Google, and **Spotify** — which is thematically right, already has credentials in
-this project, and lets a new account arrive with taste data attached. Sessions as
-an opaque random token in an httpOnly, Secure, SameSite=Lax cookie on web and in
-`expo-secure-store` on native, with the hash in D1. No password reset flow, no
-verification emails, no password storage, which removes most of the ways a small
-app leaks user data.
+Kyle asked for an off-the-shelf service rather than rolling sessions. **Clerk.**
+What decided it, checked rather than remembered:
 
-Passkeys are the tempting alternative and the recovery story is the problem: lose
-the device, lose the account, unless there's a second factor — which means email,
-which is the thing this avoids. Worth revisiting once there's a reason to hold
-addresses.
+- **The Expo SDK is the binding constraint, and Clerk's is the strongest.**
+  `@clerk/clerk-expo` 2.19.31 declares peers `react ^19`, `react-native >=0.73` —
+  this repo is React 19.2.3 / RN 0.85.3, so iOS, Android and web come off one
+  codebase. Most providers' React Native story is the weak one.
+- **It verifies at the edge.** `@clerk/backend` 3.14.0 is a JWT-verification
+  library, so the Worker checks a session against cached JWKS with no round trip
+  per API call.
+- **It already holds the `users` table.** Handle, display name and avatar are
+  Clerk's, so D1 keeps a thin mirror keyed by Clerk user id rather than owning
+  identity — and `deleted_at`, account deletion and the prebuilt profile screen
+  come with it, which is Apple's in-app-deletion requirement satisfied for free.
+- **Free tier is 50,000 monthly retained users**, which this will not trouble.
+- **The one real limit to design around: 3 social connections on the free plan.**
+  Apple + Google + Spotify is exactly three, with no room for a fourth without
+  the $25/mo Pro plan. Pro is also what removes Clerk branding from the sign-in
+  screen — worth budgeting for at launch, not before.
 
-Also needed the moment accounts exist, and they are not optional: a privacy
-policy, terms, in-app account deletion (Apple requires it), and a decision about
-what happens to a deleted user's public reviews — anonymise and keep, or remove.
-Anonymise-and-keep is the norm and is much kinder to the aggregate scores.
+Runners-up, for the record: **Better Auth** (self-hosted on Workers + D1, no
+vendor, but sessions, OAuth callbacks and the Expo integration all become ours)
+and **WorkOS AuthKit** (generous free tier, weaker Expo story). **Supabase is
+excluded on purpose** — this repo removed it in `302ac64` when the backend moved
+to Cloudflare, and bringing it back only for auth re-adds the dependency that move
+deleted.
+
+Spotify stays in the plan as a connection, not just a login: it is thematically
+right, already has credentials here, and lets a new account arrive with taste data
+attached.
+
+Still not optional the moment accounts exist: a privacy policy, terms, and a
+decision about what happens to a deleted user's public reviews — anonymise and
+keep, or remove. Anonymise-and-keep is the norm and is much kinder to the
+aggregate scores.
+
+- [ ] **On day one with the keys:** create the Clerk app, enable Apple + Google +
+  Spotify, set `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and the Worker's
+  `CLERK_SECRET_KEY`, and confirm a token minted in Expo verifies in a Worker
+  before building anything on top of it.
 
 ### Moderation, because public writing invites it
 
@@ -248,44 +289,43 @@ cleaned up.
 - [ ] **Phase 4 — the social part.** Follow people, a feed of what friends saw,
   year-in-review. Only worth it once phase 3 has content in it.
 
-Interacts with the website/app split below, and the order matters: review pages
-are server-rendered public content, so they belong on the web side. Decide the
-split first, or these get built twice.
+Review pages are public server-rendered content, so they land on the same
+`shell()` path the city hubs already use — `worker/src/detail.ts` is the awkward
+one, since it injects markup into the app shell and rewrites
+`__EXPO_ROUTER_HYDRATE__` to stop the bundle clearing it. Phase 3 is the moment
+that trick either gets removed or gets a second consumer.
 
-## Next — split the website from the app
+## Now — ship it to the stores
 
-One Expo bundle serves both audiences today, and they want opposite things: a
-visitor from search wants a page that renders without JavaScript and tells them
-what's on; a returning user wants the app. `/` is already a real server-rendered
-landing page and the ~1,700 city hubs already prove the pattern — this extends
-that to the whole public surface and lets the app stop pretending to be a website.
+Kyle runs the builds and submissions (they need his Apple and Google credentials);
+everything else is mine.
 
-- [ ] **Decide the boundary and write it down before implementing.** Which URLs are
-  web pages (server-rendered, indexable, no app shell) and which are app routes.
-  Candidate split: `/`, `/concerts/:town`, `/event/:id`, `/artist/:id`,
-  `/venue/:id` and browse-by-town become web; `/explore`, `/following`, `/saved`,
-  `/map` and `/settings` stay app. This decides everything below, so it isn't a
-  detail to settle while coding.
-- [ ] **Give the server pages a desktop layout.** The reference
-  (`souls_of_mischief_venue_details/`) is a desktop page, not a phone screen:
-  masthead with real nav, full-bleed hero, two-column body, footer with columns.
-  `worker/src/page.ts` renders one narrow column because it grew out of a
-  mobile-first landing page.
-- [ ] **Detail pages become real documents.** `worker/src/detail.ts` injects markup
-  into the app shell and then rewrites `__EXPO_ROUTER_HYDRATE__` to stop the
-  bundle clearing it. If these are web pages they should be their own documents
-  via `shell()`, like the hubs are — which removes that trick entirely.
-- [ ] **App Store build.** EAS build + submit for iOS and Android. Needs bundle
-  identifiers, store listings, screenshots, an `expo-updates` channel decision,
-  and the privacy declarations — which are short and worth stating plainly, since
-  the app collects nothing.
-- [ ] **Then the website advertises the app** instead of being it: store badges on
-  `/`, and a smart banner on the web pages rather than "Open the app" pointing at
-  a bundle the visitor is already inside.
-- [ ] **Keep one palette.** `src/constants/theme.ts` and the `:root` block in
-  `worker/src/page.ts` hold the same values twice and have already drifted once.
-  Generate the CSS variables from the TS tokens, or the two surfaces will diverge
-  exactly when they're meant to look related.
+- [ ] **`eas.json`** with build and submit profiles, `appVersionSource: remote` so
+  build numbers aren't committed, and `EXPO_PUBLIC_API_URL=https://marquee.rocks`
+  baked into the native profiles — relative URLs don't resolve off-web, so a
+  native build with it unset talks to nothing.
+- [ ] **`app.json` gaps that block a build:** `ios.bundleIdentifier` and
+  `android.package` (proposed: `rocks.marquee`, the reverse-DNS of a domain we
+  own), `ios.config.usesNonExemptEncryption: false` so export compliance isn't
+  asked on every submission, and an Android notification icon —
+  `android-icon-monochrome.png` is already a white silhouette on transparent at
+  0.4 scale, which is exactly the shape that asset needs.
+- [ ] **Block background location explicitly.** The app asks for foreground
+  location only (`Location.Accuracy.Balanced`, `requestForegroundPermissionsAsync`)
+  and should say so in the manifest, because Play review reads the manifest, not
+  the intent.
+- [ ] **Privacy declarations.** Short and worth stating precisely rather than
+  waving at: local notifications only, no push tokens anywhere in `src/`; location
+  goes to our own API as `?lat=&lng=` and is used for app functionality, not
+  linked to an identity and not used for tracking. That query string does mean
+  coordinates land in Cloudflare's request logs — worth a POST body instead before
+  the declaration is signed.
+- [ ] **Store listing copy and screenshots**, plus a decision on `expo-updates`
+  (not installed today, so there is no OTA channel; adding it buys same-day JS
+  fixes at the cost of a runtime-version policy).
+- [ ] **Then the website advertises the app**: store badges on `/`, and a smart
+  banner on the web pages rather than "Open the app" pointing at a bundle the
+  visitor is already inside.
 
 ## Event coverage — remaining phases
 
@@ -341,6 +381,16 @@ crawl multiplies duplicates instead of coverage.
   plays the preview instead of opening the link.
 - [ ] Fan/artist galleries from real images; support acts from same-venue events;
   ticket price on the event Buy bar.
+- [ ] **A desktop layout for the server-rendered pages.** `worker/src/page.ts`
+  renders one narrow column because it grew out of a mobile-first landing page,
+  while the reference (`souls_of_mischief_venue_details/`) is a desktop document:
+  masthead with real nav, full-bleed hero, two-column body, footer with columns.
+  Survives the cancelled split — the hubs and the landing page are desktop pages
+  either way.
+- [ ] **Keep one palette.** `src/constants/theme.ts` and the `:root` block in
+  `worker/src/page.ts` hold the same values twice and have already drifted once.
+  Generate the CSS variables from the TS tokens, or the two surfaces will diverge
+  exactly when they're meant to look related.
 
 ## Operational — not fixable in this repo
 
