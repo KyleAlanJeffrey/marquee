@@ -13,59 +13,23 @@ to the diff that acted on it. This file is only what's left.
 
 ---
 
-## Now — venue pages worth reading
+## Venue pages — what's left after `ea978b9`
 
-Today a venue page is a name, a map and a list of dates. It should convey what the
-room is actually like. Reference: `stitch_concert_compass/souls_of_mischief_venue_details/`.
+The page now has a room in it: a licensed photo hero, Wikipedia prose behind two
+guards, a stat grid, genres, and a "recently played here" rail — with stats and
+map still carrying the page when no article exists. The reasoning and the
+22-venue measurement that calibrated the guards are in `ea978b9`; what remains:
 
-**Wikipedia is viable for both prose and a photo, but only behind a guard — and
-that was measured, not assumed.** Sampled 22 real venue rows against the REST
-summary endpoint: 14 direct title hits, 6 rescued by a search fallback, 2 with no
-article. The failures were the dangerous kind, confidently wrong rather than
-absent: "Blue Note" (NYC) returned **Blue Note Records**, the record label;
-"Riviera" (Burgos) returned an article about the Italian word for coastline;
-"Mohawk" (Austin) returned "Music of Austin, Texas"; "Grenswerk" and "Prescott
-Park" both returned their *town's* article. Printing any of those as a venue
-description is worse than printing nothing.
-
-Two guards fix it, and together they were exactly right on the sample — **14 kept,
-all correct; 5 dropped, all correctly dropped**:
-
-1. **The article must carry coordinates within ~25 km of the venue.** This is what
-   kills the label, the dictionary word and the city-music article: none of them
-   are places, so none have coordinates. The radius is deliberately generous
-   because *our* coordinate is sometimes a source's town centroid — Red Rocks sits
-   7.6 km from its own article, and that's our error, not Wikipedia's.
-2. **The article title must share a distinguishing word with the venue name.** This
-   is what kills the town articles, which do have coordinates and are genuinely
-   nearby: "Portsmouth, New Hampshire" shares nothing with "Prescott Park".
-
-- [ ] **Description** from the Wikipedia extract behind those two guards, plus a
-  minimum length so a one-line stub doesn't become a "description" ("The Showbox"
-  returns 109 characters). CC BY-SA, so it keeps the "via Wikipedia" attribution
-  the artist bio already uses. Cache it on the venue row — this is 2 subrequests
-  and must not run per page view.
-- [ ] **Photo** from the same article's lead image. Checked the licence on 13 of
-  them and **all 13 were free** — CC BY, CC BY-SA or public domain — but every one
-  of those requires **attribution**, so the photographer and licence have to render
-  with the image. That's one more API call (`prop=imageinfo&iiprop=extmetadata`)
-  and it is not optional: a non-free logo would otherwise get republished as a
-  hero. 18 of 21 articles had a lead image.
-- [ ] **Known soft spot:** "Showbox SoDo" keeps the article for "The Showbox", a
-  different room 2.3 km away run by the same operator. Both guards pass. Needs a
-  rule about differently-named sibling rooms, or accept it.
-- [ ] **For everything without an article** — which is the whole club tier, and the
-  two misses in the sample were both small European rooms — compose from what the
-  data already knows: how often it books, which genres actually play there, what's
-  coming up. This is the only path that covers every venue, so it should be built
-  first and Wikipedia should be the enrichment on top.
+- [ ] **Showbox SoDo keeps "The Showbox"**, a different room 2.3 km away under the
+  same operator. Both guards pass, so this needs a rule about differently-named
+  sibling rooms — or an explicit decision to accept it.
+- [ ] **Support acts at that venue**, and a **"similar rooms nearby"** rail.
+- [ ] **Nothing re-checks an enriched venue.** `enrichment_checked_at` is written
+  once and never revisited, so a venue that had no article the day we asked will
+  never get one. Wants a staleness window, not a manual re-run.
 - [ ] **Google Places** stays the paid alternative: one Place Details call buys
   photos, ratings *and* the venue's own website (see the costing further down).
   Worth it only if a billing account is ever justified.
-- [ ] **Stats worth showing**, in the reference's oversized-numeral treatment:
-  upcoming show count, distinct acts, busiest month, first and next show on
-  record. All derivable from existing rows, no new source.
-- [ ] Support acts at that venue, and a "similar rooms nearby" rail.
 
 ## Now — bugs
 
@@ -398,6 +362,13 @@ crawl multiplies duplicates instead of coverage.
   wrong.** Re-clustering repoints events at a cluster *head*; it never re-decides
   which venue an event belongs to. Three Outside Lands dates still sit on the
   Davies Symphony Hall row. A Ticketmaster re-sweep of those areas fixes them.
+- **One `source='seed'` venue row is still in production.** The dev seed named its
+  venues after real rooms, so after clustering "The Catalyst" ended up the *head*
+  of a cluster carrying three real Santa Cruz shows. `venue_id` is
+  `on delete set null`, so removing it would strip those shows of their venue
+  entirely — `unseed.sql` now refuses to (`77f2be3`). It is a duplicate row inside
+  a correct cluster, which costs nothing visible; `repair-duplicates` is what
+  eventually tidies it.
 - **29 venues are pinned at a source's town-wide default** because that's the only
   row we have for them. Ticketmaster answers with one point per town for any venue
   it has no address for — `37.779499,-122.419502` for *both* Golden Gate Park and
