@@ -42,7 +42,11 @@ export function RsvpRow({ eventId }: { eventId: string }) {
         haptic
         accessibilityRole="button"
         accessibilityState={{ selected: active }}
-        accessibilityLabel={active ? `No longer ${label.toLowerCase()}` : `${label}${n ? `, ${n} so far` : ''}`}
+        accessibilityLabel={
+          active
+            ? `No longer ${label.toLowerCase()}${n ? `, ${n} so far` : ''}`
+            : `${label}${n ? `, ${n} so far` : ''}`
+        }
         onPress={() => choose(status)}
         style={[
           styles.pill,

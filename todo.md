@@ -212,8 +212,8 @@ during A/B):
 - [ ] **Delete the inert Worker secret `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`** —
   runtime secrets are invisible to `expo export`; it does nothing and reads as
   if it did.
-- [ ] **Clerk social slots**: the free tier's three are Apple + Facebook +
-  Google. If Spotify is wanted, Facebook has to go — no code change either way.
+- [x] **Clerk social slots** — resolved 2026-07-31: Apple + Google + Spotify,
+  Facebook dropped (verified via `/v1/environment`). The planned three exactly.
 - [ ] **Search Console + Bing Webmaster verification.** One-time, worth more
   than further on-page SEO.
 - [ ] **IndexNow 429s are origin-level** (Worker egress IPs; the same payload
