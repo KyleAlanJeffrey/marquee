@@ -23,12 +23,13 @@ const stage = {
   backgroundLowest: '#0e0e10',
   backgroundElevated: '#201f21', // cards (surface-container)
   backgroundHigh: '#2a2a2c', // date blocks, chips (surface-container-high)
-  backgroundHighest: '#353437',
   // Inputs sit *below* the base layer so a focused lime border reads as a glow.
   inputBg: '#0a0a0b',
   glass: 'rgba(19,19,21,0.6)',
   border: 'rgba(255,255,255,0.10)',
-  borderStrong: 'rgba(255,255,255,0.15)',
+  // A card's top edge only. Brighter than the rest of its border, which is what
+  // stands in for a light source above it now that cards carry no drop shadow.
+  borderTop: 'rgba(255,255,255,0.20)',
 
   // Text
   text: '#e5e1e4', // on-surface
@@ -53,18 +54,13 @@ const stage = {
   cyanFill: 'rgba(0,219,233,0.12)',
   cyanEdge: 'rgba(0,219,233,0.30)',
 
-  // Urgency / error
-  orange: '#ffb4ab',
-  orangeVivid: '#93000a',
+  // Urgency / error. Named for the role, not the hue — the old names said
+  // "orange" and these are a salmon and a deep red.
+  error: '#ffb4ab',
+  errorContainer: '#93000a',
 
-  // Aliases kept for shared component ergonomics
-  tint: '#c3f400',
-  onTint: '#161e00',
+  /** Following is expressed in cyan throughout, never in the primary lime. */
   following: '#7df4ff',
-  onGradient: '#161e00',
-  onGradientMuted: 'rgba(22,30,0,0.72)',
-  backgroundElement: '#201f21',
-  backgroundSelected: '#2a2a2c',
 
   // Primary button fill. Deliberately a near-solid lime ramp rather than a
   // two-hue gradient: the spec calls for solid lime CTAs, and this keeps the one
@@ -111,15 +107,17 @@ export const Spacing = {
 
 /**
  * Soft shape language — subtle rounding, to balance aggressive type and a
- * vibrant accent. Buttons and inputs are 4px; containers 12px. Anything blobbier
- * fights the typography.
+ * vibrant accent. Anything blobbier fights the typography.
+ *
+ * There are deliberately only these four. The design names exactly two UI radii,
+ * 4px for buttons and inputs and 12px for containers, so an 8px middle step had
+ * nothing to be faithful to — everything that used it was a card. `pill` is for
+ * chips and selection controls; `xs` is for hairline internal detail.
  */
 export const Radius = {
   xs: 2,
   sm: 4,
-  md: 8,
   lg: 12,
-  xl: 12,
   pill: 999,
 } as const;
 

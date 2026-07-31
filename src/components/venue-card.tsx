@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     width: 170,
     gap: Spacing.one,
     padding: Spacing.two + 2,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
   },
   tileIcon: {
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
     padding: Spacing.two + 2,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.two + 2,

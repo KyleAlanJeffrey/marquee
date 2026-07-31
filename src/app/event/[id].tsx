@@ -176,7 +176,7 @@ export default function EventScreen() {
             icon="pricetag"
             label="Availability"
             value={hasTickets ? 'Tickets available' : 'Resale on StubHub'}
-            valueColor={hasTickets ? theme.cyan : theme.orange}
+            valueColor={hasTickets ? theme.cyan : theme.error}
           />
         </Animated.View>
 
@@ -188,7 +188,7 @@ export default function EventScreen() {
         <View style={styles.section}>
           {sources.map((s) => {
             const resale = s.kind === 'resale';
-            const accent = resale ? theme.orange : theme.cyan;
+            const accent = resale ? theme.error : theme.cyan;
             return (
               <PressableScale
                 key={s.id}
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     padding: Spacing.two + 2,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
   },
   ticketIcon: {
@@ -549,11 +549,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two + 2,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
   },
   postList: { gap: Spacing.two + 2, marginTop: Spacing.three },
-  postCard: { padding: Spacing.three, borderRadius: Radius.md, borderWidth: 1, gap: Spacing.two },
+  postCard: { padding: Spacing.three, borderRadius: Radius.lg, borderWidth: 1, gap: Spacing.two },
   postHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   postAvatar: { width: 26, height: 26, borderRadius: Radius.pill },
   postImage: { width: '100%', height: 160, borderRadius: Radius.sm },
@@ -563,14 +563,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     padding: Spacing.two + 2,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
   },
   headlinerImg: { width: 56, height: 56, borderRadius: Radius.sm },
   supportRow: { flexDirection: 'row', gap: Spacing.two + 2, marginTop: Spacing.two },
   supportTile: {
     flex: 1,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     padding: Spacing.three,
     height: 92,

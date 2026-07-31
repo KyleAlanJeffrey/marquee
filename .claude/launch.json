@@ -10,8 +10,8 @@
     {
       "name": "worker",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["wrangler", "dev", "--remote", "--port", "8788"],
-      "port": 8788
+      "runtimeArgs": ["wrangler", "dev", "--remote", "--port", "8787"],
+      "port": 8787
     }
   ]
 }

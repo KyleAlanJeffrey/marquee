@@ -63,7 +63,7 @@ export function EventGridCard({
 }
 
 const styles = StyleSheet.create({
-  card: { flex: 1, borderRadius: Radius.md, borderWidth: 1, overflow: 'hidden' },
+  card: { flex: 1, borderRadius: Radius.lg, borderWidth: 1, overflow: 'hidden' },
   imageWrap: { height: 112, backgroundColor: 'rgba(255,255,255,0.04)' },
   heart: {
     position: 'absolute',

@@ -23,7 +23,7 @@ export function SectionTitle({ title, actionLabel, onAction, badge, accent }: Pr
         {accent && <View style={[styles.bar, { backgroundColor: theme.primary }]} />}
         <ThemedText type="title">{title}</ThemedText>
         {badge && (
-          <View style={[styles.badge, { backgroundColor: theme.orangeVivid }]}>
+          <View style={[styles.badge, { backgroundColor: theme.errorContainer }]}>
             <ThemedText type="labelSm" style={styles.badgeText}>
               {badge.toUpperCase()}
             </ThemedText>

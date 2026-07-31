@@ -52,7 +52,7 @@ const styles = StyleSheet.create({
   tile: {
     width: 150,
     height: 190,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     overflow: 'hidden',
   },

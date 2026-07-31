@@ -187,7 +187,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     paddingVertical: Spacing.two + 4,
-    borderRadius: Radius.md,
+    // A selection chip, so pill — matching its name and the Segmented control.
+    borderRadius: Radius.pill,
     borderWidth: 1,
   },
   followingHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

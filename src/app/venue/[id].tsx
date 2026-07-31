@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three,
     padding: Spacing.two + 2,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
     marginHorizontal: Spacing.three,
     marginBottom: Spacing.two + 2,
