@@ -179,12 +179,14 @@ export function useNearbyVenues(coords: Coords | null, radiusMiles: number, limi
  * the server's clock is the one that decides which side of that line a show is on.
  */
 export function useSavedShowDetails(eventIds: string[]) {
-  // Sorted so the key doesn't change when the same set arrives in a new order, and
-  // capped because the Worker rejects a longer list outright — better to show the
-  // first EVENTS_BY_IDS_MAX live than to 400 the whole screen.
-  const ids = [...new Set(eventIds)].sort().slice(0, EVENTS_BY_IDS_MAX);
+  // Capped in the caller's order because the Worker rejects a longer list
+  // outright — and the caller sends soonest-first, so the cap keeps the shows
+  // about to happen rather than whichever ids sort lexicographically earliest.
+  // Only the query key gets sorted, so the same set arriving in a new order
+  // doesn't refetch.
+  const ids = [...new Set(eventIds)].slice(0, EVENTS_BY_IDS_MAX);
   return useQuery({
-    queryKey: ['saved-show-details', ids],
+    queryKey: ['saved-show-details', [...ids].sort()],
     enabled: ids.length > 0,
     // Unsaving a show rewrites the key; without this the list empties for a beat.
     placeholderData: (prev) => prev,
@@ -298,13 +300,16 @@ export function useTownSearch(query: string) {
 }
 
 export function useArtistSearch(query: string) {
+  // Keyed on the trimmed query it actually sends, like useTownSearch — " foo"
+  // and "foo" are one request and should be one cache entry.
+  const q = query.trim();
   return useQuery({
-    queryKey: ['artist-search', query],
-    enabled: query.trim().length >= 2,
+    queryKey: ['artist-search', q],
+    enabled: q.length >= 2,
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<ArtistSearchResult[]> => {
       const data = await apiPost<{ artists?: ArtistSearchResult[] }>('/search-artists', {
-        query: query.trim(),
+        query: q,
       });
       return data.artists ?? [];
     },

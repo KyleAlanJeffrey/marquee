@@ -199,13 +199,16 @@ export default function MyShowsScreen() {
                     {/* Say it rather than quietly showing stale times for the rest. */}
                     {saved.length > ids.length ? ` · live times for the first ${ids.length}` : ''}
                   </ThemedText>
-                  {(details.isFetching || rsvps.isFetching) && !refreshing ? (
+                  {(details.isFetching || rsvps.isFetching || shelves.isFetching) && !refreshing ? (
                     <ActivityIndicator size="small" color={theme.textTertiary} />
                   ) : null}
                 </View>
                 {/* A failed refresh doesn't hide anything — what's below is
                     still the user's. It just says so, and offers another go. */}
-                {(details.isError || rsvps.isError) && !details.isFetching && !rsvps.isFetching ? (
+                {(details.isError || rsvps.isError || shelves.isError) &&
+                !details.isFetching &&
+                !rsvps.isFetching &&
+                !shelves.isFetching ? (
                   <View style={styles.errorRow}>
                     <ThemedText type="labelSm" style={{ color: theme.textTertiary, flex: 1 }}>
                       COULDN&rsquo;T CHECK FOR CHANGES &mdash; SHOWING WHAT&rsquo;S KNOWN

@@ -70,7 +70,7 @@ What's left is the residuals:
 
 ## P1 · Next
 
-- [x] **Folder-structure audit** (Kyle, 2026-08-01) — done the same day. The
+- [x] **Folder-structure audit** (Kyle, 2026-07-31) — done the same day. The
   real offender was `src/lib/hooks.ts`: 19 catalogue-query hooks in a file
   literally named "hooks" outside the hooks directory; it moved to
   `src/hooks/queries.ts` (11 importers updated). Everything else stays put on
