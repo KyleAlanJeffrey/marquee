@@ -53,11 +53,26 @@ const appearance = {
 
 type Mode = 'sign-in' | 'sign-up';
 
+/**
+ * Where a completed sign-in or sign-up lands: the Profile tab, which now opens
+ * on your own profile — the first concrete thing an account buys.
+ *
+ * Every redirect and cross-link below is stated explicitly because the defaults
+ * are the bug: without them, Clerk's card links its own "sign up" footer to the
+ * hosted Account Portal on `accounts.dev`, and a finished sign-up follows the
+ * portal's defaults off-site too. The session then lives on Clerk's origin, the
+ * app never sees it, and the server never hears about the new account at all —
+ * which is exactly the "signed up but nothing in the db" report that found this.
+ */
+const AFTER_AUTH = '/settings';
+
 export default function SignInScreen() {
   const theme = useTheme();
-  const { why } = useLocalSearchParams<{ why?: string }>();
+  const { why, mode: modeParam } = useLocalSearchParams<{ why?: string; mode?: string }>();
   const { signedIn } = useAuth();
-  const [mode, setMode] = useState<Mode>('sign-in');
+  // Seeded from the URL so Clerk's own footer links (`signInUrl`/`signUpUrl`
+  // below, which render as plain hrefs) switch the card without leaving the page.
+  const [mode, setMode] = useState<Mode>(modeParam === 'sign-up' ? 'sign-up' : 'sign-in');
 
   return (
     <View style={{ flex: 1 }}>
@@ -97,9 +112,19 @@ export default function SignInScreen() {
             </View>
             <View style={styles.clerk}>
               {mode === 'sign-in' ? (
-                <SignIn routing="hash" appearance={appearance} />
+                <SignIn
+                  routing="hash"
+                  appearance={appearance}
+                  signUpUrl="/sign-in?mode=sign-up"
+                  fallbackRedirectUrl={AFTER_AUTH}
+                />
               ) : (
-                <SignUp routing="hash" appearance={appearance} />
+                <SignUp
+                  routing="hash"
+                  appearance={appearance}
+                  signInUrl="/sign-in"
+                  fallbackRedirectUrl={AFTER_AUTH}
+                />
               )}
             </View>
           </>
