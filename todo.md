@@ -70,9 +70,16 @@ What's left is the residuals:
 
 ## P1 · Next
 
-- [ ] **Folder-structure audit** (Kyle, 2026-08-01): a bunch of `use*` hooks
-  live in `src/lib` that probably belong in `src/hooks`; sweep them over and
-  take a general pass for anything else misfiled while in there.
+- [x] **Folder-structure audit** (Kyle, 2026-08-01) — done the same day. The
+  real offender was `src/lib/hooks.ts`: 19 catalogue-query hooks in a file
+  literally named "hooks" outside the hooks directory; it moved to
+  `src/hooks/queries.ts` (11 importers updated). Everything else stays put on
+  purpose: the domain modules (reviews, curated, people, the account stores,
+  auth, write-gate) each export a hook as their public face *next to* their
+  types and requests, and splitting those would trade cohesion for a
+  tidier-looking tree; `lib/notifications.ts` keeps its hook because the file
+  is a subsystem with module-level side effects, not a misfiled hook. The rule
+  is written at the top of `src/hooks/queries.ts`.
 - [ ] **App-store prep** — mine except the builds and submissions:
   - [ ] **Blocked on Kyle:** the EAS project id (`a9540056-…`) belongs to an
     account `eas whoami` isn't a member of. Either `eas login` as its owner or

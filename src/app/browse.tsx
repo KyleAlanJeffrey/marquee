@@ -15,7 +15,7 @@ import { TopBar } from '@/components/top-bar';
 import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
-import { useInfiniteNearby } from '@/lib/hooks';
+import { useInfiniteNearby } from '@/hooks/queries';
 import { parseCoords, parseRadius, scalar } from '@/lib/params';
 import type { NearbyEvent } from '@/lib/types';
 

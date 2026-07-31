@@ -21,7 +21,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { discoverEvents, refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
-import { useNearbyEvents, useNearbyVenues } from '@/lib/hooks';
+import { useNearbyEvents, useNearbyVenues } from '@/hooks/queries';
 import { getCurrentCoords, reverseGeocodeLabel } from '@/lib/location';
 import { RADIUS_OPTIONS, usePrefs } from '@/lib/prefs-store';
 import { syncConcertReminders } from '@/lib/reminders';

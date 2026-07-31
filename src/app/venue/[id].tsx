@@ -24,7 +24,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { refreshVenueEvents } from '@/lib/discovery';
 import { useFollowedVenues } from '@/lib/followed-venues-store';
 import { formatPrice, formatRelativeDay, formatTime, monthLabel } from '@/lib/format';
-import { useInfiniteVenueEvents, useVenue, useVenueInfo } from '@/lib/hooks';
+import { useInfiniteVenueEvents, useVenue, useVenueInfo } from '@/hooks/queries';
 import { openUrl } from '@/lib/open-url';
 import { venueLinks } from '@/lib/venue-links';
 import type { VenueEvent } from '@/lib/types';

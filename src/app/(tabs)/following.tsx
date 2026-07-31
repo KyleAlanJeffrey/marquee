@@ -20,7 +20,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollowedVenues } from '@/lib/followed-venues-store';
 import { useFollows } from '@/lib/follows-store';
-import { useFollowingEvents } from '@/lib/hooks';
+import { useFollowingEvents } from '@/hooks/queries';
 import { getCurrentCoords } from '@/lib/location';
 import { usePrefs } from '@/lib/prefs-store';
 import type { Coords } from '@/lib/types';

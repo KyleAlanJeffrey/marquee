@@ -1,3 +1,14 @@
+/**
+ * React Query hooks over the public catalogue — artists, events, venues, towns
+ * and search. Lived in `src/lib/hooks.ts` until the folder audit: a file of
+ * nothing but hooks belongs in `src/hooks`, next to `use-theme`.
+ *
+ * The rule that keeps the rest of `src/lib` where it is: a hook that is a
+ * domain module's public face (reviews, curated lists, the account stores)
+ * stays co-located with that module's types and requests — splitting those
+ * apart would trade cohesion for a tidier-looking tree. This file had no such
+ * module; it was only ever the hooks.
+ */
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiGet, apiPost } from '@/lib/api';

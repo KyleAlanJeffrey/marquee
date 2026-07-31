@@ -7,7 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
-import { useNearbyEvents } from '@/lib/hooks';
+import { useNearbyEvents } from '@/hooks/queries';
 import type { Coords, NearbyEvent } from '@/lib/types';
 
 /** A large static map of all nearby events + the list beneath — used on native

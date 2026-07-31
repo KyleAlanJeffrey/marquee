@@ -9,7 +9,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAttendances } from '@/lib/attendances-store';
 import { formatEventDate } from '@/lib/format';
-import { useArtistPastEvents, useFetchArtistHistory } from '@/lib/hooks';
+import { useArtistPastEvents, useFetchArtistHistory } from '@/hooks/queries';
 
 /**
  * "Have you seen them before?" — the way a history gets into somebody's log.

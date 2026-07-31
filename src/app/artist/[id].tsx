@@ -24,7 +24,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
 import { openUrl } from '@/lib/open-url';
-import { useArtist, useArtistEvents, useArtistInfo } from '@/lib/hooks';
+import { useArtist, useArtistEvents, useArtistInfo } from '@/hooks/queries';
 import { STATS_FLOOR, useArtistReviewStats } from '@/lib/reviews';
 import { formatCount, formatTime, formatVenue } from '@/lib/format';
 import type { ArtistEvent } from '@/lib/types';

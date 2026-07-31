@@ -14,7 +14,7 @@ import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { formatEventDate, formatTime } from '@/lib/format';
-import { useNearbyEvents } from '@/lib/hooks';
+import { useNearbyEvents } from '@/hooks/queries';
 import { parseCoords, parseRadius } from '@/lib/params';
 import type { NearbyEvent } from '@/lib/types';
 

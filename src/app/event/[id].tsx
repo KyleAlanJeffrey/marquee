@@ -24,7 +24,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { useSavedShows } from '@/lib/saved-shows-store';
 import { openUrl } from '@/lib/open-url';
-import { useEvent, useEventBuzz, useEventLineup } from '@/lib/hooks';
+import { useEvent, useEventBuzz, useEventLineup } from '@/hooks/queries';
 import { formatEventDate, formatTime, formatVenue, formatZoneLabel } from '@/lib/format';
 import { socialLinks } from '@/lib/social';
 import { ticketSources } from '@/lib/tickets';

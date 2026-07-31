@@ -15,7 +15,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
 import { usePersonLists } from '@/lib/curated';
-import { EVENTS_BY_IDS_MAX, useSavedShowDetails } from '@/lib/hooks';
+import { EVENTS_BY_IDS_MAX, useSavedShowDetails } from '@/hooks/queries';
 import { useMyRsvps, type MyRsvp } from '@/lib/reviews';
 import { useSavedShows, type SavedShow } from '@/lib/saved-shows-store';
 import type { NearbyEvent } from '@/lib/types';

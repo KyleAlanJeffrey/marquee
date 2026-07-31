@@ -14,7 +14,7 @@ import { Fonts, Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ensureArtist } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
-import { useArtistSearch, useTownSearch } from '@/lib/hooks';
+import { useArtistSearch, useTownSearch } from '@/hooks/queries';
 import type { ArtistSearchResult, Town } from '@/lib/types';
 
 /** Wide enough to cover a metro area from the centroid of its venues. */
