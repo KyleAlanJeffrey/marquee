@@ -40,9 +40,13 @@ to the diff that acted on it. This file is only what's left.
 
 **P0 — in flight**
 
-1. [~] **Reviews phase 0** — on-device "been to" log and private rating. No
-   accounts, no new tables, no moderation. The interaction test that has to pass
-   before anything public gets built.
+1. [x] **Reviews phase 0** — done in `365c9cd`. On-device "been to" log and
+   private rating: a past event page asks "Were you there?", saying yes stores a
+   full snapshot of the show, and two optional scores — the performance and the
+   room — hang off it. New **Log** tab lists them newest night first, grouped by
+   year, rateable in place. No accounts, no new tables, no moderation, and the
+   copy says "only on this device" because that is the truth. What it still has
+   to earn: whether anyone actually rates a show they've already been to.
 2. [x] **Stop throwing the past away** — done in `71dff0d`. It was P0 for a reason
    worth remembering: history is only lost *once*, and every day the 24-hour drop
    stayed was a day nothing could re-fetch.
@@ -51,10 +55,14 @@ to the diff that acted on it. This file is only what's left.
 4. [~] **Accounts and auth — an off-the-shelf service, not ours to build.**
    **Clerk**, picked 2026-07-30; reasoning under "Accounts" below. Wiring starts
    now and is deliberately split around the keys, which arrive 2026-07-31:
-   - [~] **Everything that doesn't need a key** — SDKs, provider, secure token
-     cache, the Worker's verification middleware, the D1 `users` mirror and its
-     migration, `/api/me`. All of it inert while the env vars are unset, so an
-     unconfigured build behaves exactly like today's no-account app.
+   - [x] **Everything that doesn't need a key** — done in `78c7497`, reviewed and
+     patched in `86582fc`. SDKs, provider, secure token cache, the Worker's
+     verification seam, the D1 `users` mirror (migration 0009, applied to
+     production 2026-07-31), `/api/me`. All of it inert while the env vars are
+     unset, so an unconfigured build behaves exactly like today's no-account app —
+     verified against production, not just locally: `GET https://marquee.rocks/api/me`
+     answers 200 `{"signed_in":false,"configured":false,"user":null}`, a junk
+     bearer token gets the same, and `POST` gets 401 `sign in required`.
    - [ ] **On the keys landing:** create the Clerk app, enable Apple + Google +
      Spotify, set `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`, and
      prove a token minted in Expo verifies in a Worker before building on it.
@@ -317,21 +325,29 @@ cleaned up.
 
 ### Build order
 
-- [ ] **Phase 0 — prove the interaction with no accounts and no new tables.**
-  "I was there" + a private rating, stored on-device in the existing
-  `local-collection` store next to follows and saved shows. A "Been to" tab that
-  is a personal log. Ships in days, needs no auth, no moderation and no legal
-  page, and it answers the only question that matters — whether people log shows
-  at all — before anything irreversible is built.
+- [x] **Phase 0 — prove the interaction with no accounts and no new tables.**
+  Shipped in `365c9cd`. "Were you there?" + two private ratings, stored on-device
+  in the existing `local-collection` store next to follows and saved shows, and a
+  **Log** tab that is a personal history. Two decisions worth keeping: the stored
+  row is a *snapshot* of the show rather than an event id, so a log entry outlives
+  the event falling out of the database (and survives phase 1 rewriting how the
+  past is stored); and the performance and the room are scored separately, because
+  a great band in a bad room is the review people actually want to leave. It
+  answers the only question that matters — whether anyone logs shows at all —
+  before anything irreversible is built.
 - [ ] **Phase 0.5 — check Setlist.fm properly** before designing around it: key,
   limits, terms, and how many of our venues and artists it can actually join to.
   Everything about the back-catalogue depends on the answer.
-- [ ] **Phase 1 — the past becomes first-class.** Loosen `sanitizeInputs`, make
-  every `starts_at > now` an explicit choice, and give a past show a page worth
-  reading (who played, the setlist if we have it, who else was there).
-- [ ] **Phase 2 — accounts.** OAuth, sessions, handles, deletion, privacy policy,
-  terms. Migrating a device's local log into a new account on first sign-in is
-  part of this phase, not an afterthought — it is the reward for signing up.
+- [~] **Phase 1 — the past becomes first-class.** `sanitizeInputs` is loosened
+  (`71dff0d`) and every `starts_at > now` is now stated by the read path rather
+  than assumed by the writer. What's left is the page: a past show worth reading —
+  who played, the setlist if we have it, who else was there.
+- [~] **Phase 2 — accounts.** The plumbing is in (`78c7497`): Clerk, a verified
+  caller on the Worker, a `users` mirror in D1, `/api/me`. What's left needs the
+  keys — OAuth buttons, handles, deletion, privacy policy, terms — plus the one
+  piece that is ours either way: migrating a device's local log into a new account
+  on first sign-in. That is not an afterthought, it is the reward for signing up,
+  and phase 0's snapshot rows are already the right shape to upload.
 - [ ] **Phase 3 — public reviews.** Write, edit, report, moderate; verified
   attendance; aggregates with a confidence floor; the three read surfaces.
 - [ ] **Phase 4 — the social part.** Follow people, a feed of what friends saw,
