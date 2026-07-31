@@ -580,6 +580,43 @@ One trap avoided in `local-collection.tsx`: `replaceAll` sets a `superseded` fla
 a disk read still in flight stops merging its entries into the list afterwards.
 Without it the hydrate merge would re-add exactly what the sync had just resolved.
 
+#### CodeRabbit on the sync: five findings, three fixed, two declined
+
+**Fixed — and the critical one was a real bug I wrote.** `list-sync.tsx` read the
+local lists from a closure captured *before* two awaits, one of them a network round
+trip. Follow an artist during that window and `replaceAll` reverted it, then pushed
+the account a list without it: latency-dependent silent data loss, which is the worst
+kind to find later. Now a `latest` ref is refreshed every render and read after the
+awaits, and the run re-checks the account after each one — a sign-out or a switch
+mid-flight would otherwise stamp the mark with the wrong id and push one person's
+lists into the other's account.
+
+**Fixed — the four upserts weren't atomic.** Awaited one at a time, each committed
+alone, so a failure partway left the account holding some lists from this push and
+some from the last, with the client seeing only an error. Now one `db.batch`, which
+D1 runs as a single transaction. At most four statements, so nothing to chunk.
+
+**Fixed — nothing checked that the two validators agree.** The file claimed
+`listsBody` and `isFollowedArtist` describe one shape for two different reasons;
+that was a comment, not a test. Now 12 fixtures run through both, asserting the same
+verdict from each, so drift shows up as a failure naming which side moved.
+
+**Declined — revision tracking for concurrent writes.** This is the multi-device
+limitation already recorded above, and the half-measure is worse than the gap: a
+revision check would make the server 409, and the client has no merge-and-retry path,
+so a single-device user's push would start failing while multi-device stays broken.
+It needs the tombstones-and-versions work, as one piece, with the client.
+
+**Declined again — `.env.production` should carry a `pk_live_` key.** Second time
+this has been raised, so it goes here rather than being re-argued: there is *no*
+production Clerk instance to point at, and the advice as written ("block the
+production deployment") means taking the live site's accounts down. The underlying
+risk is real but it is about silence, which `src/lib/auth.tsx` now warns about.
+
+- [ ] **When a production Clerk instance exists:** put its `pk_live_` key in
+  `.env.production` and delete the startup warning that exists to nag about not
+  having done it.
+
 #### CodeRabbit on the Clerk work: two findings, both acted on
 
 Reviewed `d2c1dd1..1819bbd`, 16 files.

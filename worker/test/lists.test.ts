@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { isAttendance } from '../../src/lib/attendances-store';
+import { isFollowedVenue } from '../../src/lib/followed-venues-store';
+import { isFollowedArtist } from '../../src/lib/follows-store';
+import { isSavedShow } from '../../src/lib/saved-shows-store';
 import { ATTENDANCE_MAX, LIST_MAX, listsBody } from '../src/schemas';
 
 /**
@@ -136,4 +140,46 @@ describe('listsBody', () => {
       expect(listsBody.safeParse({ attendances: nights(ATTENDANCE_MAX + 1) }).success).toBe(false);
     });
   });
+});
+
+/**
+ * The two validators, run against the same fixtures.
+ *
+ * The comment at the top of this file claims the client's `isFollowedArtist` and the
+ * Worker's `listsBody` describe one shape for two different reasons. That claim is
+ * only worth anything if something checks it — otherwise the two drift a release
+ * apart and the server starts storing entries the client silently filters out of
+ * every screen, which looks exactly like data loss.
+ */
+describe('client and worker validators agree', () => {
+  const cases: { what: string; kind: 'follows' | 'venues' | 'saved' | 'attendances'; value: unknown }[] = [
+    { what: 'an artist followed from our catalog', kind: 'follows', value: artist() },
+    { what: 'an artist followed from search', kind: 'follows', value: artist({ artistId: null, spotifyId: 's1' }) },
+    { what: 'an artist with neither identity', kind: 'follows', value: artist({ artistId: null, spotifyId: null }) },
+    { what: 'an artist with no name', kind: 'follows', value: artist({ name: 42 }) },
+    { what: 'a venue with coordinates', kind: 'venues', value: { venueId: 'v1', name: 'The Showbox', city: 'Seattle', region: 'WA', lat: 47.6, lng: -122.3, followedAt: 1 } },
+    { what: 'a venue with an empty id', kind: 'venues', value: { venueId: '', name: 'X', city: null, region: null, lat: null, lng: null, followedAt: 1 } },
+    { what: 'a saved show', kind: 'saved', value: show({ priceFrom: 25, savedAt: 1 }) },
+    { what: 'a saved show with no timestamp', kind: 'saved', value: show({ priceFrom: null }) },
+    { what: 'a rated attendance', kind: 'attendances', value: show({ loggedAt: 1, rating: 4, venueRating: 2, note: 'loud' }) },
+    { what: 'an unrated attendance', kind: 'attendances', value: show({ loggedAt: 1, rating: null, venueRating: null, note: null }) },
+    { what: 'an attendance rated 6', kind: 'attendances', value: show({ loggedAt: 1, rating: 6, venueRating: null, note: null }) },
+    { what: 'an attendance rated 2.5', kind: 'attendances', value: show({ loggedAt: 1, rating: 2.5, venueRating: null, note: null }) },
+  ];
+
+  const clientValidator = {
+    follows: isFollowedArtist,
+    venues: isFollowedVenue,
+    saved: isSavedShow,
+    attendances: isAttendance,
+  } as const;
+
+  for (const { what, kind, value } of cases) {
+    it(`agrees about ${what}`, () => {
+      const server = listsBody.safeParse({ [kind]: [value] }).success;
+      const client = clientValidator[kind](value);
+      // The message names both verdicts, so a failure says which side moved.
+      expect({ what, server, client }).toEqual({ what, server: client, client });
+    });
+  }
 });

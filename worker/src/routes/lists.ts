@@ -93,10 +93,12 @@ lists.put('/', zValidator('json', listsBody), async (c) => {
         set: { payload: JSON.stringify(body[kind]), updatedAt: now },
       }),
   );
-  // Sequential rather than Promise.all: D1 serialises statements on one connection
-  // anyway, and four awaited writes fail one at a time instead of leaving a partial
-  // set behind an unhandled rejection.
-  for (const write of writes) await write;
+  // One batch, because D1 runs a batch as a single transaction. Awaiting the writes
+  // one at a time committed each on its own, so a failure partway through left the
+  // account holding some lists from this push and some from the last one — and the
+  // client, seeing an error, has no way to know which. At most four statements, so
+  // there is nothing to chunk.
+  if (writes.length) await db.batch(writes as [(typeof writes)[number], ...typeof writes]);
 
   return c.json({ lists: await readLists(db, userId) });
 });

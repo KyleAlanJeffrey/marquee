@@ -113,6 +113,24 @@ export function ListSync() {
     [follows.follows, venues.venues, saved.saved, attendances.raw],
   );
 
+  /**
+   * The lists and the session as of the latest render, for reading *after* an await.
+   *
+   * The reconciliation below awaits AsyncStorage and then a network round trip, and a
+   * closure captured before those is a description of the past. Reading a stale copy
+   * and then calling `replaceAll` with it silently reverts anything the user did while
+   * the request was in flight — follow an artist during the round trip and it
+   * disappears, then gets pushed to the account missing too. Latency-dependent data
+   * loss is the worst kind to find later.
+   *
+   * Declared before the effects that read it, because effects run in declaration
+   * order, so this is already current by the time they do.
+   */
+  const latest = useRef({ lists: local(), signedIn, userId });
+  useEffect(() => {
+    latest.current = { lists: local(), signedIn, userId };
+  });
+
   const push = useCallback(async (lists: Lists) => {
     const body = JSON.stringify(lists);
     if (body === lastPushed.current) return;
@@ -126,10 +144,17 @@ export function ListSync() {
     if (running.current || syncedFor.current === userId) return;
     running.current = true;
 
+    // The account this run is for. Everything below re-checks it after each await:
+    // a sign-out or a switch mid-flight would otherwise write one person's lists
+    // into the other's account and stamp the mark with the wrong id.
+    const runFor = userId;
+
     (async () => {
       try {
         const mark = await AsyncStorage.getItem(SYNC_MARK_KEY);
         const { lists } = await apiGet<ListsResponse>('/me/lists');
+        if (!latest.current.signedIn || latest.current.userId !== runFor) return;
+
         const remote: Lists = {
           follows: only(lists.follows, isFollowedArtist),
           venues: only(lists.venues, isFollowedVenue),
@@ -137,10 +162,9 @@ export function ListSync() {
           attendances: only(lists.attendances, isAttendance),
         };
 
-        // Computed into a local rather than read back from the stores: `replaceAll`
-        // schedules a render, so the state this function can see is still the old
-        // one, and pushing that would undo the merge it just did.
-        const mine = local();
+        // Read after the awaits, not before: anything the user did during the round
+        // trip is in here, and merging from a pre-request copy would erase it.
+        const mine = latest.current.lists;
         let next = mine;
         if (mark === null) {
           next = {
@@ -149,7 +173,7 @@ export function ListSync() {
             saved: mergeLists(mine.saved, remote.saved, sameSavedShow, (s) => s.savedAt),
             attendances: mergeLists(mine.attendances, remote.attendances, sameAttendance, (a) => a.loggedAt),
           };
-        } else if (mark !== userId) {
+        } else if (mark !== runFor) {
           // Somebody else's phone, or somebody else's turn on this one.
           next = remote;
         }
@@ -164,8 +188,12 @@ export function ListSync() {
         }
 
         await push(next);
-        await AsyncStorage.setItem(SYNC_MARK_KEY, userId);
-        syncedFor.current = userId;
+        // Re-checked once more: the push is a round trip too, and stamping the mark
+        // for an account that is no longer signed in would make the *next* person's
+        // sign-in look like an ordinary cold start and push this list into it.
+        if (!latest.current.signedIn || latest.current.userId !== runFor) return;
+        await AsyncStorage.setItem(SYNC_MARK_KEY, runFor);
+        syncedFor.current = runFor;
       } catch (err) {
         // Not fatal and not retried on a timer. The lists still work; they are on
         // the device, which is where they were before any of this existed. The next
