@@ -93,17 +93,22 @@ export default function VenueScreen() {
     room && room.count >= STATS_FLOOR && room.average != null
       ? { value: `★ ${room.average}`, label: `THE ROOM · ${room.count} REVIEWS`, accent: true }
       : null;
-  const statCells: Stat[] = stats
-    ? [
-        roomCell,
-        stats.upcoming > 0 && { value: String(stats.upcoming), label: 'UPCOMING SHOWS', accent: !roomCell },
-        stats.acts > 1 && { value: String(stats.acts), label: 'ARTISTS BOOKED' },
-        stats.busiest_month && stats.busiest_month_shows > 1
-          ? { value: monthLabel(stats.busiest_month), label: 'BUSIEST MONTH' }
-          : null,
-        stats.cheapest != null && { value: formatPrice(stats.cheapest), label: 'CHEAPEST ENTRY' },
-      ].filter((s): s is Stat => !!s)
-    : [];
+  // roomCell rides outside the `stats` branch: review stats and event stats
+  // arrive from different queries, and a room people have rated deserves its
+  // number even when the events query has nothing to add.
+  const statCells: Stat[] = [
+    roomCell,
+    ...(stats
+      ? [
+          stats.upcoming > 0 && { value: String(stats.upcoming), label: 'UPCOMING SHOWS', accent: !roomCell },
+          stats.acts > 1 && { value: String(stats.acts), label: 'ARTISTS BOOKED' },
+          stats.busiest_month && stats.busiest_month_shows > 1
+            ? { value: monthLabel(stats.busiest_month), label: 'BUSIEST MONTH' }
+            : null,
+          stats.cheapest != null && { value: formatPrice(stats.cheapest), label: 'CHEAPEST ENTRY' },
+        ]
+      : []),
+  ].filter((s): s is Stat => !!s);
   // A room the feed can place but not name: sources file the tour title in the
   // venue column, and the server refuses to publish those, so the town is the
   // heading. It is the truest thing we know about where this show is.
