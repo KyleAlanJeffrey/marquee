@@ -1059,7 +1059,82 @@ export async function persist(db: DB, raw: EventInput[], limits?: SanitizeLimits
   for (const i of inputs) if (i.venue) venueRows.set(`${i.venue.source}:${i.venue.source_venue_id}`, i.venue);
 
   const venueIdByKey = new Map<string, string>();
-  const venueKeys = [...venueRows.keys()];
+  /** Keys resolved straight to an existing room — no row of their own at all. */
+  const adoptedByKey = new Map<string, string>();
+  let venueKeys = [...venueRows.keys()];
+
+  // A junk-named venue that is NEW to the table never gets a row: it is looked
+  // up by location first, and if a same-spot room exists, the listing simply
+  // belongs to that room. Bandsintown files some shows under the tour title
+  // with the venue's real coordinates — the name guard below already stops the
+  // junk overwriting a stored name, but until this check the junk still landed
+  // as a fresh row that only clustering could hide. A junk name whose spot we
+  // don't know yet still inserts, because the show needs somewhere to hang.
+  // Known (source, source_venue_id) pairs skip all of this: their row exists,
+  // and the conflict-update path owns them.
+  const junkKeys = venueKeys.filter((k) => {
+    const v = venueRows.get(k)!;
+    return looksLikeEventTitle(v.name) && v.lat != null && v.lng != null;
+  });
+  if (junkKeys.length) {
+    const known = await batchChunked<{ id: string }[]>(
+      db,
+      junkKeys.map((k) => {
+        const v = venueRows.get(k)!;
+        return db
+          .select({ id: venues.id })
+          .from(venues)
+          .where(and(eq(venues.source, v.source), eq(venues.sourceVenueId, v.source_venue_id)))
+          .limit(1);
+      }),
+    );
+    const newJunk = junkKeys.filter((_, idx) => !known[idx]?.[0]);
+    if (newJunk.length) {
+      const DEG = 0.006; // same ~600m box the canonical pass searches
+      const nearby = await batchChunked<
+        { id: string; name: string; lat: number | null; lng: number | null; city: string | null; canonicalVenueId: string | null }[]
+      >(
+        db,
+        newJunk.map((k) => {
+          const v = venueRows.get(k)!;
+          return db
+            .select({
+              id: venues.id,
+              name: venues.name,
+              lat: venues.lat,
+              lng: venues.lng,
+              city: venues.city,
+              canonicalVenueId: venues.canonicalVenueId,
+            })
+            .from(venues)
+            .where(
+              and(
+                between(venues.lat, v.lat! - DEG, v.lat! + DEG),
+                between(venues.lng, v.lng! - DEG, v.lng! + DEG),
+              ),
+            )
+            .limit(100);
+        }),
+      );
+      newJunk.forEach((k, idx) => {
+        const v = venueRows.get(k)!;
+        // A tour title has no name tokens, so the comparators treat it as
+        // unnamed and the same-spot rule decides — the tested behaviour for
+        // junk-named rows, applied before the row exists instead of after.
+        const match = bestVenueMatch(
+          { id: k, name: v.name, lat: v.lat, lng: v.lng, city: v.city },
+          nearby[idx] ?? [],
+        );
+        if (match) {
+          adoptedByKey.set(k, (match as { canonicalVenueId?: string | null }).canonicalVenueId ?? match.id);
+        }
+      });
+      if (adoptedByKey.size) {
+        venueKeys = venueKeys.filter((k) => !adoptedByKey.has(k));
+      }
+    }
+  }
+
   if (venueKeys.length) {
     const stmts = venueKeys.map((k) => {
       const v = venueRows.get(k)!;
@@ -1106,6 +1181,9 @@ export async function persist(db: DB, raw: EventInput[], limits?: SanitizeLimits
   // Point each venue at the row that represents its physical location, so a room
   // Ticketmaster and Bandsintown name differently still holds one set of shows.
   const canonicalByKey = await canonicalizeVenues(db, venueKeys, venueRows, venueIdByKey);
+  // Adopted keys resolved to an existing room before any row was written; they
+  // join the map here, already canonical.
+  for (const [k, id] of adoptedByKey) canonicalByKey.set(k, id);
 
   const venueFor = (i: EventInput) =>
     i.venue ? canonicalByKey.get(`${i.venue.source}:${i.venue.source_venue_id}`) ?? null : null;

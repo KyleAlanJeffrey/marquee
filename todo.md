@@ -135,10 +135,14 @@ during A/B):
     banner on web pages rather than "Open the app" pointing at itself.
 - [ ] **The venue-name bugs**, which are also SEO bugs (titles get rewritten by
   Google when they name two places):
-  - [ ] Ingestion still *inserts* a new junk-named row rather than mapping it to
-    the same-spot venue it means — needs a lookup-before-insert restructure of
-    `persist`'s hot path. (It no longer overwrites good names; clustering hides
-    the junk row meanwhile.)
+  - [x] **Ingestion maps a new junk-named venue to its same-spot room instead
+    of inserting it** (2026-07-31). A tour-title venue unknown to the table is
+    looked up by location first; a same-spot match adopts the listing (resolved
+    straight to the cluster head) and no row is ever written. Unknown spots
+    still insert, because the show needs somewhere to hang. Verified on local
+    D1: junk at The Fillmore's coordinates → venue count unchanged, event on
+    The Fillmore; junk at empty coordinates → row inserted; re-ingest matched
+    without duplicating.
   - [ ] A dash-separated billing ("PROGRESSIVE HOUSE NEVER DIED - Seattle") is
     not caught, deliberately — it reads exactly like "The Eastern-GA" to a
     string rule. Pinned as a known miss in `dedupe.test.ts`; wants a source-side
