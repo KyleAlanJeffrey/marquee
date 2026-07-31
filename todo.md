@@ -193,9 +193,15 @@ during A/B):
 - [ ] Watch production crawl runs for CPU/subrequest limits; raise `CRAWL_BATCH`
   if there's headroom, and measure where `SG_MAX_PAGES=3` cuts off in *time*
   before deciding it's enough.
-- [ ] `time_unknown` column — SeatGeek fills unannounced set times with 03:30
-  local; letting `time_tbd` events in needs the column plus a card that renders
-  a date with no clock.
+- [~] `time_unknown` column — done (migration 0017). SeatGeek `time_tbd` and
+  Ticketmaster missing-`dateTime` listings now land pinned to noon at the venue
+  with the flag set; `mergeShow` never lets the placeholder displace a real
+  time and clears the flag when one arrives; matching uses a same-local-day
+  window (`TBD_SHOW_MATCH_HOURS=13`) so the placeholder and the real listing
+  become one row without collapsing two-night runs. Cards, detail pages and the
+  server-rendered pages print the date with no clock ("Time TBA" on the event
+  page), and JSON-LD publishes a date-only `startDate`. Residual: rows ingested
+  before this were skipped entirely, so flagged shows appear as sources re-crawl.
 - [ ] Venue-calendar adapters for the DIY tier (WP "The Events Calendar" JSON,
   iCal). A subsystem with a robots/ToS judgement call, not an afternoon.
 - [ ] Scheduled discovery for launch cities (optional cron sweep).

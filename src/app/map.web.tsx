@@ -240,7 +240,9 @@ export default function MapScreen() {
                   {e.artist_name}
                 </ThemedText>
                 <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                  {`${formatEventDate(e.starts_at, e.venue_timezone)} · ${formatTime(e.starts_at, e.venue_timezone)}`}
+                  {e.time_unknown
+                    ? formatEventDate(e.starts_at, e.venue_timezone)
+                    : `${formatEventDate(e.starts_at, e.venue_timezone)} · ${formatTime(e.starts_at, e.venue_timezone)}`}
                 </ThemedText>
               </View>
               <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />

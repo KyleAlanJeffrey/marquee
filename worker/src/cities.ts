@@ -303,6 +303,8 @@ export type CityData = {
     id: string;
     name: string;
     startsAt: string;
+    /** Set time not announced — the date is real, the clock is a placeholder. */
+    timeUnknown: boolean;
     zone: string | null;
     artistName: string;
     genre: string | null;
@@ -361,6 +363,7 @@ export async function cityData(env: Env, town: Town, towns: Town[]): Promise<Cit
         id: events.id,
         name: events.name,
         startsAt: events.startsAt,
+        timeUnknown: events.timeUnknown,
         artistName: artists.name,
         genres: artists.genres,
         venueName: canon.name,
@@ -418,6 +421,7 @@ export async function cityData(env: Env, town: Town, towns: Town[]): Promise<Cit
       id: s.id,
       name: s.name,
       startsAt: s.startsAt,
+      timeUnknown: s.timeUnknown,
       zone: zoneFor(town.region, town.country),
       artistName: s.artistName,
       genre: firstGenre(s.genres),
@@ -515,7 +519,7 @@ export function cityHtml(origin: string, d: CityData): string {
   let month = '';
   const showRows = d.shows
     .map((s) => {
-      const w = when(s.startsAt, s.zone);
+      const w = when(s.startsAt, s.zone, s.timeUnknown);
       const m = monthOf(s.startsAt, s.zone);
       const rule = m && m !== month ? `<li class="month">${esc(m)}</li>` : '';
       month = m || month;
@@ -596,7 +600,7 @@ export function cityHtml(origin: string, d: CityData): string {
           '@type': 'MusicEvent',
           name: s.name,
           url: `${origin}/event/${s.id}`,
-          startDate: s.startsAt,
+          startDate: s.timeUnknown ? s.startsAt.slice(0, 10) : s.startsAt,
           eventStatus: 'https://schema.org/EventScheduled',
           eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
           performer: { '@type': 'MusicGroup', name: s.artistName },

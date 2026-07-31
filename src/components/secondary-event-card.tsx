@@ -47,8 +47,10 @@ export function SecondaryEventCard({
           <ThemedText type="labelSm" style={{ color: theme.primary, flex: 1 }} numberOfLines={1}>
             {[
               genre?.toUpperCase(),
-              `${formatRelativeDay(event.starts_at, event.venue_timezone)}, ` +
-                `${formatTime(event.starts_at, event.venue_timezone)}`,
+              event.time_unknown
+                ? formatRelativeDay(event.starts_at, event.venue_timezone)
+                : `${formatRelativeDay(event.starts_at, event.venue_timezone)}, ` +
+                  `${formatTime(event.starts_at, event.venue_timezone)}`,
             ]
               .filter(Boolean)
               .join(' • ')}

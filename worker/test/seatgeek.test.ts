@@ -72,7 +72,8 @@ describe('sgToEventInputs', () => {
   const inputs = sgToEventInputs(fixture as unknown[], idFor);
 
   it('maps every usable event in the payload', () => {
-    const usable = fixture.filter((e) => !e.date_tbd && !e.time_tbd);
+    // time_tbd events are usable now — only a missing date disqualifies.
+    const usable = fixture.filter((e) => !e.date_tbd);
     expect(inputs).toHaveLength(usable.length);
     expect(inputs.every((i) => i.source === 'seatgeek')).toBe(true);
   });
@@ -124,15 +125,32 @@ describe('sgToEventInputs', () => {
     expect(sgToEventInputs(fixture as unknown[], () => undefined)).toEqual([]);
   });
 
-  it('skips an unannounced set time rather than storing SeatGeek\'s 03:30', () => {
+  it('flags an unannounced set time instead of storing SeatGeek\'s 03:30', () => {
     // The one time_tbd event in the recorded page is a three-day festival pass
-    // with a local start of 03:30 — a placeholder, not a doors time. Since
-    // SeatGeek co-owns starts_at, keeping it could also overwrite a real
-    // Ticketmaster time for the same show.
+    // with a local start of 03:30 — a placeholder, not a doors time. It used to
+    // be skipped outright; now it lands pinned to noon at the venue with
+    // time_unknown set, and mergeShow keeps the placeholder away from any real
+    // time another source publishes.
     const tbd = fixture.find((e) => e.time_tbd === true);
     expect(tbd, 'fixture should include a time_tbd event').toBeTruthy();
     expect(tbd?.datetime_local).toContain('T03:30');
-    expect(inputs.some((i) => i.source_event_id === String(tbd?.id))).toBe(false);
+    const mapped = inputs.find((i) => i.source_event_id === String(tbd?.id));
+    expect(mapped?.time_unknown).toBe(true);
+    // Noon in the venue's own zone, on the local date the payload named.
+    const local = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tbd!.venue.timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(mapped!.starts_at));
+    expect(local).toBe(`${String(tbd!.datetime_local).slice(0, 10)}, 12:00`);
+    // Announced times stay unflagged.
+    expect(inputs.filter((i) => i.time_unknown).map((i) => i.source_event_id)).toEqual([
+      String(tbd?.id),
+    ]);
   });
 
   it('skips events with no usable date', () => {

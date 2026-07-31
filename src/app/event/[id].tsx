@@ -121,7 +121,10 @@ export default function EventScreen() {
   // out when that isn't the reader's — "Doors 8:00 PM" is otherwise a guess.
   const tz = e.venue?.timezone ?? null;
   const zoneLabel = formatZoneLabel(e.starts_at, tz);
-  const time = (iso: string) => [formatTime(iso, tz), zoneLabel].filter(Boolean).join(' ');
+  // Null when the set time isn't announced — the stored timestamp is a noon
+  // placeholder, and "Doors 12:00 PM" would be an invention.
+  const time = (iso: string) =>
+    e.time_unknown ? null : [formatTime(iso, tz), zoneLabel].filter(Boolean).join(' ');
   const buzz = socialLinks(e.artist.name, e.venue?.name);
   const support = lineup.data?.support ?? [];
   // Compared against the start rather than an estimated end: a show is something
@@ -137,9 +140,9 @@ export default function EventScreen() {
         title={`${e.name}${e.venue ? ` at ${e.venue.name}` : ''} — ${formatEventDate(e.starts_at, tz)}`}
         description={`${e.name} plays ${
           e.venue ? formatVenue(e.venue.name, e.venue.city, e.venue.region) : 'live'
-        } on ${formatEventDate(e.starts_at, tz)} at ${time(
-          e.starts_at,
-        )}. Tickets, lineup and what people are saying about the show.`}
+        } on ${formatEventDate(e.starts_at, tz)}${
+          time(e.starts_at) ? ` at ${time(e.starts_at)}` : ''
+        }. Tickets, lineup and what people are saying about the show.`}
       />
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
@@ -191,7 +194,11 @@ export default function EventScreen() {
           <InfoRow
             icon="calendar"
             label="Date & Gate"
-            value={`${formatEventDate(e.starts_at, tz)} · Doors ${time(e.starts_at)}`}
+            value={
+              time(e.starts_at)
+                ? `${formatEventDate(e.starts_at, tz)} · Doors ${time(e.starts_at)}`
+                : `${formatEventDate(e.starts_at, tz)} · Time TBA`
+            }
           />
           <InfoRow
             icon="location"

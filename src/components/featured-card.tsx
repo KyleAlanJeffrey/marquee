@@ -65,7 +65,12 @@ export function FeaturedCard({ event, following, onPress, onToggleFollow }: Prop
       <View style={styles.body}>
         <View style={{ flex: 1 }}>
           <ThemedText type="labelSm" style={{ color: theme.cyan, letterSpacing: 1.5 }}>
-            {[genre?.toUpperCase(), `${weekday} ${formatTime(event.starts_at, event.venue_timezone)}`]
+            {[
+              genre?.toUpperCase(),
+              event.time_unknown
+                ? weekday
+                : `${weekday} ${formatTime(event.starts_at, event.venue_timezone)}`,
+            ]
               .filter(Boolean)
               .join(' • ')}
           </ThemedText>

@@ -26,6 +26,14 @@ export const VENUE_SAME_NAME_METERS = 12_000;
  * cheaper mistake.
  */
 export const SHOW_MATCH_HOURS = 6;
+/**
+ * The window when one side's time is a placeholder. A time-unknown listing is
+ * pinned to noon at the venue, so anything on the same local day sits within
+ * twelve hours of it in the same zone — thirteen buys a DST edge. It must stay
+ * under sixteen, or a placeholder would reach the previous evening's show and
+ * merge a two-night run.
+ */
+export const TBD_SHOW_MATCH_HOURS = 13;
 
 const EARTH_RADIUS_M = 6_371_000;
 
@@ -377,12 +385,13 @@ export function hoursApart(a: string, b: string): number {
 
 /** Same artist, same venue, close enough in time to be one show. */
 export function sameShow(
-  a: { artistId: string; venueId: string | null; startsAt: string },
-  b: { artistId: string; venueId: string | null; startsAt: string },
+  a: { artistId: string; venueId: string | null; startsAt: string; timeUnknown?: boolean | null },
+  b: { artistId: string; venueId: string | null; startsAt: string; timeUnknown?: boolean | null },
 ): boolean {
   if (a.artistId !== b.artistId) return false;
   if (!a.venueId || !b.venueId || a.venueId !== b.venueId) return false;
-  return hoursApart(a.startsAt, b.startsAt) <= SHOW_MATCH_HOURS;
+  const window = a.timeUnknown || b.timeUnknown ? TBD_SHOW_MATCH_HOURS : SHOW_MATCH_HOURS;
+  return hoursApart(a.startsAt, b.startsAt) <= window;
 }
 
 /**

@@ -108,6 +108,7 @@ export type EventBody = {
   id: string;
   name: string;
   startsAt: string;
+  timeUnknown: boolean;
   zone: string | null;
   ticketUrl: string | null;
   priceFrom: number | null;
@@ -130,7 +131,7 @@ export type EventBody = {
 };
 
 export function eventBody(d: EventBody): string {
-  const t = when(d.startsAt, d.zone);
+  const t = when(d.startsAt, d.zone, d.timeUnknown);
   const where = placeOf(d.city, d.region);
   // Festivals are filed with the bill as the venue name, so the event and the "venue"
   // are often the same string. Naming it twice in one sentence reads like a bug.
@@ -194,6 +195,7 @@ export type ArtistBody = {
   shows: {
     id: string;
     startsAt: string;
+    timeUnknown: boolean;
     zone: string | null;
     venueId: string | null;
     venueName: string | null;
@@ -209,7 +211,7 @@ export function artistBody(d: ArtistBody): string {
   const dates = d.shows.length
     ? `<ul>${d.shows
         .map((s) => {
-          const w = when(s.startsAt, s.zone);
+          const w = when(s.startsAt, s.zone, s.timeUnknown);
           const at = [s.venueName, placeOf(s.city, s.region)].filter(Boolean).join(', ');
           return `<li><a href="/event/${esc(s.id)}"><b>${esc(w.day)}${
             w.time ? ` · ${esc(w.time)}` : ''
@@ -243,7 +245,14 @@ export type VenueBody = {
   region: string | null;
   country: string | null;
   upcoming: number;
-  shows: { id: string; startsAt: string; zone: string | null; artistId: string; artistName: string }[];
+  shows: {
+    id: string;
+    startsAt: string;
+    timeUnknown: boolean;
+    zone: string | null;
+    artistId: string;
+    artistName: string;
+  }[];
   truncated: boolean;
 };
 
@@ -252,7 +261,7 @@ export function venueBody(d: VenueBody): string {
   const list = d.shows.length
     ? `<ul>${d.shows
         .map((s) => {
-          const w = when(s.startsAt, s.zone);
+          const w = when(s.startsAt, s.zone, s.timeUnknown);
           return `<li><a href="/event/${esc(s.id)}"><b>${esc(s.artistName)}</b></a><span>${esc(
             [w.day, w.time].filter(Boolean).join(' · '),
           )}</span></li>`;

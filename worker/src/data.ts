@@ -16,6 +16,7 @@ import {
   parseSources,
   sameShow,
   SHOW_MATCH_HOURS,
+  TBD_SHOW_MATCH_HOURS,
   VENUE_SAME_NAME_METERS,
   type VenuePoint,
 } from './dedupe';
@@ -92,6 +93,8 @@ export type EventInput = {
   source_event_id: string;
   name: string;
   starts_at: string;
+  /** Set time not announced: `starts_at` is noon at the venue, not a clock time. */
+  time_unknown?: boolean;
   /** Only some sources publish an end time (Bandsintown, festivals). */
   ends_at?: string | null;
   ticket_url: string | null;
@@ -141,6 +144,7 @@ export async function nearbyEvents(
       event_id: events.id,
       event_name: events.name,
       starts_at: events.startsAt,
+      time_unknown: events.timeUnknown,
       ticket_url: events.ticketUrl,
       price_from: events.priceFrom,
       artist_id: artists.id,
@@ -314,6 +318,7 @@ export async function eventsByIds(db: DB, ids: string[]) {
     event_id: string;
     event_name: string;
     starts_at: string;
+    time_unknown: boolean;
     ticket_url: string | null;
     price_from: number | null;
     artist_id: string;
@@ -336,6 +341,7 @@ export async function eventsByIds(db: DB, ids: string[]) {
         event_id: events.id,
         event_name: events.name,
         starts_at: events.startsAt,
+      time_unknown: events.timeUnknown,
         ticket_url: events.ticketUrl,
         price_from: events.priceFrom,
         artist_id: artists.id,
@@ -481,6 +487,7 @@ export async function followingEvents(
     event_id: events.id,
     event_name: events.name,
     starts_at: events.startsAt,
+    time_unknown: events.timeUnknown,
     ticket_url: events.ticketUrl,
     price_from: events.priceFrom,
     artist_id: artists.id,
@@ -596,6 +603,7 @@ export async function artistPastEvents(db: DB, id: string, limit = 300) {
       event_id: events.id,
       event_name: events.name,
       starts_at: events.startsAt,
+      time_unknown: events.timeUnknown,
       venue_id: venues.id,
       venue_name: venues.name,
       venue_city: venues.city,
@@ -620,6 +628,7 @@ export async function artistEvents(db: DB, id: string) {
       event_id: events.id,
       event_name: events.name,
       starts_at: events.startsAt,
+      time_unknown: events.timeUnknown,
       ticket_url: events.ticketUrl,
       price_from: events.priceFrom,
       venue_id: venues.id,
@@ -646,6 +655,7 @@ export async function eventById(db: DB, id: string) {
       id: events.id,
       name: events.name,
       starts_at: events.startsAt,
+      time_unknown: events.timeUnknown,
       ticket_url: events.ticketUrl,
       price_from: events.priceFrom,
       source: events.source,
@@ -676,6 +686,7 @@ export async function eventById(db: DB, id: string) {
     id: r.id,
     name: r.name,
     starts_at: r.starts_at,
+    time_unknown: r.time_unknown,
     ticket_url: r.ticket_url,
     price_from: r.price_from,
     source: r.source,
@@ -849,6 +860,7 @@ export async function venueStats(db: DB, id: string) {
         artist_name: artists.name,
         artist_image_url: artists.imageUrl,
         starts_at: events.startsAt,
+      time_unknown: events.timeUnknown,
       })
       .from(events)
       .innerJoin(artists, eq(artists.id, events.artistId))
@@ -959,6 +971,7 @@ export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
       event_id: events.id,
       event_name: events.name,
       starts_at: events.startsAt,
+      time_unknown: events.timeUnknown,
       ticket_url: events.ticketUrl,
       price_from: events.priceFrom,
       artist_id: artists.id,
@@ -1199,6 +1212,7 @@ export async function persist(db: DB, raw: EventInput[], limits?: SanitizeLimits
       artistId: i.artist_id,
       venueId: venueFor(i),
       startsAt: i.starts_at,
+      timeUnknown: i.time_unknown === true,
     })),
   );
 
@@ -1232,8 +1246,8 @@ export async function persist(db: DB, raw: EventInput[], limits?: SanitizeLimits
     // or they become two rows that only `repair-duplicates` can collapse.
     const sibling = staged.find((s) =>
       sameShow(
-        { artistId: s.row.artistId, venueId: s.row.venueId, startsAt: s.row.startsAt },
-        { artistId: i.artist_id, venueId, startsAt: i.starts_at },
+        { artistId: s.row.artistId, venueId: s.row.venueId, startsAt: s.row.startsAt, timeUnknown: s.row.timeUnknown },
+        { artistId: i.artist_id, venueId, startsAt: i.starts_at, timeUnknown: i.time_unknown },
       ),
     );
     if (sibling) {
@@ -1248,6 +1262,7 @@ export async function persist(db: DB, raw: EventInput[], limits?: SanitizeLimits
       venueId,
       name: i.name,
       startsAt: i.starts_at,
+      timeUnknown: i.time_unknown ?? false,
       endsAt: i.ends_at ?? null,
       ticketUrl: i.ticket_url,
       priceFrom: i.price_from,
@@ -1302,6 +1317,7 @@ type ExistingShow = {
   sources: string | null;
   name: string;
   startsAt: string;
+  timeUnknown: boolean | null;
   endsAt: string | null;
   ticketUrl: string | null;
   priceFrom: number | null;
@@ -1322,9 +1338,24 @@ function mergeShow(row: ExistingShow, i: EventInput, venueId: string | null) {
   const pick = <T>(field: string, incoming: T | null | undefined, existing: T | null | undefined) =>
     mergeField(field, incoming, existing, from, to);
 
+  // A real time beats a noon placeholder no matter which source holds which —
+  // field ownership only referees contests between two facts. A placeholder
+  // never overwrites a clock time (the exact accident that used to keep
+  // `time_tbd` listings out entirely), and the flag clears the moment any
+  // source publishes the real thing.
+  const incomingTbd = i.time_unknown === true;
+  const rowTbd = row.timeUnknown === true;
+  const startsAt =
+    incomingTbd !== rowTbd
+      ? incomingTbd
+        ? row.startsAt
+        : i.starts_at
+      : (pick('starts_at', i.starts_at, row.startsAt) ?? row.startsAt);
+
   return {
     name: pick('name', i.name, row.name) ?? row.name,
-    startsAt: pick('starts_at', i.starts_at, row.startsAt) ?? row.startsAt,
+    startsAt,
+    timeUnknown: incomingTbd && rowTbd,
     endsAt: pick('ends_at', i.ends_at ?? null, row.endsAt),
     ticketUrl: pick('ticket_url', i.ticket_url, row.ticketUrl),
     priceFrom: pick('price_from', i.price_from, row.priceFrom),
@@ -1410,7 +1441,14 @@ const MATCH_CLUSTER_MAX = 30;
 
 async function findExistingShows(
   db: DB,
-  keys: { source: string; sourceEventId: string; artistId: string; venueId: string | null; startsAt: string }[],
+  keys: {
+    source: string;
+    sourceEventId: string;
+    artistId: string;
+    venueId: string | null;
+    startsAt: string;
+    timeUnknown: boolean;
+  }[],
 ): Promise<(ExistingShow | null)[]> {
   if (keys.length === 0) return [];
   // Resolved once for the batch, not per listing — see `clusterIdsByVenue`.
@@ -1426,6 +1464,7 @@ async function findExistingShows(
     sources: events.sources,
     name: events.name,
     startsAt: events.startsAt,
+    timeUnknown: events.timeUnknown,
     endsAt: events.endsAt,
     ticketUrl: events.ticketUrl,
     priceFrom: events.priceFrom,
@@ -1447,7 +1486,10 @@ async function findExistingShows(
       console.warn(`venue ${k.venueId}: cluster of ${cluster.length} rows, matching the first ${MATCH_CLUSTER_MAX}`);
     }
     if (k.venueId && !Number.isNaN(t)) {
-      const window = SHOW_MATCH_HOURS * 3_600_000;
+      // A placeholder listing is pinned to noon at the venue, so "same show"
+      // means "same local day" — the wider TBD window — rather than a clock
+      // match it can't make.
+      const window = (k.timeUnknown ? TBD_SHOW_MATCH_HOURS : SHOW_MATCH_HOURS) * 3_600_000;
       clauses.push(
         and(
           // Anywhere in the venue's cluster, not just the row this listing
@@ -1464,6 +1506,21 @@ async function findExistingShows(
           between(events.startsAt, isoAt(t - window), isoAt(t + window)),
         ),
       );
+      if (!k.timeUnknown) {
+        // The mirror case: this listing has a real time, but the show may be on
+        // file as a noon placeholder from a source that didn't. An 8pm show sits
+        // 8 hours from noon — outside the clock window above — so placeholders
+        // get their own same-local-day match.
+        const tbd = TBD_SHOW_MATCH_HOURS * 3_600_000;
+        clauses.push(
+          and(
+            inArray(events.venueId, cluster.slice(0, MATCH_CLUSTER_MAX)),
+            eq(events.artistId, k.artistId),
+            eq(events.timeUnknown, true),
+            between(events.startsAt, isoAt(t - tbd), isoAt(t + tbd)),
+          ),
+        );
+      }
     }
     // Exact-id matches sort first so a re-ingest updates its own row.
     return db
@@ -1654,6 +1711,7 @@ export async function repairDuplicates(
       artistId: events.artistId,
       venueId: events.venueId,
       startsAt: events.startsAt,
+      timeUnknown: events.timeUnknown,
       source: events.source,
       sources: events.sources,
       sourceEventId: events.sourceEventId,
@@ -1700,7 +1758,13 @@ export async function repairDuplicates(
       const b = rows[j];
       if (a.artistId !== b.artistId || a.venueId !== b.venueId) break; // ordered
       if (dropped.has(b.id)) continue;
-      if (hoursApart(a.startsAt, b.startsAt) > SHOW_MATCH_HOURS) break;
+      const gap = hoursApart(a.startsAt, b.startsAt);
+      // Ordered by startsAt, so past the widest window nothing later pairs either.
+      if (gap > TBD_SHOW_MATCH_HOURS) break;
+      // In the 6–13h band only a placeholder pairs — two real times that far
+      // apart are two shows. Skip rather than break: a flagged row further on
+      // can still fall inside its own window.
+      if (gap > SHOW_MATCH_HOURS && !a.timeUnknown && !b.timeUnknown) continue;
       // Keep the older row so anything already linking to it still resolves.
       merges.push({ keep: a, drop: b });
       dropped.add(b.id);
@@ -1723,6 +1787,7 @@ export async function repairDuplicates(
     source_event_id: r.sourceEventId,
     name: r.name,
     starts_at: r.startsAt,
+    time_unknown: r.timeUnknown ?? false,
     ends_at: r.endsAt,
     ticket_url: r.ticketUrl,
     price_from: r.priceFrom,

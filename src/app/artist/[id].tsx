@@ -223,7 +223,9 @@ export default function ArtistScreen() {
                   )}
                 </View>
                 <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                  {formatTime(item.starts_at, item.venue_timezone).toUpperCase()}
+                  {item.time_unknown
+                    ? 'TIME TBA'
+                    : formatTime(item.starts_at, item.venue_timezone).toUpperCase()}
                 </ThemedText>
               </PressableScale>
               {item.ticket_url ? (

@@ -3,6 +3,9 @@ export type NearbyEvent = {
   event_id: string;
   event_name: string;
   starts_at: string;
+  /** Set time not announced: `starts_at` is noon at the venue, so render the
+   *  date and keep the clock to yourself. */
+  time_unknown: boolean;
   ticket_url: string | null;
   price_from: number | null;
   artist_id: string;
@@ -44,6 +47,7 @@ export type ArtistPastEvent = {
   event_id: string;
   event_name: string;
   starts_at: string;
+  time_unknown: boolean;
   venue_id: string | null;
   venue_name: string | null;
   venue_city: string | null;
@@ -55,6 +59,7 @@ export type ArtistEvent = {
   event_id: string;
   event_name: string;
   starts_at: string;
+  time_unknown: boolean;
   ticket_url: string | null;
   price_from: number | null;
   venue_id: string | null;
@@ -68,6 +73,7 @@ export type EventDetail = {
   id: string;
   name: string;
   starts_at: string;
+  time_unknown: boolean;
   ticket_url: string | null;
   price_from: number | null;
   source: string;
@@ -94,6 +100,7 @@ export type VenueEvent = {
   event_id: string;
   event_name: string;
   starts_at: string;
+  time_unknown: boolean;
   ticket_url: string | null;
   price_from: number | null;
   artist_id: string;

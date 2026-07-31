@@ -346,6 +346,7 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     .select({
       name: events.name,
       startsAt: events.startsAt,
+      timeUnknown: events.timeUnknown,
       ticketUrl: events.ticketUrl,
       priceFrom: events.priceFrom,
       artistId: events.artistId,
@@ -418,6 +419,7 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       id,
       name: row.name,
       startsAt: row.startsAt,
+      timeUnknown: row.timeUnknown,
       zone: zoneFor(row.venueRegion, row.venueCountry),
       ticketUrl: row.ticketUrl,
       priceFrom: row.priceFrom,
@@ -437,7 +439,9 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       '@type': 'MusicEvent',
       name: row.name,
       url: `${origin}/event/${id}`,
-      startDate: row.startsAt,
+      // Date-only for an unannounced set time — schema.org allows it, and a
+      // noon placeholder published as a startDate would be machine-read as fact.
+      startDate: row.timeUnknown ? row.startsAt.slice(0, 10) : row.startsAt,
       eventStatus: 'https://schema.org/EventScheduled',
       eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
       image: row.artistImage ?? absolute(origin, OG_IMAGE),
@@ -485,6 +489,7 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
       id: events.id,
       name: events.name,
       startsAt: events.startsAt,
+      timeUnknown: events.timeUnknown,
       venueId: canon.id,
       venueName: venues.name,
       city: venues.city,
@@ -518,6 +523,7 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
       shows: shows.slice(0, SHOWS).map((s) => ({
         id: s.id,
         startsAt: s.startsAt,
+        timeUnknown: s.timeUnknown,
         zone: zoneFor(s.region, s.country),
         venueId: s.venueId,
         venueName: s.venueName,
@@ -538,7 +544,7 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
         '@type': 'MusicEvent',
         name: s.name,
         url: `${origin}/event/${s.id}`,
-        startDate: s.startsAt,
+        startDate: s.timeUnknown ? s.startsAt.slice(0, 10) : s.startsAt,
         ...(s.venueName ? { location: { '@type': 'MusicVenue', name: s.venueName } } : null),
       })),
     },
@@ -578,6 +584,7 @@ async function venueSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       .select({
         id: events.id,
         startsAt: events.startsAt,
+        timeUnknown: events.timeUnknown,
         artistId: events.artistId,
         artistName: artists.name,
       })

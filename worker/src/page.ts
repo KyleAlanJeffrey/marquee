@@ -76,7 +76,14 @@ export const plural = (n: number, one: string, many: string) => (n === 1 ? one :
  * 03:00Z the next morning, so formatting in UTC moves it a day — the one mistake
  * a listings page cannot make.
  */
-export function when(iso: string, zone: string | null): { day: string; time: string } {
+export function when(
+  iso: string,
+  zone: string | null,
+  // Set time not announced: the timestamp is a noon placeholder. The date is
+  // real; the clock would be an invention, so it comes back empty — every
+  // template already renders around an empty `time`.
+  timeUnknown = false,
+): { day: string; time: string } {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return { day: '', time: '' };
   const f = (opts: Intl.DateTimeFormatOptions) => {
@@ -88,7 +95,7 @@ export function when(iso: string, zone: string | null): { day: string; time: str
   };
   return {
     day: f({ weekday: 'short', month: 'short', day: 'numeric' }),
-    time: f({ hour: 'numeric', minute: '2-digit' }),
+    time: timeUnknown ? '' : f({ hour: 'numeric', minute: '2-digit' }),
   };
 }
 

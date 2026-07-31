@@ -106,6 +106,8 @@ export const events = sqliteTable(
     venueId: text('venue_id').references(() => venues.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     startsAt: text('starts_at').notNull(), // ISO 8601 UTC
+    /** Set time not announced: `starts_at` is noon at the venue, not a clock time. */
+    timeUnknown: integer('time_unknown', { mode: 'boolean' }).notNull().default(false),
     endsAt: text('ends_at'),
     ticketUrl: text('ticket_url'),
     priceFrom: real('price_from'),

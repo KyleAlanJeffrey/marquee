@@ -60,6 +60,8 @@ export type LandingData = {
   soon: {
     id: string;
     startsAt: string;
+    /** Set time not announced — the date is real, the clock is a placeholder. */
+    timeUnknown: boolean;
     /** IANA zone of the venue, when we can name one. */
     zone: string | null;
     artistName: string;
@@ -148,6 +150,7 @@ export async function landingData(env: Env): Promise<LandingData> {
         id: events.id,
         name: events.name,
         startsAt: events.startsAt,
+        timeUnknown: events.timeUnknown,
         artistName: artists.name,
         genres: artists.genres,
         venueName: canon.name,
@@ -206,6 +209,7 @@ export async function landingData(env: Env): Promise<LandingData> {
       id: r.id,
       name: r.name,
       startsAt: r.startsAt,
+      timeUnknown: r.timeUnknown,
       zone: zoneFor(r.venueRegion, r.venueCountry),
       artistName: r.artistName,
       genre: firstGenre(r.genres),
@@ -321,7 +325,7 @@ export function landingHtml(origin: string, d: LandingData): string {
           '@type': 'MusicEvent',
           name: s.name,
           url: `${origin}/event/${s.id}`,
-          startDate: s.startsAt,
+          startDate: s.timeUnknown ? s.startsAt.slice(0, 10) : s.startsAt,
           eventStatus: 'https://schema.org/EventScheduled',
           eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
           performer: { '@type': 'MusicGroup', name: s.artistName },
@@ -341,7 +345,7 @@ export function landingHtml(origin: string, d: LandingData): string {
 
   const showRows = d.soon
     .map((s) => {
-      const w = when(s.startsAt, s.zone);
+      const w = when(s.startsAt, s.zone, s.timeUnknown);
       const room = [s.venueName, s.place].filter(Boolean);
       return `<li><a href="/event/${esc(s.id)}">
         <span class="date">${esc(w.day)}<small>${esc(w.time)}</small></span>

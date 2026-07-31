@@ -328,6 +328,24 @@ describe('show identity', () => {
     expect(sameShow(base, { ...base, artistId: 'a2' })).toBe(false);
     expect(sameShow({ ...base, venueId: null }, { ...base, venueId: null })).toBe(false);
   });
+
+  it('lets a noon placeholder reach a real evening time on the same local day', () => {
+    // A time_tbd listing is pinned to noon at the venue; the same show's 8pm
+    // Ticketmaster row is 8 hours away — outside the clock window, inside the
+    // same-local-day one. Without the flag, 8 hours stays two separate shows.
+    const noon = { ...base, startsAt: '2026-08-05T19:00:00Z', timeUnknown: true }; // noon PDT
+    const evening = { ...base, startsAt: '2026-08-06T03:00:00Z' }; // 8pm PDT
+    expect(sameShow(noon, evening)).toBe(true);
+    expect(sameShow({ ...noon, timeUnknown: false }, evening)).toBe(false);
+  });
+
+  it('keeps a placeholder off the previous night of a two-night run', () => {
+    // Saturday's noon placeholder is 16h from Friday's 8pm — beyond the widened
+    // window, so a two-night run cannot collapse through a TBD listing.
+    const saturdayNoon = { ...base, startsAt: '2026-08-08T19:00:00Z', timeUnknown: true };
+    const fridayEvening = { ...base, startsAt: '2026-08-08T03:00:00Z' };
+    expect(sameShow(saturdayNoon, fridayEvening)).toBe(false);
+  });
 });
 
 describe('field ownership', () => {

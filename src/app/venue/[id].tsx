@@ -370,7 +370,10 @@ export default function VenueScreen() {
                   {item.artist_name}
                 </ThemedText>
                 <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                  {[item.artist_genres?.[0]?.toUpperCase(), formatTime(item.starts_at, v?.timezone).toUpperCase()]
+                  {[
+                    item.artist_genres?.[0]?.toUpperCase(),
+                    item.time_unknown ? null : formatTime(item.starts_at, v?.timezone).toUpperCase(),
+                  ]
                     .filter(Boolean)
                     .join(' • ')}
                 </ThemedText>

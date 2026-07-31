@@ -90,7 +90,13 @@ function tmVenue(e: any): VenueRow | null {
 }
 
 function tmToEventInput(e: any, artistId: string): EventInput | null {
-  const startsAt = e.dates?.start?.dateTime;
+  // No `dateTime` means the set time isn't announced (`timeTBA`/`noSpecificTime`)
+  // — Ticketmaster still publishes the local date and the venue's zone, so the
+  // show goes in pinned to noon at the venue with `time_unknown` set, same as a
+  // SeatGeek `time_tbd` listing. Without even a date there's nothing to anchor.
+  let startsAt = e.dates?.start?.dateTime;
+  const timeUnknown = !startsAt;
+  if (!startsAt) startsAt = tmNoonUtc(e);
   if (!startsAt) return null;
   const min = e.priceRanges?.[0]?.min;
   return {
@@ -98,11 +104,23 @@ function tmToEventInput(e: any, artistId: string): EventInput | null {
     source_event_id: e.id,
     name: e.name,
     starts_at: startsAt,
+    time_unknown: timeUnknown,
     ticket_url: e.url ?? null,
     price_from: typeof min === 'number' ? min : null,
     artist_id: artistId,
     venue: tmVenue(e),
   };
+}
+
+/** Noon at the venue on the published local date — see `sgNoonUtc` for why noon. */
+function tmNoonUtc(e: any): string | null {
+  const date = typeof e?.dates?.start?.localDate === 'string' ? e.dates.start.localDate.trim() : '';
+  const zone = typeof e?.dates?.timezone === 'string' ? e.dates.timezone.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !zone) return null;
+  const naive = Date.parse(`${date}T12:00:00Z`);
+  if (Number.isNaN(naive)) return null;
+  const ms = utcMsFromLocal(naive, zone);
+  return ms === null ? null : isoAt(ms);
 }
 
 async function tmFetch(env: Env, path: string, params: Record<string, string>): Promise<any> {
@@ -806,6 +824,23 @@ export function sgUtc(e: any): string | null {
   return ms === null ? null : isoAt(ms);
 }
 
+/**
+ * Noon at the venue on the show's local date, for `time_tbd` listings whose
+ * clock time is a filler. The local *date* is still real; noon keeps the row on
+ * that calendar day in every zone and sits maximally far from both midnights,
+ * which is what lets `TBD_SHOW_MATCH_HOURS` treat "same local day" as a window.
+ */
+export function sgNoonUtc(e: any): string | null {
+  const local = typeof e?.datetime_local === 'string' ? stripZ(e.datetime_local.trim()) : '';
+  const zone = typeof e?.venue?.timezone === 'string' ? e.venue.timezone.trim() : '';
+  const date = local.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !zone) return null;
+  const naive = Date.parse(`${date}T12:00:00Z`);
+  if (Number.isNaN(naive)) return null;
+  const ms = utcMsFromLocal(naive, zone);
+  return ms === null ? null : isoAt(ms);
+}
+
 function sgVenue(e: any): VenueRow | null {
   const v = e?.venue;
   if (!v?.id) return null;
@@ -867,14 +902,15 @@ export function sgToEventInputs(
   artistIdFor: (foldedName: string) => string | undefined,
 ): EventInput[] {
   return sgEvents.flatMap((e: any) => {
-    // `time_tbd` means the set time isn't announced, and SeatGeek fills the slot
-    // with 03:30 local — the one such event in the recorded page is a three-day
-    // festival pass "starting" at half three in the morning. Keeping it would
-    // print that time on the card, and because SeatGeek co-owns `starts_at`, a
-    // placeholder could overwrite a real Ticketmaster time for the same show.
-    // Ticketmaster omits `dateTime` in the same situation and is skipped here too.
-    if (!e?.id || e.date_tbd === true || e.time_tbd === true) return [];
-    const startsAt = sgUtc(e);
+    // `date_tbd` means there is nothing to anchor the show to; skipped.
+    // `time_tbd` means only the set time isn't announced — SeatGeek fills the
+    // slot with 03:30 local, so the timestamp is a template, not a fact. The
+    // show still exists and is buyable, so it goes in pinned to noon at the
+    // venue with `time_unknown` set. `mergeShow` never lets that placeholder
+    // displace a real time, and the flag clears the moment one is published.
+    if (!e?.id || e.date_tbd === true) return [];
+    const timeUnknown = e.time_tbd === true;
+    const startsAt = timeUnknown ? sgNoonUtc(e) : sgUtc(e);
     if (!startsAt) return [];
     const performers = sgPerformers(e);
     const headliner = performers[0];
@@ -887,6 +923,7 @@ export function sgToEventInputs(
         source_event_id: String(e.id),
         name: e.title || e.short_title || `${headliner.name} @ ${e.venue?.name ?? 'TBA'}`,
         starts_at: startsAt,
+        time_unknown: timeUnknown,
         ticket_url: typeof e.url === 'string' && e.url ? e.url : null,
         price_from: sgPrice(e),
         lineup: performers.length > 1 ? performers.map((p) => p.name) : null,
