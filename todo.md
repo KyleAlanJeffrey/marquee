@@ -37,75 +37,27 @@ to the diff that acted on it. This file is only what's left.
 
 The design is **[`docs/social.md`](docs/social.md)** — object model, privacy
 rules, moderation minimum, and why reviews roll up to artist and venue rather than
-living per-event. The phases there are the plan; each ships useful alone.
-History-backfill has landed, so **nothing below is blocked any more** except D on B.
+living per-event. **All five phases landed 2026-07-31** (profiles + person graph,
+public reviews with report/block/hide moderation, artist/venue review roll-ups,
+the follow feed, curated lists), each verified against local D1 with minted
+session tokens and the moderation loop demonstrated end-to-end on production.
+What's left is the residuals:
 
-1. [~] **Phase A — profiles and the person graph.** Built 2026-07-31
-   (`87f5969`): `person_follows`, `GET /api/users/:key` (handle or Clerk id),
-   follow/unfollow, and `POST /me` refreshes the mirror from Clerk's Backend
-   API — no client-supplied identity at all. Usernames are enabled on the
-   instance (required at sign-up), so handles flow into profile URLs.
-   Hardened by Kyle's live testing the same day:
-   - Your profile and "what other people see" are **one component**
-     (`person-profile.tsx`) rendered by both the Profile tab and `/user/[key]`
-     (`c0c2753`), which also purged every stale "stored on this device" claim
-     from the app, manifest and landing page.
-   - The web sign-up flow stays onsite (`9e58fbc`): explicit
-     signUpUrl/signInUrl/fallbackRedirectUrl, verification inline, lands on
-     the Profile tab. The residual Clerk pop-up is `pk_test_` instance
-     plumbing — see Operational.
-   - **Account deletion** end to end (`8b97812`) — also the store requirement.
-   - A fresh sign-up can't be stranded without a mirror row (`4f8d10a`):
-     ProfileSync retries, and an own-profile read self-heals server-side.
-   What keeps it `[~]`: no discovery surface yet — you reach a profile from
-   settings or a shared link, nothing else, until reviews (B) put people on
-   pages.
-2. [~] **Phase B — public reviews.** Built 2026-07-31: `reviews`, `reports` and
-   `user_blocks` (migration 0014, applied local + production, all soft-delete);
-   `PUT/DELETE /api/events/:id/review` (one per person per show, edits stamped,
-   future shows refused with 422, 20/day brake), `GET .../reviews` (author's own
-   rides separately so moderation-hidden reviews don't gaslight their author);
-   report → `GET/POST /api/admin/reports` queue (hide/keep with audit trail);
-   block severs follows both ways, refuses new ones, and empties both parties'
-   review reads of each other. Client: composer + list on past-event pages
-   (own form, nothing read from the private log), reviews + block button on
-   profiles. Verified against local D1 with a minted session token, every path.
-   Still open in B: Kyle's end-to-end pass in the UI; a content *filter* beyond
-   report/block/hide if store review demands one; and the store submission
-   itself, which this phase shares a deadline with (guideline 1.2).
-3. [~] **Phase C — the roll-ups.** First slice 2026-07-31: `GET
-   /api/{artists,venues}/:id/review-stats` (indexed aggregate over public
-   reviews; artist = performance scores, venue = room scores), rendered in the
-   artist hero and venue stat grid behind a 3-review confidence floor. Still
-   open: the denormalised `rating_count`/`rating_sum` counters once volume
-   justifies them, and `AggregateRating` JSON-LD on the server-rendered pages —
-   deliberately deferred until real reviews exist, since fabricated-looking
-   review markup is a manual-action category, not a ranking nudge.
-   Original brief: **the roll-ups.** Artist live-reputation and venue-quality
-   scores on `/artist/[id]` and `/venue/[id]`, which are already server-rendered
-   and indexed. Highest-leverage phase: "is X good live" becomes a page that
-   answers a question people type into Google. Denormalised `rating_count` /
-   `rating_sum`, confidence floor, and review pages with no reviews stay
-   `noindex`.
-4. [~] **Phase D — the feed.** Built 2026-07-31: `GET /api/me/feed` — one
-   indexed query walking your follow edges to their recent public reviews (no
-   materialisation; the doc's note stands that a materialised feed earns its
-   complexity around a few hundred follows each). Rendered as "FROM PEOPLE YOU
-   FOLLOW" on your own profile, since the social graph is reached through you.
-   Blocks need no extra filter — they sever the very edge the query walks.
-   Still open: pagination beyond 50, and any feed of artist/venue activity
-   (this one is people only, by design).
-5. [~] **Phase E — curated lists.** Built 2026-07-31: `lists` + `list_items`
-   (migration 0016, hard-delete until reactions hang off them), full CRUD under
-   `/api/curated-lists` (public/private, 50 per user, 200 items, refs validated
-   and resolved on read so stale ones drop out), "Add to list" on artist, venue
-   and event pages with inline quick-create, shelves on profiles, and the
-   `/list/[id]` screen with owner controls. Verified every path against local
-   D1 with a minted token. Still open: notes on items (schema holds them, no
-   UI), reordering, and reportability once lists join the moderation kinds.
+1. [~] **Phase A residual** — no discovery surface: you reach a profile from
+   settings or a shared link, nothing else, until reviews put people on pages.
+2. [~] **Phase B residuals** — Kyle's end-to-end pass in the UI; a content
+   *filter* beyond report/block/hide if store review demands one; and the store
+   submission itself, which this phase shares a deadline with (guideline 1.2).
+3. [~] **Phase C residuals** — the denormalised `rating_count`/`rating_sum`
+   counters once volume justifies them, and `AggregateRating` JSON-LD on the
+   server-rendered pages — deliberately deferred until real reviews exist, since
+   fabricated-looking review markup is a manual-action category.
+4. [~] **Phase D residuals** — feed pagination beyond 50; any feed of
+   artist/venue activity (this one is people only, by design).
+5. [~] **Phase E residuals** — notes on list items (schema holds them, no UI),
+   reordering, and reportability once lists join the moderation kinds.
 
-**Decisions in `docs/social.md` that are Kyle's, not mine** (needed before or
-during A/B):
+**Decisions in `docs/social.md` that are Kyle's, not mine:**
 
 - [ ] What "follow" means with people in the mix. Recommendation: people live on
   a profile, not in the Following tab, which renames nothing.
@@ -118,40 +70,18 @@ during A/B):
 
 ## P1 · Next
 
-- [x] **Going / interested on upcoming shows** (Kyle, 2026-07-31) — built the
-  same day: `event_rsvps` (migration 0015, one row per person per show),
-  `PUT/DELETE /api/events/:id/rsvp`, public counts + private `mine` on
-  `GET .../rsvps`, and two count-carrying pills on upcoming event pages behind
-  the write gate. Past shows 422 ("log it instead"). Counts name nobody.
-
-- [x] **Add a show that isn't in the catalogue** (2026-07-31). A hand-entered
-  log entry with a `manual-` id and no catalogue references — possible because
-  the log renders purely from its own snapshot. Private by design: the entry
-  never becomes a shared event, so the day-one version needs no `sameShow`
-  matching and no moderation. Rateable like any other night; its row doesn't
-  navigate (there is no event page to open). Promotion to a shared object stays
-  an open decision in docs/social.md, with the matching work attached to it.
 - [ ] **App-store prep** — mine except the builds and submissions:
   - [ ] **Blocked on Kyle:** the EAS project id (`a9540056-…`) belongs to an
     account `eas whoami` isn't a member of. Either `eas login` as its owner or
     hand over an id under `kyle_jeffrey` / `stout-agtech`.
-  - [x] In-app **account deletion** — `8b97812`. `DELETE /api/me` (data first,
-    Clerk identity last, retryable partway) behind a two-tap confirm on the
-    Your-account screen, exactly where the privacy page points.
   - [ ] Screenshots (simulator + seeded data), the Play feature graphic, and the
     `expo-updates` decision (not installed → no OTA channel).
   - [ ] Then the website advertises the app: store badges on `/`, and a smart
     banner on web pages rather than "Open the app" pointing at itself.
+  - In-app account deletion (a store requirement) is done — `8b97812`.
 - [ ] **The venue-name bugs**, which are also SEO bugs (titles get rewritten by
-  Google when they name two places):
-  - [x] **Ingestion maps a new junk-named venue to its same-spot room instead
-    of inserting it** (2026-07-31). A tour-title venue unknown to the table is
-    looked up by location first; a same-spot match adopts the listing (resolved
-    straight to the cluster head) and no row is ever written. Unknown spots
-    still insert, because the show needs somewhere to hang. Verified on local
-    D1: junk at The Fillmore's coordinates → venue count unchanged, event on
-    The Fillmore; junk at empty coordinates → row inserted; re-ingest matched
-    without duplicating.
+  Google when they name two places). Junk-named *new* venues now adopt their
+  same-spot room at ingest (2026-07-31); what's left:
   - [ ] A dash-separated billing ("PROGRESSIVE HOUSE NEVER DIED - Seattle") is
     not caught, deliberately — it reads exactly like "The Eastern-GA" to a
     string rule. Pinned as a known miss in `dedupe.test.ts`; wants a source-side
@@ -209,21 +139,9 @@ during A/B):
 - [ ] Watch production crawl runs for CPU/subrequest limits; raise `CRAWL_BATCH`
   if there's headroom, and measure where `SG_MAX_PAGES=3` cuts off in *time*
   before deciding it's enough.
-- [~] `time_unknown` column — done (migration 0017). SeatGeek `time_tbd` and
-  Ticketmaster missing-`dateTime` listings now land pinned to noon at the venue
-  with the flag set; `mergeShow` never lets the placeholder displace a real
-  time and clears the flag when one arrives; matching uses a same-local-day
-  window (`TBD_SHOW_MATCH_HOURS=12` — 13 reached a real 11pm show the night
-  before) so the placeholder and the real listing become one row without
-  collapsing two-night runs. Everything that asks "still upcoming?" goes
-  through one `stillUpcoming` predicate that keeps a flagged show alive until
-  midnight at the venue rather than retiring it at its noon placeholder — the
-  feeds, sitemap, hub pages, noindex, the review/RSVP gates and the client's
-  hasHappened all share it. Cards, detail pages and the server-rendered pages
-  print the date with no clock ("Time TBA" on the event page), and JSON-LD
-  publishes a date-only `startDate`. Verified end-to-end on production with a
-  real flagged show from each source. Residual: rows ingested before this were
-  skipped entirely, so flagged shows appear as sources re-crawl.
+- Time-TBD shows landed 2026-07-31 (migration 0017, `time_unknown`) — the one
+  residual: rows those sources skipped before it exist only upstream, so flagged
+  shows accumulate as the crawls re-sweep. Nothing to do but wait.
 - [ ] Venue-calendar adapters for the DIY tier (WP "The Events Calendar" JSON,
   iCal). A subsystem with a robots/ToS judgement call, not an afternoon.
 - [ ] Scheduled discovery for launch cities (optional cron sweep).
@@ -253,8 +171,6 @@ during A/B):
 - [ ] **Delete the inert Worker secret `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`** —
   runtime secrets are invisible to `expo export`; it does nothing and reads as
   if it did.
-- [x] **Clerk social slots** — resolved 2026-07-31: Apple + Google + Spotify,
-  Facebook dropped (verified via `/v1/environment`). The planned three exactly.
 - [ ] **Search Console + Bing Webmaster verification.** One-time, worth more
   than further on-page SEO.
 - [ ] **IndexNow 429s are origin-level** (Worker egress IPs; the same payload

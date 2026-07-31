@@ -459,6 +459,13 @@ against its URL, so without a new URL an existing share keeps showing the old on
 - **Near Me** — the home feed calls `POST /nearby` for the device's location and
   auto-triggers `POST /discover-events` (server-throttled per area) to keep the
   area fresh. A Nearby/Following toggle filters to followed artists.
+- **Honest times** — a show whose set time isn't announced (SeatGeek `time_tbd`,
+  Ticketmaster with no `dateTime`) is stored pinned to noon at the venue with a
+  `time_unknown` flag, rather than skipped or given a made-up clock. Every
+  surface prints its date with no time ("Time TBA" on the event page),
+  structured data publishes a date-only `startDate`, and the listing counts as
+  upcoming until midnight at the venue. The flag clears when any source
+  publishes a real time, and a placeholder can never overwrite one.
 - **Following** — the app POSTs its follow list to `refresh-artist-events` on
   launch / pull-to-refresh to pull those artists' upcoming shows.
 - **Reminders** — local notifications scheduled on-device the day before a
