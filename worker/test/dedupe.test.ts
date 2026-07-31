@@ -4,6 +4,7 @@ import { representative } from '../src/data';
 import {
   agreesWithCluster,
   bestVenueMatch,
+  dashBillingVenueName,
   guessUtcOffsetHours,
   isPlaceholderPoint,
   looksLikeEventTitle,
@@ -176,11 +177,12 @@ describe('venue identity', () => {
   });
 
   it('lets through an event title that is punctuated like a venue', () => {
-    // Pinned as a known miss, not an aspiration. This is a real row and it is
-    // plainly a billing, but it has no colon, no "tour" and no "presents" — it
-    // separates with a dash, and so do real rooms ("The Eastern-GA", "Stage AE -
-    // Outdoors"). A dash rule would cost more true names than it saves false ones,
-    // so this shape is left for a source-side fix rather than a string rule.
+    // Pinned as a known miss for the *string* rule, not an aspiration. It has no
+    // colon, no "tour" and no "presents" — it separates with a dash, and so do
+    // real rooms ("The Eastern-GA", "Stage AE - Outdoors"). A dash rule here
+    // would cost more true names than it saves false ones. The source-side fix
+    // is `dashBillingVenueName`, judged with the listing's own context — and
+    // this exact row escapes even that (see its tests below).
     expect(looksLikeEventTitle('PROGRESSIVE HOUSE NEVER DIED - Seattle')).toBe(false);
   });
 
@@ -275,6 +277,44 @@ describe('venue identity', () => {
     // The ≤50m rule does not consult the name, which is what keeps the stricter
     // `venueNamesAgree` from losing real duplicates.
     expect(sameVenue(at('The Theatre', 37.7756, -122.4376), at('Music Hall', 37.7757, -122.4376))).toBe(true);
+  });
+});
+
+describe('dash-separated billings', () => {
+  // Every case below is a real production row from the 2026-07-31 measurement —
+  // the spec is the data, not what we assume a billing looks like.
+
+  it('catches a billing whose prefix carries the act, suffixed with its own city', () => {
+    expect(dashBillingVenueName('MGMT DJ SET - San Francisco ', 'San Francisco', 'MGMT')).toBe(true);
+    expect(dashBillingVenueName('JOURNEY OF A LIFETIME - MIAMI', 'Miami', 'Journey')).toBe(true);
+  });
+
+  it('catches a tour-shaped prefix suffixed with its own city, whoever is playing', () => {
+    expect(dashBillingVenueName('TASHA UNSCRIPTED NIGHTS TOUR - BOSTON', 'Boston', 'Tasha Cobbs')).toBe(true);
+  });
+
+  it('spares real rooms that suffix their own city', () => {
+    // SeatGeek writes this shape on legitimate venues — the whole reason the
+    // string rule refused a dash rule.
+    expect(dashBillingVenueName('Fox Theater - Oakland', 'Oakland', 'MGMT')).toBe(false);
+    expect(dashBillingVenueName('Bottom of the Hill - San Francisco', 'San Francisco', 'Wednesday')).toBe(false);
+  });
+
+  it('spares dash-named rooms whose suffix is not the city', () => {
+    expect(dashBillingVenueName('PALAIS DES CONGRES - SALLE MAURICE RAVEL', 'Le Touquet-paris-plage', 'Anyone')).toBe(false);
+    expect(dashBillingVenueName('Williams Center - Black Box - Rutherford', 'Rutherford', 'Anyone')).toBe(false);
+    // "Rutherford" IS the suffix here — but "Williams Center - Black Box" is
+    // neither tour-shaped nor the act, so the second guard holds.
+  });
+
+  it('needs the spaced dash — "The Eastern-GA" is one word to it', () => {
+    expect(dashBillingVenueName('The Eastern-GA', 'Atlanta', 'The Eastern')).toBe(false);
+  });
+
+  it('still misses the club-night brand, knowingly', () => {
+    // No artist token, no tour word: nothing in the listing separates this from
+    // a room. Pinned as the residual the todo entry accepts.
+    expect(dashBillingVenueName('PROGRESSIVE HOUSE NEVER DIED - Seattle', 'Seattle', 'Some DJ')).toBe(false);
   });
 });
 

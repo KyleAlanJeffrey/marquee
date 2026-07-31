@@ -117,6 +117,45 @@ export function looksLikeEventTitle(name: string | null | undefined): boolean {
   return n.length > VENUE_NAME_MAX || n.includes(':') || looksLikeTourName(n);
 }
 
+/**
+ * Is this "venue name" a dash-separated billing — "MGMT DJ SET - San Francisco",
+ * "JOURNEY OF A LIFETIME - MIAMI" — rather than a room?
+ *
+ * A string rule can't answer this: "Fox Theater - Oakland" and "MGMT DJ SET -
+ * San Francisco" are the same shape, and SeatGeek writes that redundant city
+ * suffix on perfectly real rooms (measured on production, 2026-07-31). So the
+ * question needs the listing's own context, which only the source mapping has:
+ * the suffix must be the listing's own city, *and* the prefix must vouch
+ * against itself — by carrying the act's own name (no room is named after
+ * tonight's act) or by reading as a tour. Both conditions, deliberately: either
+ * alone junks real venues ("PALAIS DES CONGRES - SALLE MAURICE RAVEL" is
+ * all-caps and dashed; "Bottom of the Hill - San Francisco" suffixes its city).
+ *
+ * Known miss, accepted: a club-night brand with no artist token ("PROGRESSIVE
+ * HOUSE NEVER DIED - Seattle") passes both guards and stays a known miss —
+ * there is nothing in the listing that distinguishes it from a room.
+ */
+export function dashBillingVenueName(
+  name: string | null | undefined,
+  city: string | null | undefined,
+  artistName: string | null | undefined,
+): boolean {
+  const n = name?.trim();
+  const town = city?.trim();
+  if (!n || !town) return false;
+  const cut = n.lastIndexOf(' - ');
+  if (cut <= 0) return false;
+  const prefix = n.slice(0, cut).trim();
+  const suffix = n.slice(cut + 3).trim();
+  if (!prefix || !suffix) return false;
+  const fold = (s: string) => normalizeWords(s).join(' ');
+  const suffixWords = fold(suffix);
+  if (!suffixWords || suffixWords !== fold(town)) return false;
+  if (looksLikeTourName(prefix)) return true;
+  const act = (artistName ?? '').trim().toLowerCase();
+  return act.length > 2 && prefix.toLowerCase().includes(act);
+}
+
 const normalizeWords = (s: string): string[] =>
   s
     .toLowerCase()

@@ -33,7 +33,7 @@ import {
   tierFor,
 } from './crawl';
 import { getDb, type DB } from './db';
-import { guessUtcOffsetHours } from './dedupe';
+import { dashBillingVenueName, guessUtcOffsetHours } from './dedupe';
 import { utcMsFromLocal, zoneFor } from './timezone';
 import { fetchVenueEnrichment, type VenueEnrichment } from './venue-info';
 import type { Env } from './env';
@@ -339,6 +339,11 @@ export function bitToEventInputs(artist: BitArtist, bitEvents: any[]): EventInpu
               source: 'bandsintown',
               source_venue_id: String(e.venue.id ?? `${e.venue.name}-${e.venue.city}`),
               name: e.venue.name ?? 'Unknown venue',
+              // "MGMT DJ SET - San Francisco" filed as the venue: the billing
+              // class only separates from real dash-named rooms with the
+              // listing's own artist and city in hand, so it's judged here
+              // rather than by a string rule downstream.
+              junk_name: dashBillingVenueName(e.venue.name, e.venue.city, artist.name) || undefined,
               city: e.venue.city ?? null,
               region: e.venue.region ?? null,
               country: e.venue.country ?? null,

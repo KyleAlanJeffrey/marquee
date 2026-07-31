@@ -101,6 +101,10 @@ export type VenueRow = {
   source: string;
   source_venue_id: string;
   name: string;
+  /** The source mapping's verdict that `name` is a billing, not a room — made
+   *  with context (the listing's own city and artist) that no string rule
+   *  downstream can see. See `dashBillingVenueName`. */
+  junk_name?: boolean;
   city: string | null;
   region: string | null;
   country: string | null;
@@ -1116,7 +1120,10 @@ export async function persist(db: DB, raw: EventInput[], limits?: SanitizeLimits
   // and the conflict-update path owns them.
   const junkKeys = venueKeys.filter((k) => {
     const v = venueRows.get(k)!;
-    return looksLikeEventTitle(v.name) && v.lat != null && v.lng != null;
+    // Two verdicts feed this: the string rule, and the source mapping's own
+    // (`junk_name`), which sees the listing's city and artist and catches the
+    // dash-separated billings the string rule deliberately lets through.
+    return (looksLikeEventTitle(v.name) || v.junk_name === true) && v.lat != null && v.lng != null;
   });
   if (junkKeys.length) {
     const known = await batchChunked<{ id: string }[]>(
@@ -1203,7 +1210,7 @@ export async function persist(db: DB, raw: EventInput[], limits?: SanitizeLimits
             // room's real name survived only until its next tour stop. The other
             // direction stays open on purpose: a junk stored name is replaced the
             // moment the feed sends a real one.
-            name: looksLikeEventTitle(v.name) ? sql`name` : sql`excluded.name`,
+            name: looksLikeEventTitle(v.name) || v.junk_name === true ? sql`name` : sql`excluded.name`,
             city: sql`excluded.city`,
             region: sql`excluded.region`,
             country: sql`excluded.country`,

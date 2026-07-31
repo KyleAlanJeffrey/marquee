@@ -71,6 +71,21 @@ describe('bitToEventInputs', () => {
     expect(inputs.every((i) => i.ends_at === null || /T\d{2}:\d{2}:\d{2}Z$/.test(i.ends_at!))).toBe(true);
   });
 
+  it('marks a dash-separated billing filed as the venue, using its own context', () => {
+    // "MGMT DJ SET - San Francisco" is only tellable from "Fox Theater - Oakland"
+    // with the listing's artist and city in hand, so the verdict is made here in
+    // the mapping and carried on the row (`junk_name`) for persist to act on.
+    const base = fixture[0] as Record<string, unknown>;
+    const billing = {
+      ...base,
+      venue: { ...(base.venue as object), name: 'WEDNESDAY DJ SET - San Francisco', city: 'San Francisco' },
+    };
+    const [mapped] = bitToEventInputs(artist, [billing]);
+    expect(mapped.venue?.junk_name).toBe(true);
+    // The real payload's venues are all rooms — none should carry the mark.
+    expect(inputs.every((i) => i.venue?.junk_name === undefined)).toBe(true);
+  });
+
   it('drops events with an unusable datetime instead of losing the artist', () => {
     const bad = [{ id: '1', datetime: 'not-a-date', venue: {} }, { id: '2', venue: {} }, { datetime: '2026-08-01T20:00:00' }];
     expect(bitToEventInputs(artist, bad)).toHaveLength(0);
