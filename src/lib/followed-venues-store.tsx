@@ -41,6 +41,7 @@ export const sameFollowedVenue = (v: FollowedVenue, ref: VenueRef) => !!ref.venu
 const collection = createCollection<VenueRef, FollowedVenue>({
   storageKey: 'marquee.followed-venues.v1',
   label: 'followed venues',
+  requiresAccount: 'follow venues',
   isValid: isFollowedVenue,
   matches: sameFollowedVenue,
 });

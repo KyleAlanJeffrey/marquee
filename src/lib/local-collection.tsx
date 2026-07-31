@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from 'react';
 
+import { useWriteGate } from '@/lib/write-gate';
+
 /**
  * A list the user owns, kept on the device. Follows, followed venues and saved
  * shows are all the same object: a set of things identified by some reference,
@@ -56,6 +58,16 @@ export type CollectionConfig<Ref, T extends Ref> = {
   storageKey: string;
   /** Named in the warning when a read or write fails. */
   label: string;
+  /**
+   * Set to gate *growing* this list behind an account — the value is the action
+   * phrase the sign-in screen shows, e.g. `'save shows'` → "Sign in to save shows".
+   *
+   * Removals are never gated, whatever this says. Somebody who used the app before
+   * accounts existed still has their lists, and locking them out of their own
+   * delete button would be a bug wearing a policy's clothes. You need an account to
+   * keep things; you never need one to stop keeping them.
+   */
+  requiresAccount?: string;
   isValid: (value: unknown) => value is T;
   matches: (item: T, ref: Ref) => boolean;
 };
@@ -85,10 +97,11 @@ export function mergeStored<Ref, T extends Ref>(
 }
 
 export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Ref, T>) {
-  const { storageKey, label, isValid, matches } = config;
+  const { storageKey, label, requiresAccount, isValid, matches } = config;
   const Context = createContext<Collection<T, Ref> | null>(null);
 
   function Provider({ children }: { children: ReactNode }) {
+    const gate = useWriteGate();
     const [items, setItems] = useState<T[]>([]);
     const [ready, setReady] = useState(false);
     // Separate from `ready`: the UI can render as soon as the read *finishes*, but
@@ -167,6 +180,18 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
 
     const has = useCallback((ref: Ref) => items.some((i) => matches(i, ref)), [items]);
 
+    /**
+     * True when this write should be refused, and it asks for sign-in on the way.
+     *
+     * Called before touching state, never from inside a `setItems` updater — the
+     * refusal navigates, and React replays updaters.
+     */
+    const blocked = useCallback(() => {
+      if (!requiresAccount || gate.allowed) return false;
+      gate.deny(requiresAccount);
+      return true;
+    }, [gate]);
+
     const markTouched = useCallback(() => {
       touched.current = true;
       if (hydrated.current) void reread();
@@ -174,10 +199,11 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
 
     const add = useCallback(
       (item: T) => {
+        if (blocked()) return;
         markTouched();
         setItems((prev) => (prev.some((i) => matches(i, item)) ? prev : [item, ...prev]));
       },
-      [markTouched],
+      [markTouched, blocked],
     );
 
     const remove = useCallback(
@@ -190,6 +216,9 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
     );
 
     const toggle = useCallback((item: T) => {
+      // Only the add half is gated, so decide which half this is out here, where
+      // `items` can be read without being inside an updater.
+      if (!items.some((i) => matches(i, item)) && blocked()) return;
       markTouched();
       setItems((prev) => {
         if (prev.some((i) => matches(i, item))) {
@@ -201,10 +230,11 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
         }
         return [item, ...prev];
       });
-    }, [markTouched]);
+    }, [markTouched, blocked, items]);
 
     const update = useCallback(
       (ref: Ref, patch: Partial<T>) => {
+        if (blocked()) return;
         markTouched();
         setItems((prev) => {
           const at = prev.findIndex((i) => matches(i, ref));
@@ -214,7 +244,7 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
           return next;
         });
       },
-      [markTouched],
+      [markTouched, blocked],
     );
 
     const value = useMemo(

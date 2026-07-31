@@ -104,6 +104,7 @@ export const sameAttendance = (a: Attendance, ref: AttendanceRef) =>
 const collection = createCollection<AttendanceRef, Attendance>({
   storageKey: 'marquee.attendances.v1',
   label: 'shows you went to',
+  requiresAccount: "log the shows you've been to",
   isValid: isAttendance,
   matches: sameAttendance,
 });

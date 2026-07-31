@@ -12,6 +12,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["wrangler", "dev", "--remote", "--port", "8787"],
       "port": 8787
+    },
+    {
+      "name": "worker-local",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["wrangler", "dev", "--port", "8787"],
+      "port": 8787
     }
   ]
 }

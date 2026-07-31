@@ -351,6 +351,66 @@ having no keys at all, because the app would look signed-in while every write 40
   and `npx wrangler secret put CLERK_SECRET_KEY` for production. Until then, don't
   build sign-in UI that implies the server knows who you are.
 
+#### The gate: browse open, keeping gated (decided by Kyle 2026-07-31)
+
+Asked how hard the account requirement should be, Kyle chose **gate saving, allow
+browsing**. Search, explore, town pages and every detail page work signed out;
+following an artist or venue, saving a show and logging one you went to do not.
+
+Enforced in **one place** — `write-gate.tsx` plus the four mutators in
+`local-collection.tsx` — rather than at each button, because all four lists are the
+same `createCollection`. That gates the eight-odd screens that call them today and,
+more usefully, the ninth written later by someone who never read this file.
+
+Two rules inside it worth keeping:
+
+- **Removals are never gated.** Somebody who used the app before accounts existed
+  still has their lists; locking them out of their own delete button would be a bug
+  wearing a policy's clothes. You need an account to keep things, never to stop.
+- **No key means no gate.** With `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` unset the gate
+  is open, so a fork or a local run behaves exactly as the app did before accounts.
+  Failing closed would turn a missing env var into an app where nothing saves and
+  nothing says why.
+
+Verified on web signed out: tapping "Were you there?" routes to
+`/sign-in?why=log%20the%20shows%20you%27ve%20been%20to` and
+`marquee.attendances.v1` stays `[]` — the write is refused, not silently dropped.
+
+**What this does *not* yet do:** the data still lives only on the device. Signing in
+unlocks the button; it does not yet sync anything or make it portable. That half
+needs the Worker to trust a session, so it is blocked on `CLERK_SECRET_KEY`.
+
+- [ ] **Server-side storage for the four lists** — D1 tables, routes, and migrate
+  the device's copy up on first sign-in. Blocked on the secret key. Until it lands,
+  the gate is friction ahead of its own payoff, which is the right order but not a
+  good place to stop.
+
+#### The instance is configured wrong for iOS (found 2026-07-31)
+
+Read off the instance rather than assumed
+(`GET /v1/environment` on `kind-redfish-41.clerk.accounts.dev`), confirmed by what
+the sign-in screen actually renders:
+
+- **Enabled:** email + password (verified by `email_code`), **Facebook**, **Google**.
+- **Not enabled:** **Apple**, **Spotify**.
+
+Two consequences:
+
+1. **This would be rejected from the App Store.** Offering Google and Facebook while
+   not offering Sign in with Apple is exactly what guideline 4.8 forbids. Apple is
+   not optional here — it is the price of the other two.
+2. **Facebook was never in the plan and it costs one of only three slots.** The free
+   tier allows 3 social connections; Apple + Google + Spotify was already exactly
+   three. Facebook occupying a slot means something planned can't have one.
+
+- [ ] **Kyle, in the Clerk dashboard:** enable **Apple** and **Spotify**, and drop
+  **Facebook** unless you want it instead of Spotify. No code change either way —
+  the sign-in screen renders whatever the instance reports.
+
+Also visible and expected: "Secured by Clerk" and a "Development mode" badge. The
+first goes away on the $25/mo Pro plan, the second when a production instance
+replaces this `pk_test_` one.
+
 #### Package correction: `@clerk/expo`, not `@clerk/clerk-expo`
 
 Clerk's own current Expo guide (the one Kyle sent) installs **`@clerk/expo`**.

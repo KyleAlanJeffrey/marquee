@@ -23,6 +23,7 @@ import { FollowsProvider } from '@/lib/follows-store';
 import { useNotificationObserver } from '@/lib/notifications';
 import { PrefsProvider } from '@/lib/prefs-store';
 import { SavedShowsProvider } from '@/lib/saved-shows-store';
+import { WriteGateProvider } from '@/lib/write-gate-provider';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 60 * 1000 } },
@@ -45,9 +46,14 @@ const navTheme = {
 /**
  * Everything the user owns lives on the device, so there are five of these and
  * they nest. Composed here rather than inline to keep the tree below readable.
+ *
+ * `WriteGateProvider` wraps them because four of the five ask it whether the user
+ * is allowed to add to their lists, and it in turn reads `AuthProvider`. The order
+ * auth → gate → stores is load-bearing, not stylistic.
  */
 function LocalStores({ children }: { children: React.ReactNode }) {
   return (
+    <WriteGateProvider>
     <FollowsProvider>
       <FollowedVenuesProvider>
         <SavedShowsProvider>
@@ -57,6 +63,7 @@ function LocalStores({ children }: { children: React.ReactNode }) {
         </SavedShowsProvider>
       </FollowedVenuesProvider>
     </FollowsProvider>
+    </WriteGateProvider>
   );
 }
 
@@ -97,6 +104,20 @@ export default function RootLayout() {
                       presentation: 'modal',
                       headerShown: true,
                       title: 'Find artists',
+                      headerStyle: { backgroundColor: theme.background },
+                      headerTintColor: theme.primary,
+                      headerTitleStyle: { fontFamily: Fonts.headlineMd, color: theme.text },
+                    }}
+                  />
+                  {/* A modal, because it is always an interruption: you reached it
+                      by trying to keep something, and you should land back where
+                      you were rather than somewhere new. */}
+                  <Stack.Screen
+                    name="sign-in"
+                    options={{
+                      presentation: 'modal',
+                      headerShown: true,
+                      title: 'Your account',
                       headerStyle: { backgroundColor: theme.background },
                       headerTintColor: theme.primary,
                       headerTitleStyle: { fontFamily: Fonts.headlineMd, color: theme.text },

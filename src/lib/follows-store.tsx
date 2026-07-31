@@ -52,6 +52,7 @@ export function sameArtist(a: FollowedArtist, ref: ArtistRef): boolean {
 const collection = createCollection<ArtistRef, FollowedArtist>({
   storageKey: 'marquee.follows.v1',
   label: 'follows',
+  requiresAccount: 'follow artists',
   isValid: isFollowedArtist,
   matches: sameArtist,
 });

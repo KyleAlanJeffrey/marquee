@@ -12,6 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { authConfigured, useAuth } from '@/lib/auth';
 import { useFollows } from '@/lib/follows-store';
 import { RADIUS_OPTIONS, usePrefs } from '@/lib/prefs-store';
 import { ensureNotificationPermission } from '@/lib/reminders';
@@ -28,6 +29,7 @@ function Label({ children }: { children: string }) {
 export default function ProfileScreen() {
   const theme = useTheme();
   const { follows, unfollow } = useFollows();
+  const { signedIn, displayName, loading } = useAuth();
   const { radiusMiles, setRadiusMiles, remindersEnabled, setRemindersEnabled } = usePrefs();
   const [toggling, setToggling] = useState(false);
 
@@ -66,13 +68,45 @@ export default function ProfileScreen() {
           Profile
         </ThemedText>
 
+        {/* First, because it is now the thing the rest depends on: with accounts
+            switched on, following and saving need one. Hidden entirely in a build
+            with no Clerk key, where they don't. */}
+        {authConfigured ? (
+          <>
+            <Label>ACCOUNT</Label>
+            <GlassCard style={styles.card}>
+              <PressableScale
+                haptic
+                accessibilityRole="button"
+                accessibilityLabel={signedIn ? 'Manage your account' : 'Sign in'}
+                onPress={() => router.push('/sign-in')}
+                style={styles.row}>
+                <Ionicons
+                  name={signedIn ? 'person-circle' : 'person-circle-outline'}
+                  size={26}
+                  color={signedIn ? theme.primary : theme.textTertiary}
+                />
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="smallBold">
+                    {loading ? 'Checking…' : signedIn ? (displayName ?? 'Your account') : 'Not signed in'}
+                  </ThemedText>
+                  <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                    {signedIn ? 'MANAGE OR SIGN OUT' : 'NEEDED TO FOLLOW, SAVE AND LOG SHOWS'}
+                  </ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+              </PressableScale>
+            </GlassCard>
+          </>
+        ) : null}
+
         <Label>REMINDERS</Label>
         <GlassCard style={styles.card}>
           <View style={styles.switchRow}>
             <View style={{ flex: 1, gap: 2 }}>
               <ThemedText type="smallBold">Show reminders</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {'A heads-up the day before a followed artist plays near you. Stored on this device — no account needed.'}
+                {'A heads-up the day before a followed artist plays near you. The setting itself is just a switch on this device — the follows it reminds you about are what need an account.'}
               </ThemedText>
             </View>
             <Switch
@@ -182,6 +216,7 @@ const styles = StyleSheet.create({
   card: { padding: Spacing.three, gap: Spacing.two },
   listCard: { padding: 0, overflow: 'hidden' },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   radiusRow: { flexDirection: 'row', gap: Spacing.two, marginBottom: Spacing.two },
   radiusPill: {
     flex: 1,

@@ -53,6 +53,7 @@ export const sameSavedShow = (s: SavedShow, ref: ShowRef) => !!ref.eventId && s.
 const collection = createCollection<ShowRef, SavedShow>({
   storageKey: 'marquee.saved-shows.v1',
   label: 'saved shows',
+  requiresAccount: 'save shows',
   isValid: isSavedShow,
   matches: sameSavedShow,
 });
