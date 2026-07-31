@@ -351,6 +351,47 @@ having no keys at all, because the app would look signed-in while every write 40
   and `npx wrangler secret put CLERK_SECRET_KEY` for production. Until then, don't
   build sign-in UI that implies the server knows who you are.
 
+#### Measured state of the deployment, 2026-07-31
+
+Checked rather than assumed, because the two halves of a Clerk setup fail in
+opposite directions and neither one announces itself.
+
+| Where | Publishable key | `CLERK_SECRET_KEY` |
+| --- | --- | --- |
+| local `.env` / `.dev.vars` | present | **absent** |
+| production (marquee.rocks) | **absent from the bundle** | **absent** |
+
+How each was established, so the next person doesn't have to re-derive it:
+
+- The production web bundle (`/_expo/static/js/web/entry-*.js`, 2.99 MB) contains
+  `ClerkProvider` 11 times but **zero** occurrences of the instance host
+  `kind-redfish` or of the key body `a2luZC1yZWRmaXNo`. The one `pk_test_` hit is
+  Clerk's own prefix constant (`s="pk_live_",l="pk_test_"`), not our key. So
+  `authConfigured` is false in production.
+- Confirmed by behaviour, not just by grep: `https://marquee.rocks/settings`
+  renders sections `MARQUEE, REMINDERS, SEARCH RADIUS, BUILT BY` — **no ACCOUNT
+  row**. Sign-in is unreachable in production today, and the gate is open, which
+  is `OPEN_GATE` doing exactly what it was written to do.
+- `GET https://marquee.rocks/api/me` → `{"signed_in":false,"configured":false,"user":null}`.
+
+**The mistake worth writing down**: the publishable key was set as a Worker
+*runtime secret* (`wrangler secret list` shows `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`
+alongside `ADMIN_TOKEN`, `INDEXNOW_KEY`, …). That does nothing. `EXPO_PUBLIC_*` is
+read by Metro at **build** time and inlined into the bundle; a Worker runtime
+binding is not visible to `npm run build`. The header comment in `wrangler.jsonc`
+already says this — "EXPO_PUBLIC_* are build *variables*, not secrets" — it just
+isn't where anyone looks while pasting a key into the dashboard.
+
+- [ ] **Kyle:** add `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` under **Workers Builds →
+  Build variables** (not Variables and Secrets), then redeploy. Delete the runtime
+  secret of the same name; it is inert and misleading.
+- [ ] **Kyle:** `CLERK_SECRET_KEY` — still absent everywhere. This is the half that
+  makes a session mean anything to the API.
+
+Order matters: the build variable alone gives a working sign-in whose sessions the
+server ignores. The secret key alone gives a server ready to trust sessions nobody
+can create. Both, and only then is there anything to sync.
+
 #### The gate: browse open, keeping gated (decided by Kyle 2026-07-31)
 
 Asked how hard the account requirement should be, Kyle chose **gate saving, allow
@@ -406,6 +447,13 @@ Two consequences:
 - [ ] **Kyle, in the Clerk dashboard:** enable **Apple** and **Spotify**, and drop
   **Facebook** unless you want it instead of Spotify. No code change either way —
   the sign-in screen renders whatever the instance reports.
+
+Re-read the instance on 2026-07-31 after the last round of changes: still
+`oauth_facebook, oauth_google` only, first factor `email_address`, password
+required, CAPTCHA on. So neither Apple nor Spotify has been added yet. This is
+checkable any time without the dashboard —
+`GET https://kind-redfish-41.clerk.accounts.dev/v1/environment?__clerk_api_version=2025-04-10&_clerk_js_version=5.100.0`
+reports `user_settings.social` publicly.
 
 Also visible and expected: "Secured by Clerk" and a "Development mode" badge. The
 first goes away on the $25/mo Pro plan, the second when a production instance
