@@ -382,9 +382,12 @@ binding is not visible to `npm run build`. The header comment in `wrangler.jsonc
 already says this — "EXPO_PUBLIC_* are build *variables*, not secrets" — it just
 isn't where anyone looks while pasting a key into the dashboard.
 
-- [ ] **Kyle:** add `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` under **Workers Builds →
-  Build variables** (not Variables and Secrets), then redeploy. Delete the runtime
-  secret of the same name; it is inert and misleading.
+- [x] Fixed by committing `.env.production` instead — see below. The dashboard build
+  variable would also have worked; a tracked file was chosen because it survives a
+  fresh clone and a fresh CI runner.
+- [ ] **Kyle:** delete the runtime secret `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`
+  (`npx wrangler secret delete …`). It is inert and reads as if it were doing
+  something.
 - [x] `CLERK_SECRET_KEY` — set 2026-07-31, both halves:
   `.dev.vars` for local dev and `wrangler secret put` for the deployed Worker.
 
@@ -453,6 +456,39 @@ before. With the patch reverted, a cold load tapping Follow at 7.2s denies by 8.
 - [ ] **Unverified half:** pending → *signed in* → the held write applies. It needs
   a real session, and creating an account isn't something I can do. Sign in, then
   tap Follow during a cold start and check the artist lands in Following.
+
+#### Why the deploy had no accounts in it, and the fix, 2026-07-31
+
+Kyle: "not seeing any deployed clerk account logic". Correct, and it wasn't a code
+problem. Workers Builds rebuilt fine — the deployed bundle hash moved from
+`entry-eff892b0…` to `entry-591381e0…` on the previous pushes — but that build had
+no `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` in its environment, so `authConfigured` came
+out false and every account-shaped thing compiled itself out. Zero occurrences of
+the instance host in a 3.0 MB bundle.
+
+Runtime Worker secrets are **not** visible to `expo export`, which is now proven
+twice over: the key had been sitting in Variables and Secrets across two rebuilds
+and never reached a bundle.
+
+**Fix: `.env.production`, tracked, with a `!.env.production` exception in
+`.gitignore`.** A Workers Builds build variable would also have worked, but only in
+that one dashboard — a fresh clone, a fork, or a new CI runner would build an
+accountless app with nothing to indicate why. Expo's precedence keeps the dashboard
+route open anyway: a real environment variable beats the file, so a build variable
+or an `eas.json` `env` entry still wins where one exists.
+
+Verified by building rather than by reasoning about it — `npm run build`, then
+grepping `dist/_expo/static/js/web/entry-*.js`: key body present once, API origin
+present once.
+
+This also fixes native release builds, which `eas.json` never set the key for.
+
+**On committing it to a public repo:** a Clerk publishable key is public by
+construction. It is inlined into the bundle every visitor downloads, names the
+instance and authorises nothing; the repo is not where it becomes visible. The one
+real abuse angle is sign-up spam against the dev instance, and that instance has
+CAPTCHA enabled. `CLERK_SECRET_KEY` is the half that matters and it is in neither
+the repo nor the bundle.
 
 #### The gate: browse open, keeping gated (decided by Kyle 2026-07-31)
 

@@ -49,6 +49,10 @@ supabase/.temp
 .env
 .env.*
 !.env.example
+# Tracked deliberately: EXPO_PUBLIC_* values are inlined into the public bundle
+# anyway, and a build variable that only exists in the Cloudflare dashboard is a
+# build that breaks on a fresh clone with nothing saying why.
+!.env.production
 
 # Cloudflare Worker
 .wrangler/
