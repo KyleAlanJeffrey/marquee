@@ -50,8 +50,14 @@ to the diff that acted on it. This file is only what's left.
 2. [x] **Stop throwing the past away** — done in `71dff0d`. It was P0 for a reason
    worth remembering: history is only lost *once*, and every day the 24-hour drop
    stayed was a day nothing could re-fetch.
-3. [ ] **Check Setlist.fm** (phase 0.5). Everything about the back-catalogue
-   depends on the answer, and it is a day's investigation, not a build.
+3. [x] **Check Setlist.fm** (phase 0.5) — checked 2026-07-31, and the answer is
+   **no**. Their API terms forbid retaining copies of the data, restrict it to
+   non-commercial use, and bar competing products; any one of those kills a
+   backfill. Write-up under "The blocker nobody would guess". The consequence is
+   the item below: **there is no importable past, so let people type one in.**
+   - [ ] **Let people add a show that isn't in the catalogue.** Promoted from
+     fallback to required. Needs `sameShow`/`sameVenue` matching against typed
+     input, and a private-by-default decision so it needs no moderation on day one.
 4. [~] **Accounts and auth — an off-the-shelf service, not ours to build.**
    **Clerk**, picked 2026-07-30; reasoning under "Accounts" below. Wiring starts
    now and is deliberately split around the keys, which arrive 2026-07-31:
@@ -184,15 +190,41 @@ back-catalogue and no source currently wired that could provide one. You could n
 log a gig you went to last year, which is most of what somebody would want to log
 on day one.
 
-Three ways out, and the choice shapes the product:
+Three ways out, and the choice shapes the product. **The first one is now closed**
+— see below — which means the answer is 3 then 2, and the honest version of the
+product is "your history starts now, and you can fill in the rest by hand":
 
-1. **Setlist.fm.** The right answer, and worth checking early. It is specifically
-   an archive of *past* concerts — per artist, per venue, per date — with a free
-   API key, MusicBrainz ids to join on, and the actual setlist, which is both the
-   back-catalogue and a genuinely good reason to open a past show's page. Risks to
-   check before committing: rate limits, terms on storing their data, and how well
-   its venue identity joins to ours (our clustering is coordinate-led, theirs is
-   name-led, and it publishes no coordinates).
+1. ~~**Setlist.fm.**~~ **Checked 2026-07-31. It cannot be the back-catalogue.**
+   It looked like the right answer — an archive of *past* concerts per artist, per
+   venue, per date, free key, MusicBrainz ids to join on. Then I read the API terms
+   ([setlist.fm/help/api-terms](https://www.setlist.fm/help/api-terms)), and three
+   clauses each independently rule out the thing we wanted it for:
+   - **No storage.** You may not "retain any copies of the Setlist.fm data, except
+     for the purposes of retaining cached information for short periods", and you
+     must "make direct server calls to the API … and distribute the Setlist.fm data
+     to end users … immediately upon receipt". A backfill into D1 *is* retaining
+     copies. This one is fatal on its own: the entire premise was populating our
+     own past.
+   - **Non-commercial only**, where "if the primary purpose of your application is
+     to derive revenue, it is considered commercial". True of Marquee today, and
+     the ticketing-affiliate item under "Ticketing & enrichment" is exactly the
+     thing that would stop it being true. Building the past on a source we'd have
+     to rip out the day the app earns a pound is a trap.
+   - **No competing use.** setlist.fm already has attendance marking — its API even
+     exposes `/1.0/user/{userId}/attended`. A public log of gigs you went to is
+     arguably the product they offer. That is their call to make, not ours to
+     assume, and it is a poor foundation.
+
+   The join is weak anyway: their artist endpoints are mbid-keyed, and production
+   D1 has an mbid for **712 of 3,359 artists (21%)** — and only as a by-product of
+   Bandsintown embedding one (`rememberBitIdentity`, `worker/src/sources.ts:339`).
+   The other 79% would need a name search per artist, which is the same fuzzy
+   matching problem the venue clustering already fights.
+
+   **What it is still good for:** a live-proxied setlist on a past show's page —
+   fetched on request, attributed, linked without `nofollow` (their terms require
+   both), never stored. That is a nice detail page, not a back-catalogue, and it is
+   P2. It also stays off the table entirely once there's revenue.
 2. **Let people add a show that isn't in the catalogue.** Unavoidable as a
    fallback — no source has everything, especially the DIY tier this app already
    struggles to cover. But a user-created event is a duplicate waiting to happen
@@ -200,7 +232,20 @@ Three ways out, and the choice shapes the product:
    the ingest path uses, run against what the user typed.
 3. **Only let people log shows Marquee already knew about.** Cheapest, ships
    soonest, and quietly says "your history starts now" — which for a brand-new
-   product is more defensible than it sounds, and is what phase 1 does.
+   product is more defensible than it sounds, and is what phase 0 already shipped.
+   Its cost is now clearer than it was: with Setlist.fm out, this is not a stopgap
+   ahead of a backfill, it is the floor. Every day the app runs is a day of
+   catalogue it will have forever, and `71dff0d` is what makes that true — which
+   retroactively makes that commit the most valuable thing in this list.
+
+**So option 2 is no longer optional.** It was written above as an unavoidable
+fallback; with no importable archive it is the *only* way somebody's first session
+contains more than the fortnight of history we happen to hold. It moves up to
+phase 1 and needs the design work its entry describes — `sameShow`/`sameVenue`
+run against what the user typed, and a decision about whether a user-created past
+show is public (a real event other people can log) or private to the log that
+created it. Private-first is the safer default: it needs no moderation, and
+promoting one later is easier than retracting one.
 
 Either way `sanitizeInputs` needs to stop treating the past as garbage, and the
 `starts_at > now` filter that is currently *everywhere* in the read paths has to
@@ -335,9 +380,11 @@ cleaned up.
   a great band in a bad room is the review people actually want to leave. It
   answers the only question that matters — whether anyone logs shows at all —
   before anything irreversible is built.
-- [ ] **Phase 0.5 — check Setlist.fm properly** before designing around it: key,
-  limits, terms, and how many of our venues and artists it can actually join to.
-  Everything about the back-catalogue depends on the answer.
+- [x] **Phase 0.5 — check Setlist.fm properly** before designing around it. Done
+  2026-07-31, and it came back negative: their terms forbid retaining the data, so
+  there is no backfill to be had. Details above. The good news is that it was a
+  day's reading rather than a month's integration, which is the whole reason this
+  was a phase of its own.
 - [~] **Phase 1 — the past becomes first-class.** `sanitizeInputs` is loosened
   (`71dff0d`) and every `starts_at > now` is now stated by the read path rather
   than assumed by the writer. What's left is the page: a past show worth reading —
