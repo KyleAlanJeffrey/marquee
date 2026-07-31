@@ -411,19 +411,37 @@ that trick either gets removed or gets a second consumer.
 Kyle runs the builds and submissions (they need his Apple and Google credentials);
 everything else is mine.
 
-- [ ] **`eas.json`** with build and submit profiles, `appVersionSource: remote` so
-  build numbers aren't committed, and `EXPO_PUBLIC_API_URL=https://marquee.rocks`
-  baked into the native profiles — relative URLs don't resolve off-web, so a
-  native build with it unset talks to nothing.
-- [ ] **`app.json` gaps that block a build:** `ios.bundleIdentifier` and
-  `android.package` (proposed: `rocks.marquee`, the reverse-DNS of a domain we
-  own), `ios.config.usesNonExemptEncryption: false` so export compliance isn't
-  asked on every submission, and an Android notification icon —
-  `android-icon-monochrome.png` is already a white silhouette on transparent at
-  0.4 scale, which is exactly the shape that asset needs.
-- [ ] **Block background location explicitly.** The app asks for foreground
-  location only (`Location.Accuracy.Balanced`, `requestForegroundPermissionsAsync`)
-  and should say so in the manifest, because Play review reads the manifest, not
+**Blocked 2026-07-31: the EAS project id doesn't belong to the logged-in account.**
+`eas init --id a9540056-1ade-460c-bc4f-5b93ccae1c61` wrote the id into `app.json`
+and then failed reading the project: `Entity not authorized:
+AppEntity[a9540056-…] (viewer = RegularUserViewerContext[0c3a767c-…], action =
+READ)`. `eas whoami` is `kylejeffrey@stoutagtech.com`, whose accounts are
+`kyle_jeffrey` and `stout-agtech` — and since that login is Owner on both, the
+project must live under a third account it isn't a member of. Every EAS command
+fails until that's resolved, and only Kyle can resolve it: either `eas login` as
+the account that owns the project, or hand over an id from one of these two.
+Nothing else in this section depends on it.
+
+- [x] **`eas.json`** — done. `preview` (internal distribution, APK on Android) and
+  `production`, `appVersionSource: remote` so build numbers aren't committed, and
+  `EXPO_PUBLIC_API_URL=https://marquee.rocks` in both native profiles — relative
+  URLs don't resolve off-web, so a native build with it unset talks to nothing.
+  No `development` profile yet: it wants `expo-dev-client`, which isn't installed
+  and is its own decision alongside `expo-updates`.
+- [~] **`app.json` gaps that block a build:** `ios.bundleIdentifier` and
+  `android.package` are both `rocks.marquee` now — the reverse-DNS of a domain we
+  own, which is also what universal links will want later — and
+  `ios.infoPlist.ITSAppUsesNonExemptEncryption: false` is set, so export
+  compliance isn't asked on every submission (true: the app does HTTPS and nothing
+  else cryptographic).
+  - [ ] Still missing: the **Android notification icon**.
+    `android-icon-monochrome.png` is the right shape but it is 1024×1024 —
+    Android wants a small monochrome asset, so this needs a resize rather than a
+    reference, and generating image assets blind is how you ship a white square.
+- [x] **Block background location explicitly** — `blockedPermissions:
+  ["android.permission.ACCESS_BACKGROUND_LOCATION"]`. The app asks for foreground
+  location only (`Location.Accuracy.Balanced`,
+  `requestForegroundPermissionsAsync`), and Play review reads the manifest, not
   the intent.
 - [ ] **Privacy declarations.** Short and worth stating precisely rather than
   waving at: local notifications only, no push tokens anywhere in `src/`; location
