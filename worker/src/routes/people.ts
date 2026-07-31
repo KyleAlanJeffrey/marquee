@@ -34,29 +34,35 @@ const PUBLIC_FIELDS = {
 };
 
 /**
- * Resolve a URL key to a live account. Handle first — case-folded, matching the
- * partial unique index — then the Clerk id verbatim. A handle could in principle
- * shadow someone's raw id in a URL, which is one more reason handle *policy*
- * (reserved shapes included) has to be decided before usernames are enabled.
+ * Resolve a URL key to a live account: a handle (case-folded, matching the
+ * partial unique index) or a Clerk id.
+ *
+ * For an id-shaped key (`user_…`) the id lookup runs first. Clerk does not
+ * reserve that prefix in usernames, so with handle-first a username crafted to
+ * equal somebody's Clerk id would shadow their profile URL — id-first makes an
+ * existing account's id URL unshadowable, and a handle that merely *looks* like
+ * an id still resolves when no such id exists.
  *
  * Tombstoned accounts don't resolve: a deleted user's profile is a 404, not a
  * ghost page.
  */
 async function findByKey(db: DB, key: string) {
   const alive = isNull(users.deletedAt);
-  const byHandle = await db
-    .select(PUBLIC_FIELDS)
-    .from(users)
-    .where(and(sql`lower(${users.handle}) = lower(${key})`, alive))
-    .get();
-  if (byHandle) return byHandle;
-  return (
-    (await db
+  const byHandle = () =>
+    db
+      .select(PUBLIC_FIELDS)
+      .from(users)
+      .where(and(sql`lower(${users.handle}) = lower(${key})`, alive))
+      .get();
+  const byId = () =>
+    db
       .select(PUBLIC_FIELDS)
       .from(users)
       .where(and(eq(users.id, key), alive))
-      .get()) ?? null
-  );
+      .get();
+
+  const [first, second] = key.startsWith('user_') ? [byId, byHandle] : [byHandle, byId];
+  return (await first()) ?? (await second()) ?? null;
 }
 
 people.get('/:key', async (c) => {

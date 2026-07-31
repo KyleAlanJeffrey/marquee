@@ -43,12 +43,13 @@ History-backfill has landed, so **nothing below is blocked any more** except D o
 1. [~] **Phase A — profiles and the person graph.** Built 2026-07-31
    (`87f5969`): `person_follows`, `GET /api/users/:key` (handle or Clerk id),
    follow/unfollow, the `/user/[key]` screen, and `POST /me` now refreshes the
-   mirror from Clerk's Backend API — no client-supplied identity at all. What
-   keeps it `[~]`: usernames are **disabled on the Clerk instance**, so every
-   handle is null and profiles are reachable by id only until the handle policy
-   below is decided; and there is no discovery surface yet — you reach a
-   profile from settings or a shared link, nothing else, until reviews (B) put
-   people on pages.
+   mirror from Clerk's Backend API — no client-supplied identity at all.
+   Usernames were enabled on the instance 2026-07-31 (required at sign-up;
+   verified via `/v1/environment`), so handles flow into profile URLs as
+   accounts pick them — existing accounts add theirs from the account screen.
+   What keeps it `[~]`: no discovery surface yet — you reach a profile from
+   settings or a shared link, nothing else, until reviews (B) put people on
+   pages.
 2. [ ] **Phase B — public reviews.** `reviews` table (separate from the private
    log, not a flag on it), per-entry `visibility`, opt-in and never retroactive
    in bulk. Ships **with** the moderation minimum: report, block, filter,
