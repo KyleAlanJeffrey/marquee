@@ -942,22 +942,44 @@ export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
 // --- Writes -----------------------------------------------------------------
 
 /**
- * A show more than this far out is almost always a data error (a mis-parsed year,
- * a placeholder date), and one already past is dead weight in a table whose reads
- * are all "upcoming".
+ * A show more than this far out is almost always a data error — a mis-parsed year
+ * or a placeholder date.
  */
 const MAX_YEARS_AHEAD = 2;
+/**
+ * How far back a listing may be dated and still be stored.
+ *
+ * This used to be 24 hours, with the comment "one already past is dead weight in a
+ * table whose reads are all 'upcoming'". That was true of a discovery app and it is
+ * fatal for one where you log what you went to: a show becomes worth keeping the
+ * moment it happens, and a day later we were throwing it away. Nothing recovers
+ * that later — the sources stop listing a show once it's over, so every day this
+ * stayed was a day of history that can never be re-fetched.
+ *
+ * A floor is still needed, because the failure it was really catching is a
+ * mis-parsed year: an epoch-zero date or a year rendered "0202" is a data error
+ * whichever direction it points. Two years back is far enough to accept anything a
+ * feed legitimately still lists and near enough that 1970 never gets in.
+ *
+ * Safe to widen because it changes ingest only: every read path in the Worker
+ * already states `starts_at >= now` for itself rather than relying on the table
+ * holding nothing else — checked across data.ts, cities.ts, landing.ts, seo.ts and
+ * indexnow.ts. The one query that reads the other direction is `venueStats`, which
+ * asks for past shows on purpose and gets better as this fills in.
+ */
+const MAX_YEARS_BEHIND = 2;
 /** Cap per artist per pass, so one malformed feed can't flood the table. */
 const MAX_EVENTS_PER_ARTIST = 200;
 
-/** Drop listings we shouldn't store at all: past, absurdly far out, or a flood. */
+/** Drop listings we shouldn't store at all: absurdly dated, or a flood. */
 export function sanitizeInputs(inputs: EventInput[], now = Date.now()): EventInput[] {
   const horizon = now + MAX_YEARS_AHEAD * 365 * 86_400_000;
+  const floor = now - MAX_YEARS_BEHIND * 365 * 86_400_000;
   const perArtist = new Map<string, number>();
   const kept: EventInput[] = [];
   for (const i of inputs) {
     const t = Date.parse(i.starts_at);
-    if (Number.isNaN(t) || t < now - 86_400_000 || t > horizon) continue;
+    if (Number.isNaN(t) || t < floor || t > horizon) continue;
     const n = perArtist.get(i.artist_id) ?? 0;
     if (n >= MAX_EVENTS_PER_ARTIST) continue;
     perArtist.set(i.artist_id, n + 1);

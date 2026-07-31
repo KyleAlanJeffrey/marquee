@@ -21,17 +21,23 @@ describe('sanitizeInputs', () => {
     expect(sanitizeInputs([at(days(1)), at(days(200))], NOW)).toHaveLength(2);
   });
 
-  it('drops shows already past', () => {
-    // Yesterday's gig is dead weight in a table whose every read is "upcoming".
-    expect(sanitizeInputs([at(days(-7))], NOW)).toHaveLength(0);
-    // Today's earlier show survives: a feed's timestamps are only approximate,
-    // and a same-day drop would lose a gig that hasn't happened yet.
+  it('keeps shows already past, because they are the log', () => {
+    // This used to assert the opposite. A show becomes worth keeping the moment it
+    // happens — you can only log a gig we still hold a row for — and the sources
+    // stop listing it once it's over, so anything dropped here is unrecoverable.
     expect(sanitizeInputs([at(days(-0.5))], NOW)).toHaveLength(1);
+    expect(sanitizeInputs([at(days(-7))], NOW)).toHaveLength(1);
+    expect(sanitizeInputs([at(days(-400))], NOW)).toHaveLength(1);
   });
 
-  it('drops dates far enough out to be a parsing error', () => {
+  it('drops dates far enough out, either way, to be a parsing error', () => {
     expect(sanitizeInputs([at('2199-01-01T20:00:00Z')], NOW)).toHaveLength(0);
     expect(sanitizeInputs([at(days(365))], NOW)).toHaveLength(1);
+    // The floor is what still catches a mis-parsed year: epoch zero, and a date
+    // whose year came through as "0202", are errors whichever way they point.
+    expect(sanitizeInputs([at('1970-01-01T00:00:00Z')], NOW)).toHaveLength(0);
+    expect(sanitizeInputs([at('0202-05-01T20:00:00Z')], NOW)).toHaveLength(0);
+    expect(sanitizeInputs([at(days(-365))], NOW)).toHaveLength(1);
   });
 
   it('drops an unparseable date rather than storing NaN', () => {
