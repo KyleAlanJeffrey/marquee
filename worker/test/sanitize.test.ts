@@ -59,3 +59,52 @@ describe('sanitizeInputs', () => {
     expect(kept.filter((i) => i.artist_id === 'a2')).toHaveLength(10);
   });
 });
+
+/**
+ * The loosened bounds a history backfill passes.
+ *
+ * Tested because the defaults are correct and the overrides are correct, and the
+ * failure mode of confusing them is silent: widen the defaults and mis-parsed years
+ * get into the live crawl; forget the overrides and a decade of somebody's gigs is
+ * dropped on the floor with a `console.warn` nobody reads.
+ */
+describe('sanitizeInputs limits', () => {
+  const years = (n: number) => new Date(NOW - n * 365 * 86_400_000).toISOString();
+
+  it('drops a 2014 show by default, which is why the backfill needs an override', () => {
+    // The live crawl has no way to tell a real old date from a mis-parsed year, so
+    // its window stays tight. This is the exact case that made the override necessary:
+    // Bandsintown returns history back to 2014 and every row of it would be discarded.
+    expect(sanitizeInputs([at(years(12))], NOW)).toHaveLength(0);
+    expect(sanitizeInputs([at(years(12))], NOW, { maxYearsBehind: 20 })).toHaveLength(1);
+  });
+
+  it('still rejects an impossible year however wide the window', () => {
+    // The floor's real job is catching an epoch-zero or "0202" parse, and widening it
+    // for history must not give that up.
+    for (const limits of [{}, { maxYearsBehind: 20 }]) {
+      expect(sanitizeInputs([at('1970-01-01T00:00:00Z')], NOW, limits)).toHaveLength(0);
+      expect(sanitizeInputs([at('0202-05-01T20:00:00Z')], NOW, limits)).toHaveLength(0);
+    }
+  });
+
+  it('does not let the wider window change the future horizon', () => {
+    // Asking for history says nothing about what is plausible ahead of us; a listing
+    // in 2199 is still a data error.
+    expect(sanitizeInputs([at('2199-01-01T20:00:00Z')], NOW, { maxYearsBehind: 20 })).toHaveLength(0);
+  });
+
+  it('raises the per-artist cap without changing the default', () => {
+    // Measured: one artist in our own catalogue has 308 past shows. Keeping 200 of
+    // them would leave a log with holes that nothing would ever fill.
+    const many = Array.from({ length: 308 }, (_, i) => at(days(-i - 1)));
+    expect(sanitizeInputs(many, NOW, { maxYearsBehind: 20 })).toHaveLength(200);
+    expect(sanitizeInputs(many, NOW, { maxYearsBehind: 20, maxEventsPerArtist: 500 })).toHaveLength(308);
+  });
+
+  it('counts the cap per artist, not per call', () => {
+    const mine = Array.from({ length: 30 }, (_, i) => at(days(-i - 1), 'a1'));
+    const theirs = Array.from({ length: 30 }, (_, i) => at(days(-i - 1), 'a2'));
+    expect(sanitizeInputs([...mine, ...theirs], NOW, { maxEventsPerArtist: 25 })).toHaveLength(50);
+  });
+});

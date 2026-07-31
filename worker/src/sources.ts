@@ -258,13 +258,20 @@ class BitConfigError extends Error {}
  * the crawl passes several candidates (see `lookupKeys`) and remembers which one
  * worked. Keys are already encoded here, not by the caller.
  */
-async function bitFetchByKeys(env: Env, keys: string[], maxAttempts = 3): Promise<BitLookup> {
+async function bitFetchByKeys(
+  env: Env,
+  keys: string[],
+  maxAttempts = 3,
+  // `past` is the same endpoint with the window reversed, and it is how the
+  // catalogue gets a history at all — see `fetchArtistHistory`.
+  date: 'upcoming' | 'past' = 'upcoming',
+): Promise<BitLookup> {
   if (!env.BANDSINTOWN_APP_ID) return { events: [], key: null, found: false };
   let found: string | null = null;
   for (const key of keys.slice(0, maxAttempts)) {
     const res = await fetchWithTimeout(
       `https://rest.bandsintown.com/artists/${encodeURIComponent(key)}/events` +
-        `?app_id=${encodeURIComponent(env.BANDSINTOWN_APP_ID)}&date=upcoming`,
+        `?app_id=${encodeURIComponent(env.BANDSINTOWN_APP_ID)}&date=${date}`,
     );
     // 403 is what the open tier returns for an unusable app_id, which is a
     // configuration problem rather than a fact about this artist.
@@ -346,6 +353,121 @@ async function ingestBitArtist(env: Env, db: DB, artist: BitArtist): Promise<str
   if (raw.length === 0) return [];
   await rememberBitIdentity(db, artist.id, raw[0]);
   return persist(db, bitToEventInputs(artist, raw));
+}
+
+/**
+ * How far back a history fetch will accept a date, and how many it will keep.
+ *
+ * Both loosen the live crawl's guards deliberately, and only for this call — see
+ * `SanitizeLimits` in data.ts. Twenty years is generous against a source whose own
+ * data stops around 2014, which is the point: it accepts everything real and still
+ * rejects an epoch-zero or "0202" mis-parse. 500 is above the busiest artist
+ * measured (308 past shows) so a working band's history doesn't arrive with holes.
+ */
+const HISTORY_YEARS_BEHIND = 20;
+const HISTORY_MAX_EVENTS = 500;
+
+export type ArtistHistory = {
+  artist_id: string;
+  /** False when this answer came from the stored stamp instead of upstream. */
+  fetched: boolean;
+  /** Whether Bandsintown recognised the artist at all, as opposed to having no dates. */
+  found: boolean;
+  /** Newly written rows. Zero on a second call is success, not failure. */
+  ingested: number;
+  /** Past events on file for this artist afterwards, however they got there. */
+  past_on_file: number;
+  fetched_at: string | null;
+};
+
+/**
+ * Fetch one artist's past shows, once.
+ *
+ * This is the thing that gives the catalogue a history. Every source we ingest sells
+ * tickets, so the table only ever knew about shows that hadn't happened yet — 623 past
+ * events out of 22,675, nothing before 2026-07-12. An app for logging what you have
+ * seen cannot run on 19 days.
+ *
+ * **Pulled, not pushed.** Backfilling all 3,771 artists eagerly is ~500k rows against
+ * a cron budget already tight on CPU and subrequests. Instead the first person to care
+ * about an artist pays for one request, and `past_events_fetched_at` means the second
+ * person pays nothing. That is also the only sensible prioritisation available: the
+ * artists worth having history for are the ones somebody asked about.
+ *
+ * Stamped even when nothing comes back, because "Bandsintown doesn't know them" is an
+ * answer worth remembering rather than re-asking on every page view. `force` is the
+ * escape hatch for when a later crawl has learned a better name to ask under.
+ */
+export async function fetchArtistHistory(
+  env: Env,
+  artistId: string,
+  opts: { force?: boolean } = {},
+): Promise<ArtistHistory | null> {
+  const db = getDb(env.DB);
+  const row = await db
+    .select({
+      id: artists.id,
+      name: artists.name,
+      bandsintownName: artists.bandsintownName,
+      bandsintownId: artists.bandsintownId,
+      fetchedAt: artists.pastEventsFetchedAt,
+    })
+    .from(artists)
+    .where(eq(artists.id, artistId))
+    .get();
+  if (!row) return null;
+
+  const countPast = async () =>
+    (
+      await db
+        .select({ n: sql<number>`count(*)` })
+        .from(events)
+        .where(sql`${events.artistId} = ${row.id} and ${events.startsAt} < ${nowIso()}`)
+        .get()
+    )?.n ?? 0;
+
+  // Already asked. History doesn't change, so there is nothing to gain by asking again.
+  if (row.fetchedAt && !opts.force) {
+    return {
+      artist_id: row.id,
+      fetched: false,
+      found: true,
+      ingested: 0,
+      past_on_file: await countPast(),
+      fetched_at: row.fetchedAt,
+    };
+  }
+
+  const keys = lookupKeys({
+    name: row.name,
+    bandsintownId: row.bandsintownId,
+    bandsintownName: row.bandsintownName,
+  });
+  const lookup = await bitFetchByKeys(env, keys, 3, 'past');
+
+  let ingested = 0;
+  if (lookup.events.length > 0) {
+    await rememberBitIdentity(db, row.id, lookup.events[0]);
+    const inputs = bitToEventInputs({ ...row, bandsintown_name: row.bandsintownName }, lookup.events);
+    ingested = (
+      await persist(db, inputs, {
+        maxYearsBehind: HISTORY_YEARS_BEHIND,
+        maxEventsPerArtist: HISTORY_MAX_EVENTS,
+      })
+    ).length;
+  }
+
+  const fetchedAt = nowIso();
+  await db.update(artists).set({ pastEventsFetchedAt: fetchedAt }).where(eq(artists.id, row.id));
+
+  return {
+    artist_id: row.id,
+    fetched: true,
+    found: lookup.found,
+    ingested,
+    past_on_file: await countPast(),
+    fetched_at: fetchedAt,
+  };
 }
 
 /**

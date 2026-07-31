@@ -24,8 +24,17 @@ export const artists = sqliteTable('artists', {
   genres: text('genres').notNull().default('[]'),
   /** When a client last asked about this artist; drives crawl priority. */
   lastRequestedAt: text('last_requested_at'),
+  /**
+   * When this artist's *past* shows were last fetched. Null means never asked,
+   * which is different from having no history — see migration 0011. History does
+   * not change, so unlike the upcoming crawl this is asked once.
+   */
+  pastEventsFetchedAt: text('past_events_fetched_at'),
   createdAt: createdAt(),
 });
+// No index block for `artists_history_pending_idx`: it is partial
+// (`where past_events_fetched_at is null`), which Drizzle can't express — same as
+// `artists_name_folded_idx`.
 
 /**
  * The crawl queue: one row per (artist, upstream source). Coverage from

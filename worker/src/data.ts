@@ -1,4 +1,4 @@
-import { and, between, desc, eq, gte, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
+import { and, between, desc, eq, gte, inArray, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
 import { getDb, type DB } from './db';
@@ -577,6 +577,42 @@ export async function artistById(db: DB, id: string) {
   return { ...r, genres: parseGenres(r.genres) };
 }
 
+/**
+ * An artist's shows that have already happened, newest first.
+ *
+ * The mirror of `artistEvents`, and the read side of the history backfill. Newest
+ * first because this list is scanned to answer "which of these was I at", and the
+ * gig somebody is trying to remember is far more likely to be recent than to be from
+ * 2015.
+ *
+ * Capped rather than paginated for now: with a measured mean of ~137 past shows per
+ * artist, 300 covers all but the hardest-touring bands, and a picker nobody can reach
+ * the end of is a different problem from a picker that truncates.
+ */
+export async function artistPastEvents(db: DB, id: string, limit = 300) {
+  const rows = await db
+    .select({
+      event_id: events.id,
+      event_name: events.name,
+      starts_at: events.startsAt,
+      venue_id: venues.id,
+      venue_name: venues.name,
+      venue_city: venues.city,
+      venue_region: venues.region,
+      venue_country: venues.country,
+    })
+    .from(events)
+    .leftJoin(venues, eq(venues.id, events.venueId))
+    .where(and(eq(events.artistId, id), lt(events.startsAt, nowIso())))
+    .orderBy(desc(events.startsAt))
+    .limit(limit);
+  return rows.map((r) => ({
+    ...r,
+    venue_name: publishedVenueName(r.venue_name),
+    venue_timezone: zoneFor(r.venue_region, r.venue_country),
+  }));
+}
+
 export async function artistEvents(db: DB, id: string) {
   const rows = await db
     .select({
@@ -971,17 +1007,38 @@ const MAX_YEARS_BEHIND = 2;
 /** Cap per artist per pass, so one malformed feed can't flood the table. */
 const MAX_EVENTS_PER_ARTIST = 200;
 
+/**
+ * Loosened bounds for one call, so a deliberate historical backfill isn't held to
+ * limits written for the live crawl.
+ *
+ * Both defaults are right where they are and must not be widened globally. The
+ * two-year floor exists to catch a mis-parsed year — epoch zero, or "0202" — and the
+ * live crawl has no way to tell that from a real date, so it needs the tight window.
+ * A history fetch does: it asked for the past on purpose, from a source whose own data
+ * stops in 2014, so it can accept a decade and still reject 1970. Same for the count —
+ * 200 protects against a feed flooding the table, but an artist with 308 real past
+ * shows is not a flood, and silently keeping 200 of them would leave a log with
+ * holes in it that nothing would ever fill.
+ */
+export type SanitizeLimits = { maxYearsBehind?: number; maxEventsPerArtist?: number };
+
 /** Drop listings we shouldn't store at all: absurdly dated, or a flood. */
-export function sanitizeInputs(inputs: EventInput[], now = Date.now()): EventInput[] {
+export function sanitizeInputs(
+  inputs: EventInput[],
+  now = Date.now(),
+  limits: SanitizeLimits = {},
+): EventInput[] {
+  const yearsBehind = limits.maxYearsBehind ?? MAX_YEARS_BEHIND;
+  const perArtistCap = limits.maxEventsPerArtist ?? MAX_EVENTS_PER_ARTIST;
   const horizon = now + MAX_YEARS_AHEAD * 365 * 86_400_000;
-  const floor = now - MAX_YEARS_BEHIND * 365 * 86_400_000;
+  const floor = now - yearsBehind * 365 * 86_400_000;
   const perArtist = new Map<string, number>();
   const kept: EventInput[] = [];
   for (const i of inputs) {
     const t = Date.parse(i.starts_at);
     if (Number.isNaN(t) || t < floor || t > horizon) continue;
     const n = perArtist.get(i.artist_id) ?? 0;
-    if (n >= MAX_EVENTS_PER_ARTIST) continue;
+    if (n >= perArtistCap) continue;
     perArtist.set(i.artist_id, n + 1);
     kept.push(i);
   }
@@ -989,8 +1046,8 @@ export function sanitizeInputs(inputs: EventInput[], now = Date.now()): EventInp
 }
 
 /** Upsert venues + insert unseen events; returns ids of newly inserted events. */
-export async function persist(db: DB, raw: EventInput[]): Promise<string[]> {
-  const inputs = sanitizeInputs(raw);
+export async function persist(db: DB, raw: EventInput[], limits?: SanitizeLimits): Promise<string[]> {
+  const inputs = sanitizeInputs(raw, Date.now(), limits);
   if (raw.length !== inputs.length) {
     console.warn(`persist: dropped ${raw.length - inputs.length} unusable listing(s)`);
   }
