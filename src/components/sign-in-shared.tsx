@@ -66,17 +66,25 @@ function DeleteAccountButton() {
     setState('working');
     try {
       await apiDelete('/me');
-      // Everything cached belonged to an account that no longer exists.
-      await signOut();
-      queryClient.clear();
-      setState('idle');
     } catch (err) {
       // Retry-friendly on purpose: the server deletes our data before the Clerk
       // identity, so a failure partway leaves a login that still works and a
       // button that can be pressed again.
       console.warn('account deletion failed:', err);
       setState('failed');
+      return;
     }
+    // Past this point the account is gone server-side. A sign-out hiccup is a
+    // local cleanup problem — it must not present as "deletion failed" and
+    // invite a retry against an account that no longer exists.
+    try {
+      await signOut();
+    } catch (err) {
+      console.warn('sign-out after account deletion failed:', err);
+    }
+    // Everything cached belonged to an account that no longer exists.
+    queryClient.clear();
+    setState('idle');
   };
 
   const label =
@@ -88,11 +96,23 @@ function DeleteAccountButton() {
           ? 'DELETION FAILED — TRY AGAIN'
           : 'DELETE ACCOUNT';
 
+  // The spoken label tracks the visible one, state by state — a screen-reader
+  // user mid-deletion deserves the same "working" and "failed" answers.
+  const accessibilityLabel =
+    state === 'working'
+      ? 'Deleting your account'
+      : state === 'armed'
+        ? 'Confirm: permanently delete your account'
+        : state === 'failed'
+          ? 'Account deletion failed, tap to try again'
+          : 'Delete your account';
+
   return (
     <PressableScale
       haptic
       accessibilityRole="button"
-      accessibilityLabel={state === 'armed' ? 'Confirm: permanently delete your account' : 'Delete your account'}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: state === 'working', busy: state === 'working' }}
       onPress={() => void onPress()}
       style={[styles.ghost, { borderColor: state === 'armed' ? theme.error : theme.border }]}>
       <ThemedText type="labelSm" style={{ color: state === 'idle' ? theme.textTertiary : theme.error }}>

@@ -126,11 +126,15 @@ export async function ensureUser(db: DB, userId: string): Promise<void> {
   await db
     .insert(users)
     .values({ id: userId, createdAt: now, syncedAt: now })
-    // Not `doNothing`: an existing row should still record that we saw them, and
-    // a returning account that Clerk has since restored should lose its tombstone.
+    // Not `doNothing`: an existing row should still record that we saw them.
+    // Deliberately does NOT clear a tombstone: a deleted account's JWT stays
+    // verifiable for up to a minute after deletion, and this is the fallback
+    // every sync failure lands on — clearing `deleted_at` here let that ghost
+    // token resurrect the row. A genuinely restored account is proven by
+    // `syncProfileFromClerk` succeeding, which is the path that un-tombstones.
     .onConflictDoUpdate({
       target: users.id,
-      set: { syncedAt: now, deletedAt: null },
+      set: { syncedAt: now },
     });
 }
 
@@ -192,11 +196,7 @@ export async function syncProfileFromClerk(env: Env, db: DB, userId: string): Pr
  * cleared", and this is the code that claim describes.
  */
 export async function deleteAccount(env: Env, db: DB, userId: string): Promise<void> {
-  const now = nowIso();
-  await db.batch([
-    db.delete(userLists).where(eq(userLists.userId, userId)),
-    db.delete(personFollows).where(eq(personFollows.followerId, userId)),
-    db.delete(personFollows).where(eq(personFollows.followeeId, userId)),
+  const tombstone = (now: string) =>
     db
       .update(users)
       .set({
@@ -208,11 +208,30 @@ export async function deleteAccount(env: Env, db: DB, userId: string): Promise<v
         deletedAt: now,
         syncedAt: now,
       })
-      .where(eq(users.id, userId)),
+      .where(eq(users.id, userId));
+
+  await db.batch([
+    db.delete(userLists).where(eq(userLists.userId, userId)),
+    db.delete(personFollows).where(eq(personFollows.followerId, userId)),
+    db.delete(personFollows).where(eq(personFollows.followeeId, userId)),
+    tombstone(nowIso()),
   ]);
 
   const clerk = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
-  await clerk.users.deleteUser(userId);
+  try {
+    await clerk.users.deleteUser(userId);
+  } catch (err) {
+    // Already gone is success. A retry after a partial failure — or after the
+    // Clerk call succeeded but its response was lost — 404s here, and treating
+    // that as an error would make the one retryable state unretryable.
+    if ((err as { status?: number })?.status !== 404) throw err;
+  }
+
+  // Re-asserted after the Clerk deletion: a profile sync racing this call could
+  // have rewritten the row between the batch above and the identity going away.
+  // Idempotent, and it closes the resurrection window from the deleting side;
+  // `ensureUser` refusing to clear tombstones closes it from the syncing side.
+  await tombstone(nowIso());
 }
 
 /** The mirror row, or null if this user has never written anything. */

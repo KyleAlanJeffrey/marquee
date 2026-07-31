@@ -215,7 +215,7 @@ export default function ProfileScreen() {
         )}
 
         <ThemedText type="labelSm" style={[styles.footer, { color: theme.textTertiary }]}>
-          MARQUEE · YOUR LISTS LIVE ON YOUR ACCOUNT
+          {signedIn ? 'MARQUEE · YOUR LISTS LIVE ON YOUR ACCOUNT' : 'MARQUEE · SIGN IN TO KEEP YOUR LISTS'}
         </ThemedText>
       </ScrollView>
     </View>

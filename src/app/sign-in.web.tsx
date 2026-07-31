@@ -70,9 +70,26 @@ export default function SignInScreen() {
   const theme = useTheme();
   const { why, mode: modeParam } = useLocalSearchParams<{ why?: string; mode?: string }>();
   const { signedIn } = useAuth();
-  // Seeded from the URL so Clerk's own footer links (`signInUrl`/`signUpUrl`
-  // below, which render as plain hrefs) switch the card without leaving the page.
-  const [mode, setMode] = useState<Mode>(modeParam === 'sign-up' ? 'sign-up' : 'sign-in');
+
+  // The URL names the card (so Clerk's own footer links and deep links work),
+  // and the switcher overrides it locally. The override resets whenever the
+  // param changes — a render-phase reset rather than an effect, which is the
+  // sanctioned shape for state that derives from a prop: an initializer alone
+  // goes stale when the route changes without a remount.
+  const requested: Mode = modeParam === 'sign-up' ? 'sign-up' : 'sign-in';
+  const [override, setOverride] = useState<Mode | null>(null);
+  const [seenRequest, setSeenRequest] = useState<Mode>(requested);
+  if (requested !== seenRequest) {
+    setSeenRequest(requested);
+    setOverride(null);
+  }
+  const mode = override ?? requested;
+  const setMode = setOverride;
+
+  // Clerk renders these as plain hrefs, so `why` — the reason copy above the
+  // card — has to be carried by hand or the navigation drops it.
+  const link = (m: Mode) =>
+    `/sign-in?${new URLSearchParams({ ...(why ? { why } : {}), ...(m === 'sign-up' ? { mode: 'sign-up' } : {}) })}`;
 
   return (
     <View style={{ flex: 1 }}>
@@ -115,14 +132,14 @@ export default function SignInScreen() {
                 <SignIn
                   routing="hash"
                   appearance={appearance}
-                  signUpUrl="/sign-in?mode=sign-up"
+                  signUpUrl={link('sign-up')}
                   fallbackRedirectUrl={AFTER_AUTH}
                 />
               ) : (
                 <SignUp
                   routing="hash"
                   appearance={appearance}
-                  signInUrl="/sign-in"
+                  signInUrl={link('sign-in')}
                   fallbackRedirectUrl={AFTER_AUTH}
                 />
               )}
