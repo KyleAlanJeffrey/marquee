@@ -116,6 +116,10 @@ export type SavedShow = {
   eventId: string;
   name: string;
   startsAt: string;
+  /** Set time not announced when saved — `startsAt` is a noon placeholder.
+   *  Optional: snapshots from before the flag existed simply don't have it,
+   *  and the revalidated row is the authority either way. */
+  timeUnknown?: boolean;
   artistId: string | null;
   artistName: string | null;
   artistImageUrl: string | null;
@@ -149,7 +153,12 @@ function hasShowSnapshot(a: Record<string, unknown>): boolean {
 export function isSavedShow(v: unknown): v is SavedShow {
   if (typeof v !== 'object' || v === null) return false;
   const a = v as Record<string, unknown>;
-  return hasShowSnapshot(a) && isNullableNumber(a.priceFrom) && Number.isFinite(a.savedAt);
+  return (
+    hasShowSnapshot(a) &&
+    isNullableNumber(a.priceFrom) &&
+    Number.isFinite(a.savedAt) &&
+    (a.timeUnknown === undefined || typeof a.timeUnknown === 'boolean')
+  );
 }
 
 export const sameSavedShow = (s: SavedShow, ref: ShowRef) => !!ref.eventId && s.eventId === ref.eventId;

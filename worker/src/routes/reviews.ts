@@ -3,7 +3,7 @@ import { and, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { callerFrom, ensureUser } from '../auth';
-import { nowIso } from '../data';
+import { isoAt, nowIso, TBD_GRACE_MS } from '../data';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
 import { eventRsvps, events, personFollows, reports, reviews, userBlocks, users } from '../schema';
@@ -132,14 +132,25 @@ reviewRoutes.put('/events/:id/review', zValidator('json', reviewBody), async (c)
   const db = getDb(c.env.DB);
   const eventId = c.req.param('id');
   const event = await db
-    .select({ id: events.id, artistId: events.artistId, venueId: events.venueId, startsAt: events.startsAt })
+    .select({
+      id: events.id,
+      artistId: events.artistId,
+      venueId: events.venueId,
+      startsAt: events.startsAt,
+      timeUnknown: events.timeUnknown,
+    })
     .from(events)
     .where(eq(events.id, eventId))
     .get();
   if (!event) return c.json({ error: 'not found' }, 404);
 
   const now = nowIso();
-  if (event.startsAt > now) {
+  // A time-unknown show starts *sometime* on its local day — noon is only the
+  // placeholder — so it isn't reviewable until midnight at the venue.
+  const startedBy = event.timeUnknown
+    ? isoAt(Date.parse(event.startsAt) + TBD_GRACE_MS)
+    : event.startsAt;
+  if (startedBy > now) {
     return c.json({ error: "this show hasn't happened yet" }, 422);
   }
 
@@ -280,13 +291,18 @@ reviewRoutes.put('/events/:id/rsvp', zValidator('json', rsvpBody), async (c) => 
   const db = getDb(c.env.DB);
   const eventId = c.req.param('id');
   const event = await db
-    .select({ startsAt: events.startsAt })
+    .select({ startsAt: events.startsAt, timeUnknown: events.timeUnknown })
     .from(events)
     .where(eq(events.id, eventId))
     .get();
   if (!event) return c.json({ error: 'not found' }, 404);
   const now = nowIso();
-  if (event.startsAt <= now) {
+  // Mirror of the review gate: an unannounced set time might be tonight at
+  // 11pm, so "going" stays open until midnight at the venue.
+  const startedBy = event.timeUnknown
+    ? isoAt(Date.parse(event.startsAt) + TBD_GRACE_MS)
+    : event.startsAt;
+  if (startedBy <= now) {
     return c.json({ error: 'this show has already started — log it instead' }, 422);
   }
 

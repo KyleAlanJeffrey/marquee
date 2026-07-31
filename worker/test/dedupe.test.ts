@@ -345,6 +345,13 @@ describe('show identity', () => {
     const saturdayNoon = { ...base, startsAt: '2026-08-08T19:00:00Z', timeUnknown: true };
     const fridayEvening = { ...base, startsAt: '2026-08-08T03:00:00Z' };
     expect(sameShow(saturdayNoon, fridayEvening)).toBe(false);
+    // The sharp edge: a real 11pm show the night before is 13h from noon —
+    // a different calendar day, so it must stay outside the window too.
+    const fridayLate = { ...base, startsAt: '2026-08-08T06:00:00Z' }; // 11pm PDT Friday
+    expect(sameShow(saturdayNoon, fridayLate)).toBe(false);
+    // While midnight on the day itself — 12h exactly — is still the same day.
+    const saturdayMidnight = { ...base, startsAt: '2026-08-08T07:00:00Z' };
+    expect(sameShow(saturdayNoon, saturdayMidnight)).toBe(true);
   });
 });
 

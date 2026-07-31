@@ -1,7 +1,7 @@
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, lte, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
-import { searchTowns } from './data';
+import { searchTowns, stillUpcoming } from './data';
 import { getDb } from './db';
 import type { Env } from './env';
 import {
@@ -84,7 +84,6 @@ const EMPTY: LandingData = {
   artists: [],
 };
 
-const nowIso = () => new Date().toISOString().slice(0, 19) + 'Z';
 const isoInDays = (days: number) =>
   new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 19) + 'Z';
 
@@ -129,7 +128,7 @@ function oncePerCity<T extends { venueCity: string | null }>(rows: T[], limit: n
 export async function landingData(env: Env): Promise<LandingData> {
   const db = getDb(env.DB);
   const canon = alias(venues, 'canon');
-  const window = and(gte(events.startsAt, nowIso()), lte(events.startsAt, isoInDays(HORIZON_DAYS)));
+  const window = and(stillUpcoming(), lte(events.startsAt, isoInDays(HORIZON_DAYS)));
 
   const [totals, soon, cities, rooms, acts] = await Promise.all([
     db

@@ -131,7 +131,9 @@ export default function EventScreen() {
   // you can say you were at from the moment it begins, and we don't know when it
   // finished. An unparseable date counts as upcoming, so a bad row never invites
   // somebody to log a gig that may not have happened.
-  const startedAt = Date.parse(e.starts_at);
+  // A time-unknown show starts sometime on its local day — noon is only the
+  // placeholder — so it hasn't "happened" until midnight at the venue.
+  const startedAt = Date.parse(e.starts_at) + (e.time_unknown ? 12 * 3_600_000 : 0);
   const hasHappened = now != null && Number.isFinite(startedAt) && startedAt < now;
 
   return (
@@ -490,6 +492,7 @@ export default function EventScreen() {
                   eventId: e.id,
                   name: e.name,
                   startsAt: e.starts_at,
+                  timeUnknown: e.time_unknown,
                   artistId: e.artist.id,
                   artistName: e.artist.name,
                   artistImageUrl: e.artist.image_url,

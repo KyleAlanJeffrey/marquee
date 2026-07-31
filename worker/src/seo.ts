@@ -1,8 +1,8 @@
-import { and, eq, gte, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
 import { allTowns } from './cities';
-import { clusterMemberIds } from './data';
+import { clusterMemberIds, isoAt, stillUpcoming, TBD_GRACE_MS } from './data';
 import type { DB } from './db';
 import { getDb } from './db';
 import { artistBody, eventBody, usdFrom, venueBody } from './detail';
@@ -158,7 +158,7 @@ const canonicalVenue = sql<string>`coalesce(${venues.canonicalVenueId}, ${venues
 
 /** How many URLs of each kind there are, so the index knows what to list. */
 async function sitemapCounts(db: DB): Promise<Record<Kind, number>> {
-  const upcoming = gte(events.startsAt, nowIso());
+  const upcoming = stillUpcoming();
   const [ev, ar, ve] = await Promise.all([
     db.select({ n: sql<number>`count(*)` }).from(events).where(upcoming).get(),
     db
@@ -254,7 +254,7 @@ async function pagesSitemap(env: Env, origin: string): Promise<string> {
 async function detailSitemap(env: Env, origin: string, kind: Kind, page: number): Promise<string> {
   const db = getDb(env.DB);
   const today = new Date().toISOString().slice(0, 10);
-  const upcoming = gte(events.startsAt, nowIso());
+  const upcoming = stillUpcoming();
   const offset = (page - 1) * SITEMAP_PAGE;
   const day = (iso: string | null) => (iso ?? '').slice(0, 10) || today;
 
@@ -382,7 +382,7 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     })
     .from(events)
     .leftJoin(venues, eq(venues.id, events.venueId))
-    .where(and(eq(events.artistId, row.artistId), gte(events.startsAt, nowIso()), ne(events.id, id)))
+    .where(and(eq(events.artistId, row.artistId), stillUpcoming(), ne(events.id, id)))
     .orderBy(events.startsAt)
     .limit(8);
 
@@ -413,7 +413,9 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     // A show that has happened is a dead page: nothing to buy, nothing to attend,
     // and it will never be right again. Kept crawlable for its links, out of the
     // index for the same reason a newspaper doesn't reprint last week's listings.
-    noindex: row.startsAt < nowIso(),
+    // A time-unknown show's timestamp is noon at the venue; it isn't over —
+    // and shouldn't fall out of the index — until midnight there.
+    noindex: row.startsAt < (row.timeUnknown ? isoAt(Date.now() - TBD_GRACE_MS) : nowIso()),
     image: row.artistImage,
     body: eventBody({
       id,
@@ -501,7 +503,7 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
     // Linked by cluster head: a member id is a second URL for the same room, and
     // venueSeo canonicals it away — no reason to spend a link on it.
     .leftJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
-    .where(and(eq(events.artistId, id), gte(events.startsAt, nowIso())))
+    .where(and(eq(events.artistId, id), stillUpcoming()))
     .orderBy(events.startsAt)
     .limit(SHOWS + 1);
 
@@ -578,7 +580,7 @@ async function venueSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     db
       .select({ count: sql<number>`count(*)` })
       .from(events)
-      .where(and(inArray(events.venueId, cluster), gte(events.startsAt, nowIso())))
+      .where(and(inArray(events.venueId, cluster), stillUpcoming()))
       .get(),
     db
       .select({
@@ -590,7 +592,7 @@ async function venueSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       })
       .from(events)
       .innerJoin(artists, eq(artists.id, events.artistId))
-      .where(and(inArray(events.venueId, cluster), gte(events.startsAt, nowIso())))
+      .where(and(inArray(events.venueId, cluster), stillUpcoming()))
       .orderBy(events.startsAt)
       .limit(SHOWS),
   ]);

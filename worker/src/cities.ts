@@ -1,6 +1,7 @@
-import { and, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
+import { stillUpcoming } from './data';
 import type { DB } from './db';
 import { getDb } from './db';
 import { looksLikeEventTitle } from './dedupe';
@@ -48,7 +49,6 @@ const SHOW_LIMIT = 120;
 /** Towns read for slug resolution and the nearby list. Well past what we have. */
 const TOWN_LIMIT = 4000;
 
-const nowIso = () => new Date().toISOString().slice(0, 19) + 'Z';
 const isoInDays = (days: number) =>
   new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 19) + 'Z';
 
@@ -140,7 +140,7 @@ export async function allTowns(db: DB, limit = TOWN_LIMIT): Promise<Town[]> {
     .innerJoin(events, eq(events.venueId, venues.id))
     .where(
       and(
-        gte(events.startsAt, nowIso()),
+        stillUpcoming(),
         lte(events.startsAt, isoInDays(HORIZON_DAYS)),
         sql`${venues.city} is not null and trim(${venues.city}) <> ''`,
         sql`${venues.lat} is not null and ${venues.lng} is not null`,
@@ -343,7 +343,7 @@ function milesBetween(a: Town, b: Town): number {
 export async function cityData(env: Env, town: Town, towns: Town[]): Promise<CityData> {
   const db = getDb(env.DB);
   const canon = alias(venues, 'canon');
-  const window = and(gte(events.startsAt, nowIso()), lte(events.startsAt, isoInDays(HORIZON_DAYS)));
+  const window = and(stillUpcoming(), lte(events.startsAt, isoInDays(HORIZON_DAYS)));
   // The town is identified on the venue the event points at, matching allTowns —
   // every spelling of it, so a "Montréal" venue appears on the Montreal page.
   //

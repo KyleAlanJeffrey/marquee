@@ -28,12 +28,15 @@ export const VENUE_SAME_NAME_METERS = 12_000;
 export const SHOW_MATCH_HOURS = 6;
 /**
  * The window when one side's time is a placeholder. A time-unknown listing is
- * pinned to noon at the venue, so anything on the same local day sits within
- * twelve hours of it in the same zone — thirteen buys a DST edge. It must stay
- * under sixteen, or a placeholder would reach the previous evening's show and
- * merge a two-night run.
+ * pinned to noon at the venue, so everything on the same local day — midnight
+ * to midnight — sits within exactly twelve hours of it in the same zone.
+ * Thirteen looked like harmless DST slack but isn't: it also reaches a real
+ * 11pm show on the *previous* night, and merging a late club show into the
+ * next day's TBD listing is worse than what the slack buys. The fall-back
+ * transition can push a post-11pm same-day show just outside twelve; missing
+ * that duplicate one night a year is the cheaper mistake.
  */
-export const TBD_SHOW_MATCH_HOURS = 13;
+export const TBD_SHOW_MATCH_HOURS = 12;
 
 const EARTH_RADIUS_M = 6_371_000;
 

@@ -1,6 +1,7 @@
 import { and, gte, sql } from 'drizzle-orm';
 
 import { citySlug } from './cities';
+import { stillUpcoming } from './data';
 import type { DB } from './db';
 import { getDb } from './db';
 import type { Env } from './env';
@@ -208,7 +209,7 @@ export async function submitFresh(env: Env, since: string): Promise<IndexNowResu
     })
     .from(events)
     .leftJoin(venues, sql`${venues.id} = ${events.venueId}`)
-    .where(and(gte(events.createdAt, since), gte(events.startsAt, nowIso())))
+    .where(and(gte(events.createdAt, since), stillUpcoming()))
     .limit(MAX_URLS);
 
   if (rows.length === 0) {

@@ -30,6 +30,26 @@ export const nowIso = () => new Date().toISOString().slice(0, 19) + 'Z';
 export const isoInDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 19) + 'Z';
 export const isoAt = (ms: number) => new Date(ms).toISOString().slice(0, 19) + 'Z';
 
+/** How long past its noon placeholder a time-unknown show stays "upcoming":
+ *  until midnight at the venue, which is noon plus twelve hours. */
+export const TBD_GRACE_MS = 12 * 3_600_000;
+
+/**
+ * "Hasn't happened yet", aware of unannounced set times. A `time_unknown` row's
+ * `starts_at` is noon at the venue — treating that as the moment the show ends
+ * would retire the listing at lunchtime on the day itself, so those rows stay
+ * upcoming until midnight venue-local. Shaped as a range from the earlier bound
+ * with a residual check, rather than a `case`, so `events_starts_at_idx` still
+ * gets a range scan.
+ */
+export function stillUpcoming(now = nowIso()): SQL {
+  const doorsClosed = isoAt(new Date(now).getTime() - TBD_GRACE_MS);
+  return and(
+    gte(events.startsAt, doorsClosed),
+    or(eq(events.timeUnknown, true), gte(events.startsAt, now)),
+  )!;
+}
+
 /** Sources send both `null` and `''` for "no region"; the UI only handles one. */
 const blankToNull = (v: string | null) => (v && v.trim() !== '' ? v : null);
 
@@ -172,7 +192,7 @@ export async function nearbyEvents(
     .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
     .where(
       and(
-        gte(events.startsAt, nowIso()),
+        stillUpcoming(),
         lte(events.startsAt, isoInDays(120)),
         between(venues.lat, lat - latDelta, lat + latDelta),
         between(venues.lng, lng - lngDelta, lng + lngDelta),
@@ -249,7 +269,7 @@ export async function nearbyVenues(
     .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
     .where(
       and(
-        gte(events.startsAt, nowIso()),
+        stillUpcoming(),
         lte(events.startsAt, isoInDays(120)),
         // Boxed on the row the event points at, not on the cluster head: `canon` is
         // only reachable through a coalesce, so filtering there gives up
@@ -364,7 +384,7 @@ export async function eventsByIds(db: DB, ids: string[]) {
       .where(
         and(
           inArray(events.id, unique.slice(i, i + EVENT_LOOKUP_CHUNK)),
-          gte(events.startsAt, nowIso()),
+          stillUpcoming(),
         ),
       );
     rows.push(...chunk);
@@ -612,7 +632,16 @@ export async function artistPastEvents(db: DB, id: string, limit = 300) {
     })
     .from(events)
     .leftJoin(venues, eq(venues.id, events.venueId))
-    .where(and(eq(events.artistId, id), lt(events.startsAt, nowIso())))
+    // The mirror of `stillUpcoming`: a time-unknown show isn't past until
+    // midnight at the venue, so it joins the log picker a day late rather
+    // than at lunchtime on the day itself.
+    .where(
+      and(
+        eq(events.artistId, id),
+        lt(events.startsAt, nowIso()),
+        or(eq(events.timeUnknown, false), lt(events.startsAt, isoAt(Date.now() - TBD_GRACE_MS))),
+      ),
+    )
     .orderBy(desc(events.startsAt))
     .limit(limit);
   return rows.map((r) => ({
@@ -639,7 +668,7 @@ export async function artistEvents(db: DB, id: string) {
     })
     .from(events)
     .leftJoin(venues, eq(venues.id, events.venueId))
-    .where(and(eq(events.artistId, id), gte(events.startsAt, nowIso())))
+    .where(and(eq(events.artistId, id), stillUpcoming()))
     .orderBy(events.startsAt);
   return rows.map((r) => ({
     ...r,
@@ -747,7 +776,7 @@ export async function searchTowns(db: DB, q: string, limit = 12) {
     .innerJoin(events, eq(events.venueId, venues.id))
     .where(
       and(
-        gte(events.startsAt, nowIso()),
+        stillUpcoming(),
         lte(events.startsAt, isoInDays(365)),
         sql`${venues.city} is not null and trim(${venues.city}) <> ''`,
         sql`${venues.lat} is not null and ${venues.lng} is not null`,
@@ -981,7 +1010,7 @@ export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
     })
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))
-    .where(and(inArray(events.venueId, clusterIds), gte(events.startsAt, nowIso())))
+    .where(and(inArray(events.venueId, clusterIds), stillUpcoming()))
     .orderBy(events.startsAt)
     .limit(limit)
     .offset(offset);
@@ -1727,8 +1756,8 @@ export async function repairDuplicates(
     .from(events)
     .where(
       opts.afterArtistId
-        ? and(gte(events.startsAt, nowIso()), gte(events.artistId, opts.afterArtistId))
-        : gte(events.startsAt, nowIso()),
+        ? and(stillUpcoming(), gte(events.artistId, opts.afterArtistId))
+        : stillUpcoming(),
     )
     .orderBy(events.artistId, events.venueId, events.startsAt)
     // Bounded so one repair can't try to hold the entire future in a single D1
@@ -2355,7 +2384,7 @@ export async function artistsWithUpcoming(db: DB, ids: string[]): Promise<Set<st
   const rows = await db
     .selectDistinct({ artistId: events.artistId })
     .from(events)
-    .where(and(inArray(events.artistId, ids), gte(events.startsAt, nowIso())));
+    .where(and(inArray(events.artistId, ids), stillUpcoming()));
   return new Set(rows.map((r) => r.artistId));
 }
 
@@ -2474,7 +2503,7 @@ export async function ingestStats(db: DB, days = 7) {
     })
     .from(events)
     .innerJoin(venues, eq(venues.id, events.venueId))
-    .where(and(gte(events.startsAt, nowIso()), lte(events.startsAt, isoInDays(90))))
+    .where(and(stillUpcoming(), lte(events.startsAt, isoInDays(90))))
     .groupBy(venues.city, venues.region, events.source)
     .orderBy(sql`count(*) desc`)
     .limit(40);

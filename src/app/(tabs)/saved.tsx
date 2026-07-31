@@ -27,9 +27,10 @@ function snapshotAsEvent(s: SavedShow): NearbyEvent {
     event_id: s.eventId,
     event_name: s.name,
     starts_at: s.startsAt,
-    // The snapshot predates the flag; the revalidated row corrects it. Claiming
-    // a known time briefly beats hiding every saved show's door time.
-    time_unknown: false,
+    // Snapshots from before the flag existed don't carry it; defaulting those
+    // to "time known" keeps every legacy save's door time visible, and the
+    // revalidated row corrects the rare one that was actually TBD.
+    time_unknown: s.timeUnknown ?? false,
     ticket_url: null,
     price_from: s.priceFrom,
     artist_id: s.artistId ?? '',
