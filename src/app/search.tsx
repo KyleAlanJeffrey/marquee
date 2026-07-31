@@ -10,7 +10,7 @@ import { GenreChip } from '@/components/genre-chip';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
-import { Fonts, Radius, Spacing } from '@/constants/theme';
+import { Fonts, Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ensureArtist } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
@@ -75,10 +75,13 @@ export default function SearchScreen() {
           styles.searchBar,
           {
             backgroundColor: theme.inputBg,
-            borderColor: focused ? theme.cyan : theme.border,
+            borderColor: focused ? theme.primary : theme.border,
           },
+          // The design language asks a focused field to glow in the primary, not
+          // just change its border colour.
+          focused && Glow.primary,
         ]}>
-        <Ionicons name="search" size={18} color={focused ? theme.cyan : theme.textTertiary} />
+        <Ionicons name="search" size={18} color={focused ? theme.primary : theme.textTertiary} />
         <TextInput
           value={input}
           onChangeText={setInput}

@@ -81,6 +81,18 @@ export default function Root({ children }: PropsWithChildren) {
 
         {/* Required for a full-screen react-native-web root ScrollView. */}
         <ScrollViewStyleReset />
+
+        {/*
+          Drop the browser's own focus ring on text fields. It lands inside the
+          field's lime border and the two rings read as a rendering bug.
+
+          This only removes a ring we replace: a focused field takes the primary
+          border plus its glow, which is louder than what the browser drew. It has
+          to live here rather than in a StyleSheet because `outline-style: auto`
+          ignores a zero width — only `none` clears it — and React Native's style
+          types don't accept that value.
+        */}
+        <style dangerouslySetInnerHTML={{ __html: 'input:focus{outline:none}' }} />
       </head>
       <body>{children}</body>
     </html>
