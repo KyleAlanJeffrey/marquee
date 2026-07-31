@@ -810,6 +810,51 @@ cleaned up.
 - [ ] **Phase 4 — the social part.** Follow people, a feed of what friends saw,
   year-in-review. Only worth it once phase 3 has content in it.
 
+**Both are designed now, in their own documents** (2026-07-31), because they turned
+out to rest on a fact worth its own writeup:
+
+- **[`docs/historical-concerts.md`](docs/historical-concerts.md)** — the catalogue has
+  **19 days of history**. Production D1: 22,675 events, **623 in the past**, earliest
+  `2026-07-12`. Every source sells tickets, and nobody sells tickets to last year, so
+  somebody with 200 gigs behind them can log **none** of them. For a product whose
+  loop is "log what you've seen" that is a blank page where the value goes.
+
+  The way out is in that document, and the wedge is something already built: the log
+  renders purely from its own snapshot — no `useEvent`, no fetch, not revalidated —
+  so **a logged show does not need a row in `events`**. That splits the problem into
+  discovery (hard) and logging (already solved), and the recommended first pass is
+  three pickers over the 3,771 artists and 2,891 venue clusters we already have, into
+  a `past_shows` table with synthetic `past:<uuid>` ids. No new data source, no
+  moderation queue.
+
+  Two cheap experiments come first and neither has been run: whether Bandsintown
+  answers for past dates (we already hold the credential), and the real MusicBrainz
+  join rate against 50 realistic gigs.
+
+- **[`docs/social.md`](docs/social.md)** — the object model, and the structural
+  difference that has to drive it: a film is watched by millions separately, a concert
+  by a few thousand once. Per-event reviews alone give almost every page one review or
+  none, so reviews have to roll up to **artist** (are they good live), **venue** (is it
+  a good room) and **tour**. That makes phase 0's two-rating split load-bearing rather
+  than a nicety, and it makes phase C the highest-leverage work in the plan, because
+  `/artist/[id]` and `/venue/[id]` are already server-rendered and indexed.
+
+  Two things in there that are easy to find out too late:
+
+  - **Shipping the social layer and shipping to the App Store are one project.**
+    Guideline 1.2 requires filtering, reporting, blocking and published contact info
+    for any UGC app, with no partial credit, and #38 is already in flight.
+  - **Phases B and C are blocked on the historical work** even though they look
+    independent. Reviews of a catalogue with 19 days in it are reviews of nothing.
+    Phase A (profiles and the person graph) is genuinely unblocked and can start now.
+
+- [ ] **Decisions in those documents that are Kyle's, not mine:** what "follow" should
+  mean now that it would cover artists, venues *and* people (recommendation: people
+  live on a profile, not in the Following tab, which renames nothing); whether a
+  contributed past show is private to the logger or a shared object (it decides
+  whether moderation gets pulled forward); handle policy, since handles go in URLs and
+  are effectively permanent; and store-first or social-first.
+
 Review pages are public server-rendered content, so they land on the same
 `shell()` path the city hubs already use — `worker/src/detail.ts` is the awkward
 one, since it injects markup into the app shell and rewrites
