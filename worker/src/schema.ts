@@ -186,3 +186,27 @@ export const users = sqliteTable('users', {
 // `lower(handle)`, which Drizzle can't express — same as `artists_name_folded_idx`.
 // Declaring a second, plain index here would mean the schema described an index
 // the database has never had, and handle lookups are case-folded anyway.
+
+/**
+ * The four lists a person owns — follows, followed venues, saved shows, the
+ * attendance log — one row per list, each holding the client's own JSON array.
+ *
+ * A document rather than four relational tables because the job is portability and
+ * not querying; see `0010_user_lists.sql` for the reasoning and for when to stop
+ * doing it this way.
+ */
+export const userLists = sqliteTable(
+  'user_lists',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    /** One of `follows` | `venues` | `saved` | `attendances`, checked in SQL. */
+    kind: text('kind').notNull(),
+    /** A JSON array, validated on the way in and again on the way out. */
+    payload: text('payload').notNull(),
+    /** Epoch millis, matching the stamps inside the payload rather than ISO text. */
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.kind] })],
+);

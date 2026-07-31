@@ -98,3 +98,110 @@ export const profileBody = z.object({
   displayName: z.string().trim().max(100).nullish(),
   avatarUrl: z.string().trim().url().max(500).nullish(),
 });
+
+/*
+ * The four on-device lists, as the server will accept them.
+ *
+ * These mirror `isFollowedArtist`, `isFollowedVenue`, `isSavedShow` and
+ * `isAttendance` in `src/lib/*-store.tsx`. Two validators for one shape is a real
+ * cost, and it is paid on purpose: the client's exists because a device's
+ * `localStorage` can be edited, and this one exists because an HTTP body can be
+ * anything at all. Neither can stand in for the other.
+ *
+ * Every string is capped. The caps are not product rules — they stop one request
+ * from writing a megabyte into a row that gets read back on every sign-in.
+ */
+
+/** Snapshot text: long enough for a real venue name, short enough to bound a row. */
+const snapshotText = z.string().max(300);
+/** Absent and null both mean null. Older clients may simply omit a field. */
+const nullableText = snapshotText.nullish().transform((v) => v ?? null);
+const nullableNumber = z.number().nullish().transform((v) => v ?? null);
+/** Epoch millis. Not bounded to "now" — a device with a wrong clock still owns its list. */
+const stamp = z.number().int();
+/** 1–5 whole stars, or nothing. Matches `isRating` on the client. */
+const rating = z
+  .number()
+  .int()
+  .min(1)
+  .max(5)
+  .nullish()
+  .transform((v) => v ?? null);
+
+/** The show snapshot carried by both saved shows and attendances. */
+const showSnapshot = {
+  eventId: entityId,
+  name: snapshotText,
+  startsAt: z.string().max(40),
+  artistId: nullableText,
+  artistName: nullableText,
+  artistImageUrl: z.string().max(1000).nullish().transform((v) => v ?? null),
+  venueId: nullableText,
+  venueName: nullableText,
+  venueCity: nullableText,
+  venueTimezone: nullableText,
+};
+
+const followedArtist = z
+  .object({
+    artistId: nullableText,
+    spotifyId: nullableText,
+    name: snapshotText,
+    imageUrl: z.string().max(1000).nullish().transform((v) => v ?? null),
+    genres: z.array(z.string().max(60)).max(30).optional().default([]),
+    followedAt: stamp,
+  })
+  // The same rule the client enforces: an artist followed from search has only a
+  // Spotify id, one from a nearby show has only ours, and an entry with neither
+  // can never be matched against anything again.
+  .refine((a) => !!a.artistId || !!a.spotifyId, {
+    message: 'artistId or spotifyId is required',
+  });
+
+const followedVenue = z.object({
+  venueId: entityId,
+  name: snapshotText,
+  city: nullableText,
+  region: nullableText,
+  lat: nullableNumber,
+  lng: nullableNumber,
+  followedAt: stamp,
+});
+
+const savedShow = z.object({ ...showSnapshot, priceFrom: nullableNumber, savedAt: stamp });
+
+const attendance = z.object({
+  ...showSnapshot,
+  loggedAt: stamp,
+  rating,
+  venueRating: rating,
+  note: z.string().max(2000).nullish().transform((v) => v ?? null),
+});
+
+/**
+ * How many entries one list may hold.
+ *
+ * A ceiling rather than a target: the busiest plausible user is a few hundred
+ * follows and a lifetime of gigs, and anything past this is a loop rather than a
+ * person. Attendances get more room because a log only grows.
+ */
+export const LIST_MAX = 1000;
+export const ATTENDANCE_MAX = 2000;
+
+/**
+ * A whole-list push. Every key optional, so a client can send one list or all four.
+ *
+ * Whole-list rather than per-item because it makes deletion work without
+ * tombstones: what the client sends *is* the list, so an entry it dropped is gone.
+ * The cost is that two devices editing at once means the later writer wins the
+ * whole list, which is honest for one person with one phone and is written down in
+ * todo.md as the thing to fix before it isn't.
+ */
+export const listsBody = z
+  .object({
+    follows: z.array(followedArtist).max(LIST_MAX).optional(),
+    venues: z.array(followedVenue).max(LIST_MAX).optional(),
+    saved: z.array(savedShow).max(LIST_MAX).optional(),
+    attendances: z.array(attendance).max(ATTENDANCE_MAX).optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, { message: 'send at least one list' });

@@ -6,6 +6,7 @@ import type { AppEnv, Env } from './env';
 import { artists } from './routes/artists';
 import { events } from './routes/events';
 import { feed } from './routes/feed';
+import { lists } from './routes/lists';
 import { me } from './routes/me';
 import { search } from './routes/search';
 import { venues } from './routes/venues';
@@ -29,6 +30,7 @@ api.route('/artists', artists);
 api.route('/venues', venues);
 api.route('/events', events);
 api.route('/me', me); // who the bearer token says this is
+api.route('/me/lists', lists); // the four on-device lists, kept for this account
 api.route('/admin', admin); // /health, /backfill-bandsintown
 
 // Root app: API first, then static assets for everything else.
