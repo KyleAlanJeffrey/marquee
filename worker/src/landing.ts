@@ -13,6 +13,7 @@ import {
   howSection,
   masthead,
   num,
+  OG_IMAGE,
   placeOf,
   realVenueName,
   shell,
@@ -49,7 +50,6 @@ const TITLE = 'Concerts Near You — Every Upcoming Show in One Place · Marquee
 // Kept inside DESC_MAX — a snippet that overflows is copy no search result shows.
 export const DESCRIPTION =
   'Find concerts near you: upcoming shows, tour dates and tickets from Ticketmaster, SeatGeek and Bandsintown in one listing. No account needed.';
-const OG_IMAGE = '/og-image.png';
 
 /** How far ahead the page counts, matching the app's own horizon. */
 const HORIZON_DAYS = 365;

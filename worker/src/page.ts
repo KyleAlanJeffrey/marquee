@@ -12,7 +12,16 @@
  */
 
 const NAME = 'Marquee';
-const OG_IMAGE = '/og-image.png';
+
+/**
+ * The social card, with a version on it.
+ *
+ * Facebook, X, Slack, iMessage and Google all cache the card against its URL and
+ * hold it for a long time — so redrawing the PNG in place does nothing for the
+ * links people have already shared. The `?v` is what makes them fetch again, and
+ * it has to be bumped whenever public/og-image.png is rebuilt.
+ */
+export const OG_IMAGE = '/og-image.png?v=2';
 
 // --- text -------------------------------------------------------------------
 

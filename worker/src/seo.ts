@@ -7,7 +7,7 @@ import type { DB } from './db';
 import { getDb } from './db';
 import { artistBody, eventBody, usdFrom, venueBody } from './detail';
 import type { Env } from './env';
-import { clampDesc } from './page';
+import { clampDesc, OG_IMAGE } from './page';
 import { artists, events, venues } from './schema';
 import { zoneFor } from './timezone';
 
@@ -27,7 +27,6 @@ const NAME = 'Marquee';
 const DEFAULT_TITLE = 'Marquee — Find concerts near you';
 const DEFAULT_DESCRIPTION =
   'Marquee is a live music radar: discover upcoming concerts near you, follow the artists you love, and get a reminder before their next nearby show.';
-const OG_IMAGE = '/og-image.png';
 
 /**
  * Routes the Expo export prerenders. Everything else is a dynamic detail page.

@@ -60,13 +60,14 @@ export default function Root({ children }: PropsWithChildren) {
         <meta property="og:locale" content="en_US" />
         {/* Relative here, absolutized by the Worker (crawlers need a full URL). */}
         <meta property="og:url" content="/" />
-        <meta property="og:image" content="/og-image.png" />
+        {/* ?v must match OG_IMAGE in worker/src/page.ts — see the note there. */}
+        <meta property="og:image" content="/og-image.png?v=2" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:image:alt" content={TITLE} />
 
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:image" content="/og-image.png" />
+        <meta name="twitter:image" content="/og-image.png?v=2" />
 
         <meta name="theme-color" content="#131315" />
         <meta name="color-scheme" content="dark" />

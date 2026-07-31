@@ -17,10 +17,15 @@
 // same drawing, so they can't drift when the palette changes.
 import { Buffer } from 'node:buffer';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
 const PUBLIC = new URL('../public/', import.meta.url);
 const IMAGES = new URL('../assets/images/', import.meta.url);
+
+// sharp wants a path, not a URL, and a URL's pathname is percent-encoded — a
+// checkout under a directory with a space in it would send sharp a literal '%20'.
+const at = (name, dir) => fileURLToPath(new URL(name, dir));
 
 const CHARCOAL = '#131315';
 
@@ -85,14 +90,14 @@ const TARGETS = [
 ];
 
 for (const [dir, name, opts] of TARGETS) {
-  await sharp(Buffer.from(icon(opts))).png().toFile(new URL(name, dir).pathname);
+  await sharp(Buffer.from(icon(opts))).png().toFile(at(name, dir));
 }
 
 // The adaptive background is a flat plate — a mark here would show through the
 // foreground layer.
 await sharp({ create: { width: 1024, height: 1024, channels: 4, background: CHARCOAL } })
   .png()
-  .toFile(new URL('android-icon-background.png', IMAGES).pathname);
+  .toFile(at('android-icon-background.png', IMAGES));
 
 // Kept in step with the committed manifest deliberately: this used to write
 // start_url '/' and the old near-black theme colours, so running it would have
