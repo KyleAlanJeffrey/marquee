@@ -5,7 +5,7 @@ import { nearbyVenues, venueById, venueEvents } from '../data';
 import { getDb } from '../db';
 import type { AppEnv } from '../env';
 import { nearbyVenuesQuery, pageQuery } from '../schemas';
-import { refreshVenue } from '../sources';
+import { refreshVenue, venueInfo } from '../sources';
 
 export const venues = new Hono<AppEnv>();
 
@@ -18,6 +18,18 @@ venues.get('/nearby', zValidator('query', nearbyVenuesQuery), async (c) => {
 venues.get('/:id', async (c) => {
   const venue = await venueById(getDb(c.env.DB), c.req.param('id'));
   return venue ? c.json(venue) : c.json({ error: 'not found' }, 404);
+});
+
+// Separate from `/:id` because it reaches Wikipedia on a cold venue, and the venue
+// header should not wait on that. The screen renders from `/:id` and fills this in.
+venues.get('/:id/info', async (c) => {
+  try {
+    const info = await venueInfo(c.env, c.req.param('id'));
+    return info ? c.json(info) : c.json({ error: 'not found' }, 404);
+  } catch (err) {
+    console.error('venue info failed:', err);
+    return c.json({ error: 'info failed' }, 500);
+  }
 });
 
 venues.get('/:id/events', zValidator('query', pageQuery), async (c) => {

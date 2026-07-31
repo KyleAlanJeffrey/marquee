@@ -16,6 +16,7 @@ import type {
   Page,
   Town,
   VenueDetail,
+  VenueInfo,
   VenueEvent,
 } from '@/lib/types';
 
@@ -190,6 +191,22 @@ export function useVenue(venueId: string) {
   return useQuery({
     queryKey: ['venue', venueId],
     queryFn: (): Promise<VenueDetail> => apiGet(`/venues/${venueId}`),
+  });
+}
+
+/**
+ * The venue's description, photo and derived stats.
+ *
+ * Its own query rather than part of `useVenue` because a venue nobody has opened
+ * before reaches Wikipedia on the way, and the name and map shouldn't wait on that.
+ * Cached for an hour on the client and, once fetched, indefinitely on the venue row
+ * — a room's photograph doesn't change.
+ */
+export function useVenueInfo(venueId: string) {
+  return useQuery({
+    queryKey: ['venue-info', venueId],
+    staleTime: 60 * 60 * 1000,
+    queryFn: (): Promise<VenueInfo> => apiGet(`/venues/${venueId}/info`),
   });
 }
 

@@ -17,6 +17,7 @@ import {
   startRun,
   touchArtistsRequested,
   upsertTmArtist,
+  venueStats,
   type CrawlOutcome,
   type EventInput,
   type IncomingArtist,
@@ -34,6 +35,7 @@ import {
 import { getDb, type DB } from './db';
 import { guessUtcOffsetHours } from './dedupe';
 import { utcMsFromLocal, zoneFor } from './timezone';
+import { fetchVenueEnrichment, type VenueEnrichment } from './venue-info';
 import type { Env } from './env';
 import { artists, discoveryLog, events, venues } from './schema';
 
@@ -1077,6 +1079,97 @@ async function wikipediaBio(name: string): Promise<{ text: string; url: string |
     if (hit) bio = await summary(hit);
   }
   return bio;
+}
+
+// --- Venues -----------------------------------------------------------------
+
+/**
+ * Everything the venue page needs beyond its calendar: the derived stats, plus a
+ * description and photo if Wikipedia has them.
+ *
+ * The stats always come back. The Wikipedia half is fetched at most once per venue
+ * and then read from the row, keyed on `enrichment_checked_at` — which records the
+ * *attempt*, because most venues have no article and without it every view would
+ * re-ask about a club Wikipedia has never heard of.
+ *
+ * Writing the cache is deliberately not awaited by the caller's critical path
+ * beyond the update itself, and a failed write is swallowed: a page that renders
+ * with a description it will fetch again next time is strictly better than a page
+ * that 500s because D1 was busy.
+ */
+export async function venueInfo(env: Env, venueId: string) {
+  const db = getDb(env.DB);
+  // Resolve the cluster head first, by primary key, then read it by primary key.
+  // Two indexed lookups rather than one `coalesce(canonical_venue_id, id) = ?`,
+  // which isn't sargable and scans the whole venues table.
+  const head =
+    (
+      await db
+        .select({ head: sql<string>`coalesce(${venues.canonicalVenueId}, ${venues.id})` })
+        .from(venues)
+        .where(eq(venues.id, venueId))
+        .get()
+    )?.head ?? null;
+  if (!head) return null;
+
+  const row = await db
+    .select({
+      id: venues.id,
+      name: venues.name,
+      city: venues.city,
+      lat: venues.lat,
+      lng: venues.lng,
+      description: venues.description,
+      descriptionUrl: venues.descriptionUrl,
+      photoUrl: venues.photoUrl,
+      photoCredit: venues.photoCredit,
+      photoLicense: venues.photoLicense,
+      photoLicenseUrl: venues.photoLicenseUrl,
+      checkedAt: venues.enrichmentCheckedAt,
+    })
+    .from(venues)
+    // The head owns the description, as it owns the name and the coordinates.
+    .where(eq(venues.id, head))
+    .get();
+  if (!row) return null;
+
+  const stats = await venueStats(db, row.id);
+
+  let enrichment: VenueEnrichment = {
+    description: row.description,
+    descriptionUrl: row.descriptionUrl,
+    photoUrl: row.photoUrl,
+    photoCredit: row.photoCredit,
+    photoLicense: row.photoLicense,
+    photoLicenseUrl: row.photoLicenseUrl,
+  };
+  if (!row.checkedAt) {
+    enrichment = await fetchVenueEnrichment(row);
+    try {
+      await db
+        .update(venues)
+        .set({ ...enrichment, enrichmentCheckedAt: nowIso() })
+        .where(eq(venues.id, row.id));
+    } catch (err) {
+      console.warn(`venueInfo: could not cache enrichment for ${row.id}`, err);
+    }
+  }
+
+  return {
+    description: enrichment.description,
+    description_url: enrichment.descriptionUrl,
+    // A free-licensed photo without its credit is a licence breach, so the two
+    // travel together or neither is published.
+    photo: enrichment.photoUrl && enrichment.photoLicense
+      ? {
+          url: enrichment.photoUrl,
+          credit: enrichment.photoCredit,
+          license: enrichment.photoLicense,
+          license_url: enrichment.photoLicenseUrl,
+        }
+      : null,
+    stats,
+  };
 }
 
 // --- Lineup (support acts) --------------------------------------------------

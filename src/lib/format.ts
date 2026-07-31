@@ -49,6 +49,17 @@ export function formatRelativeDay(iso: string, timeZone?: string | null): string
   return formatEventDate(iso, timeZone);
 }
 
+/**
+ * "2026-09" as "SEP". Formatted in UTC deliberately: `new Date('2026-09')` is
+ * midnight UTC on the 1st, so rendering it in a negative-offset zone would print
+ * the month before.
+ */
+export function monthLabel(month: string): string {
+  const d = new Date(`${month}-01T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return month;
+  return d.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' }).toUpperCase();
+}
+
 export function formatTime(iso: string, timeZone?: string | null): string {
   return new Date(iso).toLocaleTimeString(undefined, {
     hour: 'numeric',

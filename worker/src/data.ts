@@ -1,4 +1,4 @@
-import { and, between, eq, gte, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
+import { and, between, desc, eq, gte, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
 import { getDb, type DB } from './db';
@@ -750,6 +750,130 @@ export async function venueById(db: DB, id: string) {
     ? { ...r, name: publishedVenueName(r.name), timezone: zoneFor(r.region, r.country) }
     : null;
 }
+
+/**
+ * What we can say about a room from its own calendar.
+ *
+ * This is the half of a venue page that works for *every* venue, which is why it
+ * exists: Wikipedia covers arenas and named theatres and knows nothing about the
+ * club tier, so anything that depends on an article can only ever be enrichment on
+ * top of this. Every number here comes from rows we already hold.
+ *
+ * `busiest_month` is counted in UTC rather than the venue's zone. A show at 00:30
+ * local on the 1st can therefore land in the previous month, which at worst moves
+ * one show between two adjacent counts — and doing it properly means grouping by a
+ * zone SQLite doesn't know, per row, to change a headline that says "August".
+ */
+export async function venueStats(db: DB, id: string) {
+  const clusterIds = (await clusterVenueIds(db, id)).slice(0, EVENT_LOOKUP_CHUNK);
+  if (clusterIds.length === 0) return null;
+  const scope = inArray(events.venueId, clusterIds);
+  const now = nowIso();
+
+  const [totals, months, top, recent] = await Promise.all([
+    db
+      .select({
+        upcoming: sql<number>`count(distinct case when ${events.startsAt} >= ${now} then ${events.id} end)`,
+        past: sql<number>`count(distinct case when ${events.startsAt} < ${now} then ${events.id} end)`,
+        acts: sql<number>`count(distinct ${events.artistId})`,
+        next_at: sql<string | null>`min(case when ${events.startsAt} >= ${now} then ${events.startsAt} end)`,
+        last_at: sql<string | null>`max(case when ${events.startsAt} < ${now} then ${events.startsAt} end)`,
+        // What it costs to get in, as a floor rather than an average: a room's
+        // cheap night is more informative than the mean of a jazz trio and an arena
+        // tour, and price_from is itself already a minimum.
+        cheapest: sql<number | null>`min(case when ${events.startsAt} >= ${now} and ${events.priceFrom} > 0 then ${events.priceFrom} end)`,
+      })
+      .from(events)
+      .where(scope)
+      .get(),
+    db
+      .select({
+        month: sql<string>`substr(${events.startsAt}, 1, 7)`,
+        shows: sql<number>`count(distinct ${events.id})`,
+      })
+      .from(events)
+      .where(and(scope, gte(events.startsAt, now)))
+      .groupBy(sql`substr(${events.startsAt}, 1, 7)`)
+      .orderBy(sql`count(distinct ${events.id}) desc`, sql`substr(${events.startsAt}, 1, 7)`)
+      .limit(1),
+    // The genres that actually play here, which is the closest thing we have to
+    // saying what kind of room it is without anybody describing it.
+    db
+      .select({ genres: artists.genres })
+      .from(events)
+      .innerJoin(artists, eq(artists.id, events.artistId))
+      .where(and(scope, gte(events.startsAt, now)))
+      .limit(GENRE_SCAN),
+    // Who played here lately. On a room with no upcoming shows this is the only
+    // thing on the page with a name in it.
+    db
+      .select({
+        artist_id: artists.id,
+        artist_name: artists.name,
+        artist_image_url: artists.imageUrl,
+        starts_at: events.startsAt,
+      })
+      .from(events)
+      .innerJoin(artists, eq(artists.id, events.artistId))
+      .where(and(scope, lte(events.startsAt, now)))
+      .orderBy(desc(events.startsAt))
+      // Over-fetched because it's deduplicated by artist below: a residency puts
+      // the same name on six consecutive nights, and one room really did return
+      // "Keyon Harrold" three times.
+      .limit(RECENT_SCAN),
+  ]);
+
+  const counts = new Map<string, number>();
+  for (const r of top) {
+    for (const g of parseGenres(r.genres)) {
+      const key = g.trim().toLowerCase();
+      if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  const genres = [...counts.entries()]
+    // Alphabetical inside a tie, or equally-common genres reorder between requests.
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 4)
+    .map(([g]) => g);
+
+  return {
+    upcoming: totals?.upcoming ?? 0,
+    past: totals?.past ?? 0,
+    acts: totals?.acts ?? 0,
+    next_at: totals?.next_at ?? null,
+    last_at: totals?.last_at ?? null,
+    cheapest: totals?.cheapest ?? null,
+    busiest_month: months[0]?.month ?? null,
+    busiest_month_shows: months[0]?.shows ?? 0,
+    genres,
+    // One row per act, keeping their latest night. Ordered newest-first already, so
+    // the first sighting of a name is the one to keep.
+    recent: dedupeBy(recent, (r) => r.artist_id).slice(0, RECENT_ACTS),
+  };
+}
+
+/** First occurrence wins, order preserved. */
+function dedupeBy<T>(rows: T[], key: (row: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const r of rows) {
+    const k = key(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+
+/** Past shows read to fill the "recently played" rail, before deduplication. */
+const RECENT_SCAN = 40;
+/** Acts shown in it. Enough to characterise a room, few enough to scan. */
+const RECENT_ACTS = 6;
+
+/** Upcoming shows read for their genres. A ceiling, not a page size: the busiest
+ *  room in the table has 163 upcoming shows and four genres is the answer either
+ *  way. */
+const GENRE_SCAN = 120;
 
 /**
  * Every venue id that belongs to the same room as `id` — the cluster head, and

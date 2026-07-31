@@ -115,6 +115,48 @@ export type VenueDetail = {
   timezone: string | null;
 };
 
+/**
+ * What a room is like, rather than just what's on there.
+ *
+ * `stats` is always present — every number in it comes from shows we already hold,
+ * so it works for a basement venue as well as an arena. `description` and `photo`
+ * come from Wikipedia and are usually null: it covers named theatres and arenas and
+ * knows nothing about the club tier.
+ */
+export type VenueInfo = {
+  description: string | null;
+  /** The article, for the CC BY-SA attribution the licence requires. */
+  description_url: string | null;
+  /** Free-licensed, so it never arrives without its credit — the server drops the
+   *  photo entirely rather than publish one it can't attribute. */
+  photo: {
+    url: string;
+    credit: string | null;
+    license: string;
+    license_url: string | null;
+  } | null;
+  stats: {
+    upcoming: number;
+    past: number;
+    /** Distinct acts booked here, across everything we know about. */
+    acts: number;
+    next_at: string | null;
+    last_at: string | null;
+    /** Lowest advertised entry price of anything upcoming, or null. */
+    cheapest: number | null;
+    /** "2026-09", the month with the most upcoming shows. */
+    busiest_month: string | null;
+    busiest_month_shows: number;
+    genres: string[];
+    recent: {
+      artist_id: string;
+      artist_name: string;
+      artist_image_url: string | null;
+      starts_at: string;
+    }[];
+  } | null;
+};
+
 /** A page of a paginated list (cursor = next offset, or null when done). */
 export type Page<T> = { items: T[]; nextCursor: number | null };
 

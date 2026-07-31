@@ -68,6 +68,17 @@ export const venues = sqliteTable(
     lng: real('lng'),
     /** The venue row representing this physical location (itself, if first). */
     canonicalVenueId: text('canonical_venue_id'),
+    /** Wikipedia extract for the room, CC BY-SA, shown with `descriptionUrl`. */
+    description: text('description'),
+    descriptionUrl: text('description_url'),
+    /** The article's lead photograph. Free-licensed, so `photoCredit` and
+     *  `photoLicense` must render with it — see migration 0008. */
+    photoUrl: text('photo_url'),
+    photoCredit: text('photo_credit'),
+    photoLicense: text('photo_license'),
+    photoLicenseUrl: text('photo_license_url'),
+    /** When we last *asked*, not when we last found something. */
+    enrichmentCheckedAt: text('enrichment_checked_at'),
   },
   (t) => ({
     sourceUnique: unique().on(t.source, t.sourceVenueId),
