@@ -40,11 +40,15 @@ rules, moderation minimum, and why reviews roll up to artist and venue rather th
 living per-event. The phases there are the plan; each ships useful alone.
 History-backfill has landed, so **nothing below is blocked any more** except D on B.
 
-1. [ ] **Phase A — profiles and the person graph.** A profile page: handle,
-   avatar, counts, the public parts of a log. `person_follows` table,
-   follow/unfollow, followers/following lists. No reviews yet, so no moderation
-   surface. The handle is Clerk's — `me.post('/')` deliberately refuses
-   client-supplied identity, so read it back from the token claims.
+1. [~] **Phase A — profiles and the person graph.** Built 2026-07-31
+   (`87f5969`): `person_follows`, `GET /api/users/:key` (handle or Clerk id),
+   follow/unfollow, the `/user/[key]` screen, and `POST /me` now refreshes the
+   mirror from Clerk's Backend API — no client-supplied identity at all. What
+   keeps it `[~]`: usernames are **disabled on the Clerk instance**, so every
+   handle is null and profiles are reachable by id only until the handle policy
+   below is decided; and there is no discovery surface yet — you reach a
+   profile from settings or a shared link, nothing else, until reviews (B) put
+   people on pages.
 2. [ ] **Phase B — public reviews.** `reviews` table (separate from the private
    log, not a flag on it), per-entry `visibility`, opt-in and never retroactive
    in bulk. Ships **with** the moderation minimum: report, block, filter,

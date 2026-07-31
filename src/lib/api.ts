@@ -57,9 +57,24 @@ async function authHeaders(): Promise<Record<string, string>> {
  */
 type RequestOpts = { anonymous?: boolean };
 
+/**
+ * A failed request, with the status attached so a screen can tell "doesn't
+ * exist" (404) from "couldn't reach it" — the two need different copy, and
+ * parsing the message string to find out is how that distinction quietly breaks.
+ */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 export async function apiGet<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   const res = await fetch(url(path), { headers: opts.anonymous ? {} : await authHeaders() });
-  if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
+  if (!res.ok) throw new ApiError(`GET ${path} → ${res.status}`, res.status);
   return res.json() as Promise<T>;
 }
 
@@ -77,7 +92,7 @@ export async function apiDelete<T>(path: string, opts: RequestOpts = {}): Promis
     method: 'DELETE',
     headers: opts.anonymous ? {} : await authHeaders(),
   });
-  if (!res.ok) throw new Error(`DELETE ${path} → ${res.status}`);
+  if (!res.ok) throw new ApiError(`DELETE ${path} → ${res.status}`, res.status);
   return res.json() as Promise<T>;
 }
 
@@ -92,6 +107,6 @@ async function send<T>(
     headers: { 'Content-Type': 'application/json', ...(opts.anonymous ? {} : await authHeaders()) },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
+  if (!res.ok) throw new ApiError(`${method} ${path} → ${res.status}`, res.status);
   return res.json() as Promise<T>;
 }

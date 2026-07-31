@@ -89,10 +89,13 @@ export function useFollowPerson(key: string) {
       console.warn('follow failed:', err);
       if (context?.previous) queryClient.setQueryData(profileKey(key), context.previous);
     },
-    // The follower list on this profile changed too, whichever way it went.
+    // Every cached profile, not just this one: the viewer's own profile — its
+    // following count and list — changed too, and it may be cached under their
+    // handle, their id, or both, so there is no precise key to name. Profiles
+    // are one cheap read each and follows are rare; blanket beats stale.
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: profileKey(key) });
-      queryClient.invalidateQueries({ queryKey: followListKey(key, 'followers') });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+      queryClient.invalidateQueries({ queryKey: ['profile-list'] });
     },
   });
 }

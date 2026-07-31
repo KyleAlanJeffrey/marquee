@@ -14,6 +14,7 @@ import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { ApiError } from '@/lib/api';
 import { personLabel, useFollowList, useFollowPerson, useProfile, type PublicUser } from '@/lib/people';
 import { useWriteGate } from '@/lib/write-gate';
 
@@ -85,12 +86,15 @@ export default function ProfileScreen() {
   }
 
   if (profile.isError || !profile.data) {
+    // "Doesn't exist" and "couldn't load" are different answers: a stale link or
+    // deleted account gets the first, a network hiccup must not — telling someone
+    // an account is gone because their wifi dropped is the wrong kind of wrong.
+    const gone = profile.error instanceof ApiError && profile.error.status === 404;
     return (
       <View style={styles.center}>
-        {/* A 404 is the likely error: a stale link, or a deleted account. */}
         <ErrorState
-          message="This profile doesn't exist — the account may have been deleted."
-          onRetry={() => profile.refetch()}
+          message={gone ? "This profile doesn't exist — the account may have been deleted." : undefined}
+          onRetry={gone ? undefined : () => profile.refetch()}
         />
       </View>
     );

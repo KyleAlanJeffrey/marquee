@@ -51,7 +51,16 @@ me.post('/', async (c) => {
   const { userId } = await callerFrom(c.env, c.req.header('authorization'));
   if (!userId) return c.json({ error: 'sign in required' }, 401);
   const db = getDb(c.env.DB);
-  await syncProfileFromClerk(c.env, db, userId);
+  try {
+    await syncProfileFromClerk(c.env, db, userId);
+  } catch (err) {
+    // Clerk's API being down is not this account being broken. The token already
+    // verified, so the row still gets claimed — just without fresher profile
+    // fields than whatever it already held. The client retries the sync on its
+    // next launch either way, and a stale display name beats a failed sign-in.
+    console.warn('profile sync from Clerk failed:', err);
+    await ensureUser(db, userId);
+  }
   return c.json({ ok: true, user: await findUser(db, userId) });
 });
 
