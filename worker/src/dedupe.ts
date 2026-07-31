@@ -150,10 +150,20 @@ export function dashBillingVenueName(
   if (!prefix || !suffix) return false;
   const fold = (s: string) => normalizeWords(s).join(' ');
   const suffixWords = fold(suffix);
-  if (!suffixWords || suffixWords !== fold(town)) return false;
+  const townWords = fold(town);
+  // Non-Latin names ("東京") fold to nothing, so they compare raw instead of
+  // silently never matching.
+  const suffixIsTown =
+    suffixWords || townWords
+      ? !!suffixWords && suffixWords === townWords
+      : suffix.toLowerCase() === town.toLowerCase();
+  if (!suffixIsTown) return false;
   if (looksLikeTourName(prefix)) return true;
-  const act = (artistName ?? '').trim().toLowerCase();
-  return act.length > 2 && prefix.toLowerCase().includes(act);
+  // Whole tokens, not substrings: the band War must not claim Warlord Theater.
+  const actTokens = normalizeWords(artistName ?? '');
+  if (actTokens.length === 0) return false;
+  const prefixTokens = new Set(normalizeWords(prefix));
+  return actTokens.every((t) => prefixTokens.has(t));
 }
 
 const normalizeWords = (s: string): string[] =>

@@ -311,6 +311,18 @@ describe('dash-separated billings', () => {
     expect(dashBillingVenueName('The Eastern-GA', 'Atlanta', 'The Eastern')).toBe(false);
   });
 
+  it('matches the artist as whole tokens, so War cannot claim Warlord Theater', () => {
+    expect(dashBillingVenueName('Warlord Theater - Oakland', 'Oakland', 'War')).toBe(false);
+    expect(dashBillingVenueName('WAR LIVE SET - Oakland', 'Oakland', 'War')).toBe(true);
+  });
+
+  it('compares a non-Latin city raw instead of never matching it', () => {
+    // Normalisation strips CJK to nothing; the fallback compares the strings
+    // themselves so a billing suffixed with 東京 is still tellable in Tokyo.
+    expect(dashBillingVenueName('BABYMETAL WORLD TOUR - 東京', '東京', 'Babymetal')).toBe(true);
+    expect(dashBillingVenueName('Zepp DiverCity - 東京', '東京', 'Babymetal')).toBe(false);
+  });
+
   it('still misses the club-night brand, knowingly', () => {
     // No artist token, no tour word: nothing in the listing separates this from
     // a room. Pinned as the residual the todo entry accepts.
