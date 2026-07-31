@@ -67,6 +67,50 @@ describe('venue identity', () => {
     );
   });
 
+  it("does not let the town's own name count as a distinguishing word", () => {
+    // "Metro Chicago" and "Radius Chicago" are two different rooms that agree on
+    // nothing but the word "chicago" — which every venue in Chicago may carry. The
+    // coordinates here are pinned ~145m apart, inside the window where a shared
+    // word used to be enough to merge them.
+    const metro = at('Metro Chicago', 41.9397, -87.6589, 'Chicago');
+    const radius = at('Radius Chicago', 41.941, -87.6589, 'Chicago');
+    expect(venueNamesAgree('Metro Chicago', 'Radius Chicago', 'Chicago')).toBe(false);
+    expect(sameVenue(metro, radius)).toBe(false);
+  });
+
+  it('uses whichever side knows the town when only one does', () => {
+    const metro = at('Metro Chicago', 41.9397, -87.6589, 'Chicago');
+    const radius = { id: 'r', name: 'Radius Chicago', lat: 41.941, lng: -87.6589 };
+    expect(sameVenue(metro, radius)).toBe(false);
+  });
+
+  it('still joins two spellings of one room once the town is dropped', () => {
+    // The city word goes, the identifying word stays: "Metro" is what matches.
+    expect(venueNamesAgree('Metro Chicago', 'Metro', 'Chicago')).toBe(true);
+    expect(
+      sameVenue(at('Metro Chicago', 41.9397, -87.6589, 'Chicago'), at('Metro', 41.9408, -87.6589, 'Chicago')),
+    ).toBe(true);
+  });
+
+  it('still joins a town-named venue to its identical twin across a centroid', () => {
+    // The escape hatch the city-drop needs: "Royal Oak Music Theatre" in Royal Oak
+    // is nothing but city words and stopwords, so dropping the town would empty it
+    // — but token-identical names in one town are one room, and the rule above
+    // (12km, same town) exists exactly for these centroid-stamped pairs.
+    expect(venueNamesMatchStrongly('Royal Oak Music Theatre', 'Royal Oak Music Theatre', 'Royal Oak')).toBe(true);
+    expect(venueNamesAgree('Royal Oak Music Theatre', 'Royal Oak Music Theatre', 'Royal Oak')).toBe(true);
+  });
+
+  it('keeps a venue whose whole identity is the town name mergeable at the same spot', () => {
+    // Dropping the town can empty a name ("Chicago Theatre" in Chicago is all
+    // stopwords and city). Empty claims nothing, so it cannot conflict — the
+    // same-spot rule still joins it, same as any all-generic name.
+    expect(venueNamesConflict('Chicago Theatre', 'The Chicago Theatre', 'Chicago')).toBe(false);
+    expect(
+      sameVenue(at('Chicago Theatre', 41.8855, -87.6275, 'Chicago'), at('The Chicago Theatre', 41.8855, -87.6275, 'Chicago')),
+    ).toBe(true);
+  });
+
   it('needs coordinates on both sides', () => {
     expect(sameVenue(at('Somewhere', 1, 1), { id: 'x', name: 'Somewhere', lat: null, lng: null })).toBe(false);
   });

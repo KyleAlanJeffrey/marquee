@@ -1263,11 +1263,75 @@ function mergeShow(row: ExistingShow, i: EventInput, venueId: string | null) {
  * from an earlier merge, then by venue + artist + a time window — Bandsintown
  * publishes venue-local times, so "same show" can't mean "same timestamp".
  */
+/**
+ * Cluster membership for many venue ids at once — the set-sized version of
+ * `clusterVenueIds`, for callers holding a whole batch of listings.
+ *
+ * Two indexed reads for the entire set (primary key, then `venues_canonical_idx`),
+ * chunked under D1's bound-parameter ceiling. Exists because the ingest path used to
+ * inline `coalesce(canonical_venue_id, id) = ?` per listing, which is the non-sargable
+ * form every read path was already moved away from — one whole-table scan per incoming
+ * show, on the hottest write path in the Worker.
+ *
+ * An id the venues table doesn't know maps to just itself, which matches nothing
+ * downstream (`events.venue_id` is a foreign key), same as the subquery it replaces.
+ */
+async function clusterIdsByVenue(db: DB, ids: (string | null)[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  const unique = [...new Set(ids.filter((v): v is string => !!v))];
+  if (unique.length === 0) return out;
+
+  const headOf = new Map<string, string>();
+  for (let i = 0; i < unique.length; i += EVENT_LOOKUP_CHUNK) {
+    const rows = await db
+      .select({ id: venues.id, head: sql<string>`coalesce(${venues.canonicalVenueId}, ${venues.id})` })
+      .from(venues)
+      .where(inArray(venues.id, unique.slice(i, i + EVENT_LOOKUP_CHUNK)));
+    for (const r of rows) headOf.set(r.id, r.head);
+  }
+
+  const heads = [...new Set(headOf.values())];
+  const membersOf = new Map<string, string[]>();
+  for (let i = 0; i < heads.length; i += EVENT_LOOKUP_CHUNK) {
+    const rows = await db
+      .select({ id: venues.id, head: venues.canonicalVenueId })
+      .from(venues)
+      .where(inArray(venues.canonicalVenueId, heads.slice(i, i + EVENT_LOOKUP_CHUNK)));
+    for (const r of rows) {
+      if (!r.head) continue;
+      (membersOf.get(r.head) ?? membersOf.set(r.head, []).get(r.head)!).push(r.id);
+    }
+  }
+
+  for (const id of unique) {
+    const head = headOf.get(id);
+    if (!head) {
+      out.set(id, [id]);
+      continue;
+    }
+    // Head first, then members; deduped because the asked-for id may be the head.
+    out.set(id, [...new Set([head, ...(membersOf.get(head) ?? [])])]);
+  }
+  return out;
+}
+
+/**
+ * The most cluster ids one match clause will carry. Real clusters are a handful of
+ * rows; a cluster past this size is a clustering bug (see `venueEvents`, which warns
+ * on the same condition), and the cap keeps the statement under D1's parameter limit.
+ */
+const MATCH_CLUSTER_MAX = 30;
+
 async function findExistingShows(
   db: DB,
   keys: { source: string; sourceEventId: string; artistId: string; venueId: string | null; startsAt: string }[],
 ): Promise<(ExistingShow | null)[]> {
   if (keys.length === 0) return [];
+  // Resolved once for the batch, not per listing — see `clusterIdsByVenue`.
+  const clusters = await clusterIdsByVenue(
+    db,
+    keys.map((k) => k.venueId),
+  );
   const cols = {
     id: events.id,
     artistId: events.artistId,
@@ -1291,6 +1355,11 @@ async function findExistingShows(
       sql`json_extract(${events.sources}, ${'$."' + k.source + '"'}) = ${k.sourceEventId}`,
     ];
     const t = new Date(k.startsAt).getTime();
+    const cluster = k.venueId ? (clusters.get(k.venueId) ?? [k.venueId]) : [];
+    if (cluster.length > MATCH_CLUSTER_MAX) {
+      // The head sorts first, so the slice keeps the row most shows point at.
+      console.warn(`venue ${k.venueId}: cluster of ${cluster.length} rows, matching the first ${MATCH_CLUSTER_MAX}`);
+    }
     if (k.venueId && !Number.isNaN(t)) {
       const window = SHOW_MATCH_HOURS * 3_600_000;
       clauses.push(
@@ -1301,9 +1370,10 @@ async function findExistingShows(
           // a later venue joined the cluster and took the name — lexicographic
           // order picks the representative, so it moves when the cluster grows.
           // Comparing ids directly missed those and left the show stored twice.
-          sql`${events.venueId} in (
-                select id from ${venues} where coalesce(canonical_venue_id, id) = ${k.venueId}
-              )`,
+          // The ids are pre-resolved for the whole batch (two indexed reads)
+          // instead of the old inline `coalesce(...)` subquery, which scanned the
+          // venues table once per incoming listing.
+          inArray(events.venueId, cluster.slice(0, MATCH_CLUSTER_MAX)),
           eq(events.artistId, k.artistId),
           between(events.startsAt, isoAt(t - window), isoAt(t + window)),
         ),

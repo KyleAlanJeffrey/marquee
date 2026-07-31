@@ -106,19 +106,53 @@ export function looksLikeEventTitle(name: string | null | undefined): boolean {
   return n.length > VENUE_NAME_MAX || n.includes(':') || looksLikeTourName(n);
 }
 
-export function venueNameTokens(name: string): Set<string> {
-  // A tour title vouches for nothing, so it gets no tokens: it cannot agree with a
-  // name, and it cannot conflict with one either.
-  if (looksLikeTourName(name)) return new Set();
-  const tokens = name
+const normalizeWords = (s: string): string[] =>
+  s
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .split(' ')
-    .filter((t) => t.length > 1 && !STOPWORDS.has(t));
+    .filter((t) => t.length > 1);
+
+/**
+ * @param city When given, the town's own words are dropped from the name \u2014 in its
+ * own town a city name distinguishes nothing. "Metro Chicago" and "Radius Chicago"
+ * are two different rooms that agree on nothing but the word "chicago", and that
+ * shared word was enough for `venueNamesAgree` to merge them. Measured on
+ * production before this landed: of a 60-cluster sample holding 3+ distinct names,
+ * 11 had a pair whose only shared words were the town's \u2014 "Manchester Club
+ * Academy", "O2 Ritz Manchester" and "O2 Apollo Manchester" fused into one row is
+ * the textbook case.
+ */
+export function venueNameTokens(name: string, city?: string | null): Set<string> {
+  // A tour title vouches for nothing, so it gets no tokens: it cannot agree with a
+  // name, and it cannot conflict with one either.
+  if (looksLikeTourName(name)) return new Set();
+  const cityWords = city ? new Set(normalizeWords(city)) : null;
+  const tokens = normalizeWords(name).filter((t) => !STOPWORDS.has(t) && !cityWords?.has(t));
   return new Set(tokens);
+}
+
+/** Non-empty and token-for-token equal. */
+function sameTokens(a: Set<string>, b: Set<string>): boolean {
+  if (a.size === 0 || a.size !== b.size) return false;
+  for (const t of a) if (!b.has(t)) return false;
+  return true;
+}
+
+/**
+ * Token-for-token the same name, city words included.
+ *
+ * The escape hatch for venues named after their own town. "Royal Oak Music
+ * Theatre" in Royal Oak is nothing but city words and stopwords, so the city-drop
+ * empties it and it could never vouch for itself again — but two rows in one town
+ * carrying the *identical* name are one room, city words or not. A single shared
+ * word is weak evidence; the whole name is not.
+ */
+function identicalNames(a: string, b: string): boolean {
+  return sameTokens(venueNameTokens(a), venueNameTokens(b));
 }
 
 /**
@@ -128,9 +162,10 @@ export function venueNameTokens(name: string): Set<string> {
  * the same building at the same coordinates is already matched without a name.
  * Missing a duplicate costs a repeated row; merging two venues loses shows.
  */
-export function venueNamesAgree(a: string, b: string): boolean {
-  const ta = venueNameTokens(a);
-  const tb = venueNameTokens(b);
+export function venueNamesAgree(a: string, b: string, city?: string | null): boolean {
+  if (identicalNames(a, b)) return true;
+  const ta = venueNameTokens(a, city);
+  const tb = venueNameTokens(b, city);
   if (ta.size === 0 || tb.size === 0) return false;
   for (const t of ta) if (tb.has(t)) return true;
   return false;
@@ -154,9 +189,9 @@ export function venueNamesAgree(a: string, b: string): boolean {
  * That is the cheaper error on purpose: a duplicate row repeats a show, a bad merge
  * moves every show in the cluster to the wrong room.
  */
-export function venueNamesConflict(a: string, b: string): boolean {
-  const ta = venueNameTokens(a);
-  const tb = venueNameTokens(b);
+export function venueNamesConflict(a: string, b: string, city?: string | null): boolean {
+  const ta = venueNameTokens(a, city);
+  const tb = venueNameTokens(b, city);
   if (ta.size === 0 || tb.size === 0) return false;
   for (const t of ta) if (tb.has(t)) return false;
   return true;
@@ -227,9 +262,10 @@ export function pointKey(lat: number | null | undefined, lng: number | null | un
  * different rooms rarely nest like this ("Brooklyn Bowl" and "Brooklyn Steel"
  * don't), which is what makes it safe to trust over a long distance.
  */
-export function venueNamesMatchStrongly(a: string, b: string): boolean {
-  const ta = venueNameTokens(a);
-  const tb = venueNameTokens(b);
+export function venueNamesMatchStrongly(a: string, b: string, city?: string | null): boolean {
+  if (identicalNames(a, b)) return true;
+  const ta = venueNameTokens(a, city);
+  const tb = venueNameTokens(b, city);
   if (ta.size === 0 || tb.size === 0) return false;
   const [smaller, larger] = ta.size <= tb.size ? [ta, tb] : [tb, ta];
   for (const t of smaller) if (!larger.has(t)) return false;
@@ -263,9 +299,13 @@ const sameTown = (a: VenuePoint, b: VenuePoint): boolean =>
 export function sameVenue(a: VenuePoint, b: VenuePoint): boolean {
   if (a.lat == null || a.lng == null || b.lat == null || b.lng == null) return false;
   const meters = metersBetween({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng });
-  if (meters <= VENUE_SAME_SPOT_METERS && !venueNamesConflict(a.name, b.name)) return true;
-  if (meters <= VENUE_MATCH_METERS && venueNamesAgree(a.name, b.name)) return true;
-  return meters <= VENUE_SAME_NAME_METERS && sameTown(a, b) && venueNamesMatchStrongly(a.name, b.name);
+  // Whichever side knows its town. Two rows this close are in one town, so a single
+  // value serves both names, and the comparison stays symmetric when only one row
+  // carries a city.
+  const town = a.city ?? b.city ?? null;
+  if (meters <= VENUE_SAME_SPOT_METERS && !venueNamesConflict(a.name, b.name, town)) return true;
+  if (meters <= VENUE_MATCH_METERS && venueNamesAgree(a.name, b.name, town)) return true;
+  return meters <= VENUE_SAME_NAME_METERS && sameTown(a, b) && venueNamesMatchStrongly(a.name, b.name, town);
 }
 
 /** The closest venue in `candidates` that is the same place as `target`. */
