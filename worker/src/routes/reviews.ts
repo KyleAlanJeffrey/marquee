@@ -143,15 +143,25 @@ reviewRoutes.put('/events/:id/review', zValidator('json', reviewBody), async (c)
     return c.json({ error: "this show hasn't happened yet" }, 422);
   }
 
-  const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 19) + 'Z';
-  const written =
-    (await db
-      .select({ n: sql<number>`count(*)` })
-      .from(reviews)
-      .where(and(eq(reviews.userId, userId), gt(reviews.createdAt, dayAgo)))
-      .get())?.n ?? 0;
-  if (written >= REVIEWS_PER_DAY) {
-    return c.json({ error: 'review limit reached for today' }, 429);
+  // The daily brake is for *new* reviews only. An edit doesn't add anything to
+  // the pile — and counting it would lock somebody out of correcting their own
+  // twentieth review, which punishes exactly the wrong behaviour.
+  const existing = await db
+    .select({ id: reviews.id })
+    .from(reviews)
+    .where(and(eq(reviews.userId, userId), eq(reviews.eventId, eventId)))
+    .get();
+  if (!existing) {
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 19) + 'Z';
+    const written =
+      (await db
+        .select({ n: sql<number>`count(*)` })
+        .from(reviews)
+        .where(and(eq(reviews.userId, userId), gt(reviews.createdAt, dayAgo)))
+        .get())?.n ?? 0;
+    if (written >= REVIEWS_PER_DAY) {
+      return c.json({ error: 'review limit reached for today' }, 429);
+    }
   }
 
   await ensureUser(db, userId);

@@ -230,8 +230,13 @@ admin.get('/reports', async (c) => {
  * are answered by the same act — they still get closed individually, which
  * keeps each reporter's outcome recorded.
  */
-admin.post('/reports/:id', zValidator('json', reportResolveBody), async (c) => {
-  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+// Auth runs as its own middleware so an unauthorized request is refused before
+// zValidator ever parses its body — the one route order where that matters.
+admin.post(
+  '/reports/:id',
+  async (c, next) => (authorized(c) ? next() : c.json({ error: 'unauthorized' }, 401)),
+  zValidator('json', reportResolveBody),
+  async (c) => {
   const db = getDb(c.env.DB);
   const report = await db
     .select({ id: reports.id, targetId: reports.targetId })
@@ -250,4 +255,5 @@ admin.post('/reports/:id', zValidator('json', reportResolveBody), async (c) => {
   }
   await db.batch(statements as [typeof statements[0], ...typeof statements]);
   return c.json({ ok: true, action });
-});
+  },
+);

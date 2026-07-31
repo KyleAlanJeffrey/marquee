@@ -136,6 +136,7 @@ export function ReviewSection({ eventId, venueName }: { eventId: string; venueNa
 
   const mine = data?.mine ?? null;
   const [editing, setEditing] = useState(false);
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const [rating, setRating] = useState<number | null>(null);
   const [venueRating, setVenueRating] = useState<number | null>(null);
   const [body, setBody] = useState('');
@@ -215,11 +216,27 @@ export function ReviewSection({ eventId, venueName }: { eventId: string; venueNa
               <PressableScale
                 haptic
                 accessibilityRole="button"
-                accessibilityLabel="Take your review down"
-                onPress={() => remove.mutate(undefined, { onSuccess: () => setEditing(false) })}
-                style={[styles.smallBtn, { borderColor: theme.border }]}>
+                accessibilityLabel={
+                  confirmingRemoval ? 'Confirm: take your review down' : 'Take your review down'
+                }
+                // Same second-tap confirm as account deletion, and for the same
+                // reason: multi-button Alert dialogs are a no-op on web.
+                onPress={() => {
+                  if (!confirmingRemoval) {
+                    setConfirmingRemoval(true);
+                    return;
+                  }
+                  remove.mutate(undefined, {
+                    onSuccess: () => {
+                      setConfirmingRemoval(false);
+                      setEditing(false);
+                    },
+                    onError: () => setConfirmingRemoval(false),
+                  });
+                }}
+                style={[styles.smallBtn, { borderColor: confirmingRemoval ? theme.error : theme.border }]}>
                 <ThemedText type="labelSm" style={{ color: theme.error }}>
-                  TAKE IT DOWN
+                  {confirmingRemoval ? 'TAP AGAIN TO REMOVE' : 'TAKE IT DOWN'}
                 </ThemedText>
               </PressableScale>
             )}
@@ -227,6 +244,11 @@ export function ReviewSection({ eventId, venueName }: { eventId: string; venueNa
           {save.isError && (
             <ThemedText type="labelSm" style={{ color: theme.error }}>
               COULDN&apos;T PUBLISH JUST NOW — TRY AGAIN
+            </ThemedText>
+          )}
+          {remove.isError && (
+            <ThemedText type="labelSm" style={{ color: theme.error }}>
+              COULDN&apos;T TAKE IT DOWN JUST NOW — TRY AGAIN
             </ThemedText>
           )}
         </View>

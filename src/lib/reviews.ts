@@ -74,7 +74,12 @@ export function useSaveReview(eventId: string) {
   return useMutation({
     mutationFn: (review: { rating: number | null; venueRating: number | null; body: string | null }) =>
       apiPut(`/events/${encodeURIComponent(eventId)}/review`, review),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: eventReviewsKey(eventId) }),
+    // The profile's review list shows the same rows, cached under a key this
+    // mutation can't name precisely (handle or id) — prefix invalidation again.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: eventReviewsKey(eventId) });
+      queryClient.invalidateQueries({ queryKey: ['profile-reviews'] });
+    },
   });
 }
 
@@ -82,7 +87,10 @@ export function useDeleteReview(eventId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => apiDelete(`/events/${encodeURIComponent(eventId)}/review`),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: eventReviewsKey(eventId) }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: eventReviewsKey(eventId) });
+      queryClient.invalidateQueries({ queryKey: ['profile-reviews'] });
+    },
   });
 }
 

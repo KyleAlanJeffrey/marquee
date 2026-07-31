@@ -226,6 +226,11 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
 
       {/* Their public reviews — the content profiles exist for. Absent rather
           than empty while loading; an empty state only once the answer is real. */}
+      {theirReviews.isError && (
+        <View style={styles.centreBlock}>
+          <ErrorState onRetry={() => theirReviews.refetch()} />
+        </View>
+      )}
       {theirReviews.isSuccess && (
         <>
           <ThemedText type="label" style={[styles.reviewsLabel, { color: theme.primary }]}>
