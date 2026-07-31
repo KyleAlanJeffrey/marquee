@@ -102,6 +102,25 @@ export function useReportReview() {
   });
 }
 
+export type FeedItem = ProfileReview & {
+  authorId: string;
+  authorHandle: string | null;
+  authorName: string | null;
+  authorAvatarUrl: string | null;
+};
+
+/**
+ * The feed: recent public reviews by the people you follow. Signed-in only —
+ * the query is "my follows", and there is no anonymous version of that.
+ */
+export function useFeed(enabled: boolean) {
+  return useQuery({
+    queryKey: ['feed'],
+    enabled,
+    queryFn: (): Promise<{ items: FeedItem[] }> => apiGet('/me/feed'),
+  });
+}
+
 export type RatingStats = { count: number; average: number | null };
 
 /** Reviews only headline a page once a few people agree — one rave is a rave. */

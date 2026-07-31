@@ -6,7 +6,7 @@ import { callerFrom, ensureUser } from '../auth';
 import { nowIso } from '../data';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
-import { events, reports, reviews, userBlocks, users } from '../schema';
+import { events, personFollows, reports, reviews, userBlocks, users } from '../schema';
 import { reportBody, reviewBody } from '../schemas';
 
 /**
@@ -238,6 +238,50 @@ reviewRoutes.post('/reviews/:id/report', zValidator('json', reportBody), async (
     createdAt: nowIso(),
   });
   return c.json({ ok: true });
+});
+
+/**
+ * The feed (phase D): recent public reviews by the people you follow, merged
+ * and sorted. Fan-out-on-read — one indexed query — and deliberately not
+ * materialised: at this graph size a join is fine, and the note the design doc
+ * leaves is that a materialised feed earns its complexity somewhere around a
+ * few hundred follows each, not before.
+ *
+ * No block filter needed on top: blocking severs the follow edge this query
+ * walks, so an estranged pair can't appear in each other's feeds by
+ * construction.
+ */
+const FEED_PAGE = 50;
+
+reviewRoutes.get('/me/feed', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+
+  const db = getDb(c.env.DB);
+  const items = await db
+    .select({
+      id: reviews.id,
+      eventId: reviews.eventId,
+      eventName: events.name,
+      startsAt: events.startsAt,
+      rating: reviews.rating,
+      venueRating: reviews.venueRating,
+      body: reviews.body,
+      createdAt: reviews.createdAt,
+      ...AUTHOR_FIELDS,
+    })
+    .from(personFollows)
+    .innerJoin(
+      reviews,
+      and(eq(reviews.userId, personFollows.followeeId), eq(reviews.visibility, 'public'), isNull(reviews.deletedAt)),
+    )
+    .innerJoin(users, and(eq(users.id, reviews.userId), isNull(users.deletedAt)))
+    .innerJoin(events, eq(events.id, reviews.eventId))
+    .where(eq(personFollows.followerId, userId))
+    .orderBy(desc(reviews.createdAt))
+    .limit(FEED_PAGE);
+
+  return c.json({ items, limit: FEED_PAGE });
 });
 
 /**

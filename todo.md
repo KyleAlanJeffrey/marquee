@@ -87,8 +87,14 @@ History-backfill has landed, so **nothing below is blocked any more** except D o
    answers a question people type into Google. Denormalised `rating_count` /
    `rating_sum`, confidence floor, and review pages with no reviews stay
    `noindex`.
-4. [ ] **Phase D — the feed.** Fan-out-on-read (one indexed query at this graph
-   size; do **not** build the materialised version first). Needs B.
+4. [~] **Phase D — the feed.** Built 2026-07-31: `GET /api/me/feed` — one
+   indexed query walking your follow edges to their recent public reviews (no
+   materialisation; the doc's note stands that a materialised feed earns its
+   complexity around a few hundred follows each). Rendered as "FROM PEOPLE YOU
+   FOLLOW" on your own profile, since the social graph is reached through you.
+   Blocks need no extra filter — they sever the very edge the query walks.
+   Still open: pagination beyond 50, and any feed of artist/venue activity
+   (this one is people only, by design).
 5. [ ] **Phase E — lists.** `lists` + `list_items`. Deliberately last — the most
    fun to build and the least load-bearing.
 
