@@ -286,7 +286,7 @@ export default function EventScreen() {
                   <PressableScale
                     onPress={() => router.push(`/venue/${e.venue!.id}`)}
                     style={[styles.mapsBtn, { backgroundColor: theme.cyan, borderColor: theme.cyan }]}>
-                    <ThemedText type="label" style={{ color: '#00363a', fontSize: 12 }}>
+                    <ThemedText type="label" style={{ color: theme.onCyan, fontSize: 12 }}>
                       VIEW VENUE
                     </ThemedText>
                   </PressableScale>
@@ -352,7 +352,10 @@ export default function EventScreen() {
                     <ThemedText type="smallBold" numberOfLines={1} style={{ flexShrink: 1 }}>
                       {p.author}
                     </ThemedText>
-                    <ThemedText type="labelSm" numberOfLines={1} style={{ color: theme.textTertiary, flexShrink: 1 }}>
+                    <ThemedText
+                      type="labelSm"
+                      numberOfLines={1}
+                      style={{ color: theme.textTertiary, flexShrink: 1, textTransform: 'none' }}>
                       @{p.handle}
                     </ThemedText>
                   </View>
@@ -466,7 +469,7 @@ export default function EventScreen() {
               following
                 ? { backgroundColor: theme.primary, borderColor: theme.primary }
                 : { borderColor: theme.primary },
-              following && Glow.purple,
+              following && Glow.primary,
             ]}>
             <Ionicons
               name={following ? 'heart' : 'heart-outline'}

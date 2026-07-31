@@ -59,7 +59,7 @@ export function FeaturedCard({ event, following, onPress, onToggleFollow }: Prop
             borderColor: following ? theme.cyan : theme.border,
           },
         ]}>
-        <Ionicons name={following ? 'heart' : 'heart-outline'} size={20} color={following ? '#00363a' : '#fff'} />
+        <Ionicons name={following ? 'heart' : 'heart-outline'} size={20} color={following ? theme.onCyan : '#fff'} />
       </Pressable>
 
       <View style={styles.body}>

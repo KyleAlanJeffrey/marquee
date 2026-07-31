@@ -215,7 +215,7 @@ export default function ArtistScreen() {
               {item.ticket_url ? (
                 <PressableScale
                   onPress={() => openUrl(item.ticket_url!)}
-                  style={[styles.ticketBtn, { backgroundColor: theme.primary }, Glow.purple, { shadowOpacity: 0.25 }]}>
+                  style={[styles.ticketBtn, { backgroundColor: theme.primary }, Glow.primary, { shadowOpacity: 0.25 }]}>
                   <ThemedText type="label" style={{ color: theme.onPrimary, fontSize: 12 }}>
                     Tickets
                   </ThemedText>
@@ -266,7 +266,10 @@ export default function ArtistScreen() {
                             {t.name}
                           </ThemedText>
                           {t.album && (
-                            <ThemedText type="labelSm" numberOfLines={1} style={{ color: theme.textTertiary }}>
+                            <ThemedText
+                              type="labelSm"
+                              numberOfLines={1}
+                              style={{ color: theme.textTertiary, textTransform: 'none' }}>
                               {t.album}
                             </ThemedText>
                           )}

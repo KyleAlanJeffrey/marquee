@@ -3,9 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
-    "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
-    "@expo-google-fonts/sora": "^0.4.2",
-    "@expo-google-fonts/space-grotesk": "^0.4.1",
+    "@expo-google-fonts/anybody": "^0.4.2",
     "@expo/vector-icons": "^15.0.2",
     "@hono/zod-validator": "^0.9.0",
     "@kylealanjeffrey/badge": "^0.0.2",

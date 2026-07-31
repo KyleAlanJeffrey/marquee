@@ -197,8 +197,8 @@ export default function BrowseScreen() {
         accessibilityRole="button"
         accessibilityLabel="Open the map view"
         style={[styles.mapBtn, { backgroundColor: theme.cyan }, Glow.cyan, !coords && styles.mapBtnDisabled]}>
-        <Ionicons name="map" size={20} color="#00363a" />
-        <ThemedText type="label" style={{ color: '#00363a', fontSize: 13 }}>
+        <Ionicons name="map" size={20} color={theme.onCyan} />
+        <ThemedText type="label" style={{ color: theme.onCyan, fontSize: 13 }}>
           Map View
         </ThemedText>
       </PressableScale>

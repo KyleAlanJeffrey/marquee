@@ -23,7 +23,7 @@ export function EmptyState({ icon, title, message, actionLabel, onAction }: Prop
         style={[
           styles.iconWrap,
           { backgroundColor: theme.backgroundElevated, borderColor: 'rgba(236,178,255,0.3)' },
-          Glow.purple,
+          Glow.primary,
           { shadowOpacity: 0.25 },
         ]}>
         <Ionicons name={icon} size={38} color={theme.primary} />
@@ -37,7 +37,7 @@ export function EmptyState({ icon, title, message, actionLabel, onAction }: Prop
       {actionLabel && onAction && (
         <PressableScale
           onPress={onAction}
-          style={[styles.button, { backgroundColor: theme.primary }, Glow.purple]}>
+          style={[styles.button, { backgroundColor: theme.primary }, Glow.primary]}>
           <ThemedText type="label" style={{ color: theme.onPrimary, fontSize: 13 }}>
             {actionLabel}
           </ThemedText>

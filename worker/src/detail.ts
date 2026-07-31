@@ -27,23 +27,28 @@ import { esc, placeOf, when } from './page';
  * Everything is scoped under `#mq-sr` — the app owns the rest of the document.
  */
 const STYLE = `<style>
-#mq-sr{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:#131313;color:#f4f2f7;
-  font:400 16px/1.6 Sora,system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 20px 64px}
+/* The app registers Anybody under the @expo-google-fonts family names, so those
+   come first; plain 'Anybody' covers the case where the webfont came from the
+   server-rendered pages instead. */
+#mq-sr{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:#131315;color:#e5e1e4;
+  font:400 16px/1.6 Anybody_400Regular,Anybody,system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 20px 64px}
 #mq-sr .in{max-width:760px;margin:0 auto}
-#mq-sr a{color:#ecb2ff}
+#mq-sr a{color:#c3f400}
 #mq-sr .crumbs{font-size:13px;letter-spacing:.04em;text-transform:uppercase;opacity:.6;margin:0 0 18px}
 #mq-sr .crumbs a{color:inherit;text-decoration:none}
-#mq-sr h1{font:800 clamp(26px,5vw,40px)/1.15 Sora,system-ui,sans-serif;margin:0 0 10px;letter-spacing:-.01em}
+#mq-sr h1{font:italic 800 clamp(26px,5vw,40px)/1.15 Anybody_800ExtraBold_Italic,Anybody,system-ui,sans-serif;
+  margin:0 0 10px;letter-spacing:-.03em;text-transform:uppercase}
 #mq-sr .lede{font-size:17px;opacity:.78;margin:0 0 24px}
-#mq-sr h2{font:700 19px/1.3 Sora,system-ui,sans-serif;margin:34px 0 12px}
-#mq-sr .cta{display:inline-block;background:#ecb2ff;color:#131313;font-weight:700;text-decoration:none;
-  padding:12px 20px;border-radius:999px;margin:6px 0 4px}
+#mq-sr h2{font:700 19px/1.3 Anybody_700Bold,Anybody,system-ui,sans-serif;margin:34px 0 12px}
+/* Lime is far too bright for white text, so the CTA label is the near-black. */
+#mq-sr .cta{display:inline-block;background:#c3f400;color:#161e00;font-weight:700;text-decoration:none;
+  padding:12px 20px;border-radius:4px;margin:6px 0 4px}
 #mq-sr ul{list-style:none;margin:0;padding:0}
-#mq-sr li{border-top:1px solid rgba(244,242,247,.12);padding:12px 0}
+#mq-sr li{border-top:1px solid rgba(229,225,228,.12);padding:12px 0}
 #mq-sr li b{display:block;font-weight:600}
 #mq-sr li span{font-size:14px;opacity:.7}
 #mq-sr .facts{margin:0 0 20px}
-#mq-sr .facts div{border-top:1px solid rgba(244,242,247,.12);padding:9px 0;display:flex;gap:14px}
+#mq-sr .facts div{border-top:1px solid rgba(229,225,228,.12);padding:9px 0;display:flex;gap:14px}
 #mq-sr .facts dt{opacity:.6;min-width:88px;font-size:14px}
 #mq-sr .facts dd{margin:0}
 #mq-sr .more{font-size:14px;opacity:.7}

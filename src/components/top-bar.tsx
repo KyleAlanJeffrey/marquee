@@ -37,7 +37,7 @@ export function TopBar({ onSearchPress, transparent, back, title, action }: Prop
           backgroundColor: theme.glass,
           borderBottomColor: theme.border,
           borderBottomWidth: 1,
-          ...Glow.purple,
+          ...Glow.primary,
           shadowOpacity: 0.12,
         },
       ]}>

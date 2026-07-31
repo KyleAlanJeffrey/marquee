@@ -1,13 +1,13 @@
 {
   "name": "Marquee — Find concerts near you",
   "short_name": "Marquee",
-  "description": "Marquee is a live music radar: discover upcoming concerts near you, follow the artists you love, and get a reminder before their next nearby show.",
+  "description": "Marquee is a live music radar: discover upcoming concerts near you, follow the artists you love, and get a reminder before their next nearby show. No account needed.",
   "start_url": "/explore",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0e0e0e",
-  "theme_color": "#0e0e0e",
+  "background_color": "#131315",
+  "theme_color": "#131315",
   "categories": [
     "music",
     "entertainment",

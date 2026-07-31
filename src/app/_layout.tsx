@@ -1,13 +1,11 @@
 import {
-  PlusJakartaSans_400Regular,
-  PlusJakartaSans_500Medium,
-  PlusJakartaSans_600SemiBold,
-} from '@expo-google-fonts/plus-jakarta-sans';
-import { Sora_600SemiBold, Sora_700Bold, Sora_800ExtraBold } from '@expo-google-fonts/sora';
-import {
-  SpaceGrotesk_500Medium,
-  SpaceGrotesk_700Bold,
-} from '@expo-google-fonts/space-grotesk';
+  Anybody_400Regular,
+  Anybody_500Medium,
+  Anybody_600SemiBold,
+  Anybody_700Bold,
+  Anybody_800ExtraBold,
+  Anybody_800ExtraBold_Italic,
+} from '@expo-google-fonts/anybody';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
@@ -61,14 +59,12 @@ function LocalStores({ children }: { children: React.ReactNode }) {
 export default function RootLayout() {
   useNotificationObserver();
   const [fontsLoaded] = useFonts({
-    Sora_600SemiBold,
-    Sora_700Bold,
-    Sora_800ExtraBold,
-    PlusJakartaSans_400Regular,
-    PlusJakartaSans_500Medium,
-    PlusJakartaSans_600SemiBold,
-    SpaceGrotesk_500Medium,
-    SpaceGrotesk_700Bold,
+    Anybody_400Regular,
+    Anybody_500Medium,
+    Anybody_600SemiBold,
+    Anybody_700Bold,
+    Anybody_800ExtraBold,
+    Anybody_800ExtraBold_Italic,
   });
 
   return (

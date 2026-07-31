@@ -51,7 +51,7 @@ export function FollowButton({
   return (
     // The glow wrapper has to carry the pill radius too, or on web the shadow is
     // drawn as a square behind a round button.
-    <Animated.View style={[styles.glowWrap, animatedStyle, following && Glow.purple]}>
+    <Animated.View style={[styles.glowWrap, animatedStyle, following && Glow.primary]}>
       <PressableScale
         haptic={false}
         accessibilityRole="button"

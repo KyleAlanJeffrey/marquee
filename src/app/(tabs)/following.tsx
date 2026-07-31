@@ -253,7 +253,8 @@ const styles = StyleSheet.create({
   railContent: { paddingHorizontal: Spacing.three, gap: Spacing.three, paddingVertical: Spacing.three },
   railItem: { alignItems: 'center', width: 68, gap: Spacing.one },
   railAvatar: { width: 60, height: 60, borderRadius: Radius.pill, borderWidth: 1 },
-  railName: { maxWidth: 68, textAlign: 'center' },
+  // An artist's own name, so it keeps its own capitalisation.
+  railName: { maxWidth: 68, textAlign: 'center', textTransform: 'none' },
   venueList: { paddingTop: Spacing.three },
   sectionLabel: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.two, letterSpacing: 1.5 },
 });

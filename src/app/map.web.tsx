@@ -159,9 +159,11 @@ export default function MapScreen() {
 
     const bounds = new mapboxgl.LngLatBounds();
     for (const g of groups) {
-      const color = g.following ? '#bd00ff' : '#00dbe9';
+      // Followed artists take the primary lime so they read first; everything
+      // else sits back in the supporting cyan.
+      const color = g.following ? theme.primary : theme.cyanSoft;
       const el = document.createElement('div');
-      el.style.cssText = `width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #0e0e0e;box-shadow:0 0 10px ${color};cursor:pointer;`;
+      el.style.cssText = `width:16px;height:16px;border-radius:50%;background:${color};border:2px solid ${theme.backgroundLowest};box-shadow:0 0 10px ${color};cursor:pointer;`;
       el.addEventListener('click', (ev) => {
         ev.stopPropagation();
         setSelectedKey(g.key);

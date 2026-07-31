@@ -376,13 +376,14 @@ export function landingHtml(origin: string, d: LandingData): string {
   ${bulbs(48)}
   <div class="hero">
     <div class="rise">
-      <p class="eyebrow">Live music radar</p>
+      <p class="eyebrow">No account needed</p>
       <h1>Every concert<br>near you, <span class="lit">in one place.</span></h1>
       <p class="lede">Marquee pulls the listings from Ticketmaster, SeatGeek and Bandsintown, throws away the duplicates, and shows you what is actually on — tonight, this weekend, or any time in the next year.</p>
       <div class="buttons">
         <a class="btn" href="/explore">Open the app</a>
         <a class="btn ghost" href="/map">See the map</a>
       </div>
+      <p class="tagline">No sign-up, no email, no password. The artists you follow and the shows you save stay on your own device.</p>
     </div>
     <div class="stub rise" style="animation-delay:.12s">
       <p class="eyebrow" style="color:var(--cyan)">On sale right now</p>

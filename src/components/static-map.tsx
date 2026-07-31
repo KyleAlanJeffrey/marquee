@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View } from 'react-native';
 
+import { Colors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type MapPoint = { lat: number; lng: number; following?: boolean };
@@ -15,7 +16,10 @@ if (RAW_MAPBOX_TOKEN && !MAPBOX_TOKEN) {
   console.warn('EXPO_PUBLIC_MAPBOX_TOKEN must be a public "pk." token; ignoring it (using the fallback map).');
 }
 
-const pin = (p: MapPoint) => `pin-s+${p.following ? 'bd00ff' : '00dbe9'}(${p.lng.toFixed(5)},${p.lat.toFixed(5)})`;
+// Mapbox wants bare hex, so the leading '#' is stripped off the palette tokens.
+const hex = (c: string) => c.replace('#', '');
+const pin = (p: MapPoint) =>
+  `pin-s+${hex(p.following ? Colors.dark.primary : Colors.dark.cyanSoft)}(${p.lng.toFixed(5)},${p.lat.toFixed(5)})`;
 
 /** Mapbox Static Images API URL for these points, or null when unavailable.
  *  A single point is centered at `zoom`; multiple points auto-fit the frame. */
@@ -70,7 +74,7 @@ function MapGrid({ points }: { points: MapPoint[] }) {
   return (
     <>
       <LinearGradient
-        colors={['#161422', '#0e0e0e']}
+        colors={['#1b1b1d', '#0e0e10']}
         style={StyleSheet.absoluteFill}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
