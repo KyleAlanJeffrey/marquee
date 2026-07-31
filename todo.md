@@ -88,9 +88,9 @@ during A/B):
   - [ ] **Blocked on Kyle:** the EAS project id (`a9540056-…`) belongs to an
     account `eas whoami` isn't a member of. Either `eas login` as its owner or
     hand over an id under `kyle_jeffrey` / `stout-agtech`.
-  - [ ] An in-app **account deletion** entry point (both stores require it now
-    that accounts exist; the privacy page already promises Profile → Your
-    account).
+  - [x] In-app **account deletion** — `8b97812`. `DELETE /api/me` (data first,
+    Clerk identity last, retryable partway) behind a two-tap confirm on the
+    Your-account screen, exactly where the privacy page points.
   - [ ] Screenshots (simulator + seeded data), the Play feature graphic, and the
     `expo-updates` decision (not installed → no OTA channel).
   - [ ] Then the website advertises the app: store badges on `/`, and a smart
