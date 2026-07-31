@@ -419,6 +419,41 @@ inspecting a real native token. Noted in `worker/src/auth.ts` next to the option
 `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, which is the Next.js convention and is read by
 nothing here. Expo inlines `EXPO_PUBLIC_*` only.
 
+#### CodeRabbit on the gate: the loading window was a real hole
+
+Reviewed `d2c1dd1` against `78c7497`, 29 files. **One finding, and it was right.**
+
+The gate said `allowed: !configured || loading || signedIn`. The comment defending
+`loading` argued that bouncing somebody mid-check is worse than letting a write
+through — but that traded one wrong answer for another, and the window is not
+small. Nothing wraps the tree in `ClerkLoaded`; `AuthProvider` renders children
+straight into a live `ClerkProvider`, so the app is fully interactive while
+`isLoaded` is false, and on web that answer costs a `/v1/client` round trip. A
+signed-out user tapping Follow early kept the follow, or didn't, depending on their
+network. A gate that fails non-deterministically is the worst kind.
+
+So `loading` is now a third state, `pending`, and the write is **held** rather than
+decided: `local-collection` parks the one most recent intent and, when the gate
+answers, either applies it or denies it. Late, never wrong. What gets parked is
+`applyAdd` and not the public mutator — replaying `toggle` after the wait could find
+the item present by then and *remove* it, which is the one outcome nobody asked for.
+
+Measured on a cold web load with the window forced open to 30s (a temporary patch,
+reverted; dev-mode boot alone takes ~7s, which is why 6s wasn't enough to see it):
+
+| page age | url | `marquee.follows.v1` |
+| --- | --- | --- |
+| 8.2s — tapped Follow while pending | event page | `[]` |
+| 9.7s / 11.7s / 28.7s / 31.7s | event page | `[]` |
+| 33.7s — window closed, held write refused | `/sign-in?why=follow%20artists` | `[]` |
+
+No silent write and no premature bounce, which are the two things being traded
+before. With the patch reverted, a cold load tapping Follow at 7.2s denies by 8.05s.
+
+- [ ] **Unverified half:** pending → *signed in* → the held write applies. It needs
+  a real session, and creating an account isn't something I can do. Sign in, then
+  tap Follow during a cold start and check the artist lands in Following.
+
 #### The gate: browse open, keeping gated (decided by Kyle 2026-07-31)
 
 Asked how hard the account requirement should be, Kyle chose **gate saving, allow

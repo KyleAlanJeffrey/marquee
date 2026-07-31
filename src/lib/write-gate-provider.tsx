@@ -21,11 +21,13 @@ export function WriteGateProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<WriteGate>(
     () => ({
-      // `loading` counts as allowed on purpose: Clerk takes a moment to say whether
-      // a stored session is still good, and bouncing somebody to sign in during that
-      // window would throw a login screen at a user who is already signed in. The
-      // server is the real gate for anything that leaves the device.
-      allowed: !configured || loading || signedIn,
+      // Deliberately not `|| loading`. Clerk takes a moment — a network round trip
+      // on web — to say whether a stored session is still good, and during it the
+      // app is already interactive. Treating that as allowed let a signed-out user
+      // slip a Follow past the gate depending on how fast their network was, so the
+      // window is now reported as `pending` and the write waits for the answer.
+      allowed: !configured || (!loading && signedIn),
+      pending: configured && loading,
       deny,
     }),
     [configured, loading, signedIn, deny],

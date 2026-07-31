@@ -19,8 +19,25 @@ import { createContext, useContext } from 'react';
  * `write-gate-provider.tsx`, which is imported only from the app tree.
  */
 export type WriteGate = {
-  /** True when a write may proceed. */
+  /** True when a write may proceed. Never true while `pending`. */
   allowed: boolean;
+  /**
+   * We don't know yet, because Clerk hasn't finished saying whether the session it
+   * has on disk is still good.
+   *
+   * This is a third state rather than a lean in either direction, and both leans
+   * are wrong. Counting it as allowed lets a signed-out user tap Follow during the
+   * window and keep something the gate exists to stop — non-deterministically,
+   * which is the worst way for a rule to fail. Counting it as denied throws a
+   * sign-in screen at somebody who is already signed in. Neither is rare enough to
+   * wave off: nothing blocks the tree on `isLoaded`, so the app is fully
+   * interactive while this is true, and on web the answer costs a network round
+   * trip to Clerk.
+   *
+   * So callers hold the write instead of deciding it, and apply or refuse it once
+   * this clears. Late is acceptable; wrong isn't.
+   */
+  pending: boolean;
   /**
    * Called *instead of* the write when it may not proceed. `what` is a short noun
    * phrase for the copy on the sign-in screen — "save shows", "follow artists".
@@ -37,7 +54,7 @@ export type WriteGate = {
  * never "denied": failing closed here would turn a missing env var into an app
  * where nothing can be saved and nothing says why.
  */
-export const OPEN_GATE: WriteGate = { allowed: true, deny: () => {} };
+export const OPEN_GATE: WriteGate = { allowed: true, pending: false, deny: () => {} };
 
 export const WriteGateContext = createContext<WriteGate>(OPEN_GATE);
 

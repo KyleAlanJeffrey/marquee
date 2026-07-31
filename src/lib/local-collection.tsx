@@ -181,15 +181,47 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
     const has = useCallback((ref: Ref) => items.some((i) => matches(i, ref)), [items]);
 
     /**
-     * True when this write should be refused, and it asks for sign-in on the way.
+     * A write that arrived while the gate was still deciding, waiting for the answer.
+     *
+     * One slot, not a queue: somebody tapping twice during the window means the
+     * second tap, and replaying a stale pile of intents after a sign-in is a worse
+     * surprise than dropping the earlier one.
+     */
+    const held = useRef<(() => void) | null>(null);
+
+    /**
+     * True when this write must not proceed *now*, and it either asks for sign-in or
+     * holds the write until the gate can answer.
+     *
+     * `apply` is the already-decided effect, not the public mutator — replaying it
+     * skips re-checking a gate we have by then confirmed, and can't recurse.
      *
      * Called before touching state, never from inside a `setItems` updater — the
      * refusal navigates, and React replays updaters.
      */
-    const blocked = useCallback(() => {
-      if (!requiresAccount || gate.allowed) return false;
-      gate.deny(requiresAccount);
-      return true;
+    const guard = useCallback(
+      (apply: () => void) => {
+        if (!requiresAccount) return false;
+        if (gate.pending) {
+          held.current = apply;
+          return true;
+        }
+        if (gate.allowed) return false;
+        gate.deny(requiresAccount);
+        return true;
+      },
+      [gate],
+    );
+
+    // The gate has answered: run what was waiting on it, or refuse it now that
+    // refusing means something.
+    useEffect(() => {
+      if (gate.pending) return;
+      const waiting = held.current;
+      if (!waiting) return;
+      held.current = null;
+      if (gate.allowed) waiting();
+      else if (requiresAccount) gate.deny(requiresAccount);
     }, [gate]);
 
     const markTouched = useCallback(() => {
@@ -197,13 +229,20 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
       if (hydrated.current) void reread();
     }, [reread]);
 
-    const add = useCallback(
+    const applyAdd = useCallback(
       (item: T) => {
-        if (blocked()) return;
         markTouched();
         setItems((prev) => (prev.some((i) => matches(i, item)) ? prev : [item, ...prev]));
       },
-      [markTouched, blocked],
+      [markTouched],
+    );
+
+    const add = useCallback(
+      (item: T) => {
+        if (guard(() => applyAdd(item))) return;
+        applyAdd(item);
+      },
+      [applyAdd, guard],
     );
 
     const remove = useCallback(
@@ -218,7 +257,11 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
     const toggle = useCallback((item: T) => {
       // Only the add half is gated, so decide which half this is out here, where
       // `items` can be read without being inside an updater.
-      if (!items.some((i) => matches(i, item)) && blocked()) return;
+      //
+      // What gets held is `applyAdd`, not this function: the user meant to add, and
+      // replaying a toggle after the wait could find the item present by then and
+      // remove it instead — the one outcome nobody asked for.
+      if (!items.some((i) => matches(i, item)) && guard(() => applyAdd(item))) return;
       markTouched();
       setItems((prev) => {
         if (prev.some((i) => matches(i, item))) {
@@ -230,11 +273,10 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
         }
         return [item, ...prev];
       });
-    }, [markTouched, blocked, items]);
+    }, [markTouched, guard, applyAdd, items]);
 
-    const update = useCallback(
+    const applyUpdate = useCallback(
       (ref: Ref, patch: Partial<T>) => {
-        if (blocked()) return;
         markTouched();
         setItems((prev) => {
           const at = prev.findIndex((i) => matches(i, ref));
@@ -244,7 +286,15 @@ export function createCollection<Ref, T extends Ref>(config: CollectionConfig<Re
           return next;
         });
       },
-      [markTouched, blocked],
+      [markTouched],
+    );
+
+    const update = useCallback(
+      (ref: Ref, patch: Partial<T>) => {
+        if (guard(() => applyUpdate(ref, patch))) return;
+        applyUpdate(ref, patch);
+      },
+      [applyUpdate, guard],
     );
 
     const value = useMemo(
