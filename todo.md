@@ -42,11 +42,21 @@ History-backfill has landed, so **nothing below is blocked any more** except D o
 
 1. [~] **Phase A — profiles and the person graph.** Built 2026-07-31
    (`87f5969`): `person_follows`, `GET /api/users/:key` (handle or Clerk id),
-   follow/unfollow, the `/user/[key]` screen, and `POST /me` now refreshes the
-   mirror from Clerk's Backend API — no client-supplied identity at all.
-   Usernames were enabled on the instance 2026-07-31 (required at sign-up;
-   verified via `/v1/environment`), so handles flow into profile URLs as
-   accounts pick them — existing accounts add theirs from the account screen.
+   follow/unfollow, and `POST /me` refreshes the mirror from Clerk's Backend
+   API — no client-supplied identity at all. Usernames are enabled on the
+   instance (required at sign-up), so handles flow into profile URLs.
+   Hardened by Kyle's live testing the same day:
+   - Your profile and "what other people see" are **one component**
+     (`person-profile.tsx`) rendered by both the Profile tab and `/user/[key]`
+     (`c0c2753`), which also purged every stale "stored on this device" claim
+     from the app, manifest and landing page.
+   - The web sign-up flow stays onsite (`9e58fbc`): explicit
+     signUpUrl/signInUrl/fallbackRedirectUrl, verification inline, lands on
+     the Profile tab. The residual Clerk pop-up is `pk_test_` instance
+     plumbing — see Operational.
+   - **Account deletion** end to end (`8b97812`) — also the store requirement.
+   - A fresh sign-up can't be stranded without a mirror row (`4f8d10a`):
+     ProfileSync retries, and an own-profile read self-heals server-side.
    What keeps it `[~]`: no discovery surface yet — you reach a profile from
    settings or a shared link, nothing else, until reviews (B) put people on
    pages.
