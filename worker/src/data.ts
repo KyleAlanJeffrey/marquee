@@ -4,6 +4,7 @@ import { alias } from 'drizzle-orm/sqlite-core';
 import { getDb, type DB } from './db';
 import { zoneFor } from './timezone';
 import {
+  agreesWithCluster,
   bestVenueMatch,
   hoursApart,
   isPlaceholderPoint,
@@ -1078,7 +1079,14 @@ export async function persist(db: DB, raw: EventInput[], limits?: SanitizeLimits
         .onConflictDoUpdate({
           target: [venues.source, venues.sourceVenueId],
           set: {
-            name: sql`excluded.name`,
+            // An incoming name that reads as an event title never overwrites the
+            // stored one. Bandsintown swaps a venue's name for the current tour's
+            // title and back again between crawls, and the crawl re-sends every
+            // venue on a 15-minute cycle — unconditional `excluded.name` meant a
+            // room's real name survived only until its next tour stop. The other
+            // direction stays open on purpose: a junk stored name is replaced the
+            // moment the feed sends a real one.
+            name: looksLikeEventTitle(v.name) ? sql`name` : sql`excluded.name`,
             city: sql`excluded.city`,
             region: sql`excluded.region`,
             country: sql`excluded.country`,
@@ -1479,10 +1487,34 @@ export async function repairDuplicates(
     return out;
   };
 
+  // Who has already joined each interim head, so a candidate can be checked
+  // against the whole cluster and not just the one row it matched. `sameVenue` is
+  // pairwise; without this, two rooms that share nothing chain together through an
+  // intermediate both can reach — see `agreesWithCluster`.
+  const membersOf = new Map<string, VenuePoint[]>();
   for (const v of sorted) {
-    const match = v.lat != null && v.lng != null ? bestVenueMatch(v, neighbours(v.lat, v.lng)) : null;
+    let match: VenuePoint | null = null;
+    if (v.lat != null && v.lng != null) {
+      let pool = neighbours(v.lat, v.lng);
+      // The nearest candidate whose *cluster* accepts this row. Refusing the
+      // nearest and taking the next is deliberate: the nearest may head a chain
+      // this row has no business in, while its true twin sits a street further.
+      for (;;) {
+        const best = bestVenueMatch(v, pool);
+        if (!best) break;
+        const head = canonicalOf.get(best.id) ?? best.id;
+        if (agreesWithCluster(v, membersOf.get(head) ?? [best])) {
+          match = best;
+          break;
+        }
+        pool = pool.filter((c) => c.id !== best.id);
+      }
+    }
     const resolved = match ? canonicalOf.get(match.id) ?? match.id : v.id;
     canonicalOf.set(v.id, resolved);
+    const group = membersOf.get(resolved);
+    if (group) group.push(v);
+    else membersOf.set(resolved, [v]);
     if (resolved === v.id && v.lat != null && v.lng != null) {
       const key = cellKey(v.lat, v.lng);
       const cell = buckets.get(key);
@@ -1836,8 +1868,23 @@ async function canonicalizeVenues(
       return;
     }
     // Everything here that is the same physical room, plus wherever those rows
-    // already point.
-    const cluster = candidates.filter((c) => c.id !== t.id && sameVenue(target, c));
+    // already point. Joining a row also means joining its whole cluster, so the
+    // target has to agree with every member of that cluster this batch can see —
+    // members beyond the candidate radius are invisible here, and the repair pass,
+    // which sees the whole table, holds the same rule over them.
+    const byHead = new Map<string, Candidate[]>();
+    for (const c of candidates) {
+      const h = c.canonicalVenueId ?? c.id;
+      const group = byHead.get(h);
+      if (group) group.push(c);
+      else byHead.set(h, [c]);
+    }
+    const cluster = candidates.filter(
+      (c) =>
+        c.id !== t.id &&
+        sameVenue(target, c) &&
+        agreesWithCluster(target, byHead.get(c.canonicalVenueId ?? c.id) ?? []),
+    );
     // An existing head keeps the job. Ranking here only ever sees one batch, while
     // repairDuplicates ranks from the whole table, so re-picking on ingest makes a
     // room's public id churn between passes — and that id is what a device stores

@@ -308,6 +308,33 @@ export function sameVenue(a: VenuePoint, b: VenuePoint): boolean {
   return meters <= VENUE_SAME_NAME_METERS && sameTown(a, b) && venueNamesMatchStrongly(a.name, b.name, town);
 }
 
+/**
+ * May this row join a cluster whose members are these?
+ *
+ * `sameVenue` is pairwise, and clustering is not: "Three Links Deep Ellum" matched
+ * "The Factory In Deep Ellum" on the neighbourhood words, the Factory had already
+ * (correctly — it's the same room renamed) absorbed "The Bomb Factory", and the
+ * transitive result was Three Links filed under The Bomb Factory: two genuinely
+ * different Dallas rooms, chained through an intermediate both could reach. The
+ * candidate has to agree with the members already in the cluster, not just the row
+ * it happened to be compared against.
+ *
+ * Members that can't be judged don't get a veto: a tour-title row has no name
+ * tokens to agree *or* disagree with, and a row with no coordinates can't be
+ * distance-checked. A token-less candidate skips the check entirely — it matched on
+ * location alone and claims nothing the cluster could contradict.
+ */
+export function agreesWithCluster(candidate: VenuePoint, members: VenuePoint[]): boolean {
+  if (venueNameTokens(candidate.name).size === 0) return true;
+  for (const m of members) {
+    if (m.id === candidate.id) continue;
+    if (m.lat == null || m.lng == null) continue;
+    if (venueNameTokens(m.name).size === 0) continue;
+    if (!sameVenue(candidate, m)) return false;
+  }
+  return true;
+}
+
 /** The closest venue in `candidates` that is the same place as `target`. */
 export function bestVenueMatch(target: VenuePoint, candidates: VenuePoint[]): VenuePoint | null {
   let best: VenuePoint | null = null;

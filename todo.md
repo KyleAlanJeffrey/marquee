@@ -121,9 +121,15 @@ map still carrying the page when no article exists. The reasoning and the
   an event title, 283 of them cluster heads with upcoming shows — and **240 of
   those 283 are alone in their cluster**, so there is no correct name in the table
   to promote and no repair pass that could recover one. What's left:
-  - [ ] **Ingestion still writes them.** Nothing rejects the string on the way in,
-    so the count grows. The real fix is per-source: when a feed puts the tour title
-    in the venue column, find the venue it actually means.
+  - [~] **Ingestion still writes them — but no longer at a good name's expense**
+    (2026-07-31). The conflict-update was `name = excluded.name` unconditionally,
+    and the crawl re-sends every venue on a 15-minute cycle, so a room's real name
+    survived only until Bandsintown swapped it for the current tour's title. An
+    event-title name now never overwrites a stored one (both directions validated
+    against local D1: junk-over-real keeps real, real-over-junk replaces junk).
+    Still open: a *new* junk-named row is still inserted rather than being mapped
+    to the same-spot venue it means — that needs a lookup-before-insert restructure
+    of `persist`'s hot path, and clustering already hides the row meanwhile.
   - [ ] **A dash-separated billing is not caught** and deliberately so —
     "PROGRESSIVE HOUSE NEVER DIED - Seattle" reads exactly like "The Eastern-GA" to
     a string rule. Pinned as a known miss in `dedupe.test.ts`; wants a source-side
@@ -131,23 +137,35 @@ map still carrying the page when no article exists. The reasoning and the
   - [ ] **A name we can't publish is a room we can't name.** 240 venues now render
     as their town. Reverse-geocoding the coordinates is the only route to a real
     name, and it's the same missing capability as the 29 placeholder-pinned rows.
-- [ ] **A town's own name still counts as distinguishing**, so "Metro Chicago" and
-  "Radius Chicago" agree on "chicago" and can merge. Fix is to drop name tokens
-  matching the venue's city. Accounts for most of the ~45 remaining clusters that
-  hold 3+ distinct real names.
-- [ ] **Chained venue clusters.** "Three Links Deep Ellum" is clustered into "The
-  Bomb Factory" — two genuinely different Dallas rooms. Individually their names
-  conflict, so they can only have merged transitively through an intermediate row
-  ("The Factory In Deep Ellum" / "The Studio at the Factory"). `sameVenue` is
-  pairwise; clustering is not. Wants a check that a candidate agrees with the
-  whole cluster, not just the row it was compared against.
-- [ ] **`findExistingShows` scans the venues table per listing.**
-  `worker/src/data.ts` matches shows with
-  `venue_id in (select id from venues where coalesce(canonical_venue_id, id) = ?)`
-  — the exact non-sargable form the read paths were moved away from, one statement
-  per incoming show on the hot ingest path. Resolve cluster members once per
-  distinct venue id (two indexed lookups, as `clusterVenueIds` does) and bind an
-  `in (...)`.
+- [x] **A town's own name no longer counts as distinguishing** (2026-07-31). The
+  comparators drop the town's words when a caller knows the town, with the escape
+  hatch the test suite demanded: token-identical names still match, because "Royal
+  Oak Music Theatre" in Royal Oak is nothing *but* town words and stopwords, and
+  dropping them split identical twins across a centroid. Measured before landing:
+  11 of a 60-cluster sample with 3+ names had a pair sharing only city words
+  ("Manchester Club Academy" / "O2 Ritz Manchester" / "O2 Apollo Manchester" as one
+  row). The old wording here guessed "most of ~45"; the measured rate is lower.
+- [x] **Chained venue clusters** (2026-07-31). `agreesWithCluster` in `dedupe.ts`:
+  a candidate joins only if it agrees with every member already in the cluster that
+  can be judged — tour-title members have no tokens to disagree with and rows
+  without coordinates can't be distance-checked, so neither gets a veto, and a
+  token-less candidate joins on location alone (stranding it would strand its
+  show). Enforced at both clustering sites: `repairDuplicates`' full-table pass
+  (which also retries the next-nearest candidate when a cluster refuses one) and
+  ingest's cluster adoption, which checks the members the batch can see. Pinned
+  with the real Dallas trio — and one correction to the old text here: "The Bomb
+  Factory" *is* "The Factory In Deep Ellum" renamed, one room; Three Links up the
+  street is the wrongly-chained one, and the test keeps the twins together while
+  refusing it.
+- [x] **`findExistingShows` no longer scans the venues table per listing**
+  (2026-07-31). Cluster membership resolves once per batch — `clusterIdsByVenue`,
+  two indexed reads chunked under D1's 100-bound-parameter ceiling — and each match
+  clause binds a plain `in (...)`. Verified by ingesting the same 49-event artist
+  twice: second pass matched every row, ingested 0, no duplicates.
+- [ ] **Run `POST /api/admin/repair-duplicates` on production** now that the three
+  cluster rules above are in: it is what re-evaluates existing clusters (Manchester,
+  Dallas) under the new comparators. Needs `ADMIN_TOKEN`, so it is Kyle's to fire,
+  cursor-paged (`afterArtistId`) until done.
 
 ## P0 · Pivot — concerts you've been to, and what you thought
 

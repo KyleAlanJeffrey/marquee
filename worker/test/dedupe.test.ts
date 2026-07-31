@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { representative } from '../src/data';
 import {
+  agreesWithCluster,
   bestVenueMatch,
   guessUtcOffsetHours,
   isPlaceholderPoint,
@@ -257,6 +258,40 @@ describe('venue identity', () => {
     // The ≤50m rule does not consult the name, which is what keeps the stricter
     // `venueNamesAgree` from losing real duplicates.
     expect(sameVenue(at('The Theatre', 37.7756, -122.4376), at('Music Hall', 37.7757, -122.4376))).toBe(true);
+  });
+});
+
+describe('cluster membership', () => {
+  // The measured Dallas chain: The Factory In Deep Ellum and The Bomb Factory are
+  // one room (renamed), and Three Links is a different bar up the street that
+  // shares only the neighbourhood words with the first name.
+  const factory = at('The Factory In Deep Ellum', 32.7841, -96.7846, 'Dallas');
+  const bomb = at('The Bomb Factory', 32.7841, -96.7846, 'Dallas');
+  const links = at('Three Links Deep Ellum', 32.7846, -96.7823, 'Dallas');
+
+  it('lets the renamed room in and keeps the neighbour out', () => {
+    // Pairwise, Three Links matches the Factory on "deep ellum" — that is the
+    // chain forming. Against the whole cluster it fails on The Bomb Factory, which
+    // it shares nothing with and does not sit on.
+    expect(sameVenue(links, factory)).toBe(true);
+    expect(agreesWithCluster(bomb, [factory])).toBe(true);
+    expect(agreesWithCluster(links, [factory, bomb])).toBe(false);
+  });
+
+  it('gives no veto to members that cannot be judged', () => {
+    // A tour-title member has no tokens to disagree with; a row with no
+    // coordinates cannot be distance-checked. Neither should keep a real twin out.
+    const tourRow = at('JOJI: SOLARIS TOUR w/ special guests', 32.9, -96.9, 'Dallas');
+    const noCoords = { id: 'n', name: 'The Bomb Factory', lat: null, lng: null };
+    expect(agreesWithCluster(bomb, [factory, tourRow, noCoords])).toBe(true);
+  });
+
+  it('lets a token-less candidate join on location alone', () => {
+    // The candidate side of the same rule: a tour-title row matched by coordinates
+    // claims nothing the cluster could contradict, and stranding it would strand
+    // its show.
+    const tourRow = at('Brunette World Tour', 32.7841, -96.7846, 'Dallas');
+    expect(agreesWithCluster(tourRow, [factory, bomb])).toBe(true);
   });
 });
 
