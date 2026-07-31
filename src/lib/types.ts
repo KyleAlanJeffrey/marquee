@@ -33,6 +33,24 @@ export type FollowingEvent = NearbyEvent & {
   matched_venue: boolean;
 };
 
+/**
+ * A show of theirs that has already happened.
+ *
+ * The same shape as `ArtistEvent` minus the ticketing fields, because you cannot buy
+ * a ticket to last year. Kept as its own type rather than a partial so the picker
+ * can't accidentally render a "Buy tickets" button for a gig in 2016.
+ */
+export type ArtistPastEvent = {
+  event_id: string;
+  event_name: string;
+  starts_at: string;
+  venue_id: string | null;
+  venue_name: string | null;
+  venue_city: string | null;
+  venue_region: string | null;
+  venue_timezone: string | null;
+};
+
 export type ArtistEvent = {
   event_id: string;
   event_name: string;

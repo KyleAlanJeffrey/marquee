@@ -61,7 +61,6 @@ shape on both sides.
 *(Written before the Bandsintown result below, and left standing because the reasoning
 still holds — it is just answering a smaller question now.)*
 
-
 ~7M setlists going back decades, contributed by the exact people we want. It is the
 closest thing to a concert TMDB that exists.
 
@@ -130,8 +129,11 @@ Three properties that matter more than the counts:
    uses. No new matching logic.
 2. **Keyed by artist name, not MBID.** The 23%-MBID problem that sank Setlist.fm does
    not apply, and our Bandsintown client already queries by name.
-3. **A hard floor at 2014.** An explicit `2005-01-01,2010-12-31` range for Radiohead
-   returns `0`, so this is their data horizon rather than a paging limit.
+3. **A floor around 2014, and it moves per artist.** An explicit
+   `2005-01-01,2010-12-31` range for Radiohead returns `0`, so it is a data horizon
+   rather than a paging limit — but RUSH came back with a 2013-04-13 show, so it is not
+   a single global cutoff. Reason for the generous 20-year ingest window rather than a
+   tidy 2014 one: the horizon is a property of their data, not a rule we can encode.
 
 Checked for a silent cap and did not find one. Radiohead's yearly slices give
 2016: 23, 2017: 30, 2018: 24 — and **0 for both 2015 and 2019**, which is *correct*:
@@ -222,17 +224,56 @@ dedupe, and nearly impossible to vandalise into something libellous.
 - Verifying that anyone actually attended. See `docs/social.md` — it only starts to
   matter when the log becomes public.
 
+## Built, 2026-07-31
+
+Steps 2 and 3 below are done, and measured against production rather than described:
+
+- `POST /api/artists/:id/history` — fetches an artist's past shows once, stamps
+  `past_events_fetched_at`, and returns `{ fetched, found, ingested, past_on_file }`.
+- `GET /api/artists/:id/past-events` — reads them back, newest first.
+- `PastShowsPicker` on the artist page, collapsed until asked, so opening an artist
+  page still costs no upstream request.
+
+| check | result |
+| --- | --- |
+| Olivia Rodrigo, production | 0 → **164** past events, back to 2021-09 |
+| RUSH, triggered from the UI | **74** on file (upstream had 75), back to 2013-04 |
+| Bilmuri, local | **234** — past the old 200-row cap |
+| second `POST` | `fetched:false, ingested:0` — the stamp holds, no upstream call |
+| `GET /events` for an artist with history | still `[]` — history doesn't leak into upcoming |
+| nested `<button>`s in the picker on web | **0** |
+| tapping a row while signed out | `/sign-in?why=log the shows you've been to`, nothing written |
+
+That last row is worth noting: the write gate covered a brand-new screen with no extra
+wiring, because it lives at the `local-collection` choke point rather than on buttons.
+That was the reason given for putting it there, and this is the first time it has been
+collected.
+
+**Two constants had to become per-call rather than being widened**, and the reasoning
+is in `SanitizeLimits`: `MAX_YEARS_BEHIND = 2` exists to catch a mis-parsed year, which
+the live crawl cannot tell from a real old date, and would have dropped everything
+before 2024; `MAX_EVENTS_PER_ARTIST = 200` guards against a feed flood and would have
+truncated an artist with 308 real shows into a log with holes nothing would ever fill.
+
+- [ ] **Festivals land in the venue column, and history makes it worse.** Measured on
+  production after the backfills: of 788 past events with a venue, **19 have a
+  four-digit year in the venue name** and 9 contain "festival" — "Lasso 2026",
+  "iHeartRadio Music Festival 2021". About 2.4%, so real but not urgent. It is the
+  known `looksLikeEventTitle` gap already in this file, and historical data is
+  festival-heavier than upcoming data, so the rate will climb as more artists are
+  backfilled.
+
 ## What to build first, in order
 
 1. ~~Run the Bandsintown past-date experiment.~~ **Done** — see above. It changed the
    plan, which is what made it worth doing before anything was built.
-2. **On-demand past-event backfill for one artist.** A route that takes an artist,
-   fetches their past Bandsintown events, joins venues by coordinates through the
-   existing dedupe path, and writes them. This is the increment that makes the pivot
-   real: it takes the catalogue from 19 days of history to about a decade, for every
-   artist anybody asks about.
-3. **"I saw them before" on the artist page** — the past events, pick one, log it. The
-   log screen already renders whatever it is handed, so this is a picker over new rows
+2. ~~**On-demand past-event backfill for one artist.**~~ **Done.** A route that takes an
+   artist, fetches their past Bandsintown events, joins venues by coordinates through
+   the existing dedupe path, and writes them. This was the increment that made the
+   pivot real: it takes the catalogue from 19 days of history to about a decade, for
+   every artist anybody asks about.
+3. ~~**"I saw them before" on the artist page.**~~ **Done** — `PastShowsPicker`. The log
+   screen already renders whatever it is handed, so this was a picker over new rows
    rather than a new surface.
 4. **Then measure what is left.** With 2014-onward covered, the size of the remaining
    problem is a number rather than a guess, and it decides whether steps 5 and 6 are

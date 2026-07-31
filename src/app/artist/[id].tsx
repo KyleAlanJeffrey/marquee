@@ -14,6 +14,7 @@ import { GalleryStrip } from '@/components/gallery-strip';
 import { GenreChip } from '@/components/genre-chip';
 import { GlassCard } from '@/components/glass-card';
 import { PageMeta } from '@/components/page-meta';
+import { PastShowsPicker } from '@/components/past-shows-picker';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
@@ -282,6 +283,14 @@ export default function ArtistScreen() {
                 </GlassCard>
               </>
             )}
+
+            {/* Your history with them. Above About because it is a thing to *do*,
+                and below the upcoming shows because that is why most people came. */}
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
+              <ThemedText type="title">Your history</ThemedText>
+            </View>
+            <PastShowsPicker artistId={id} artistName={a.name} artistImageUrl={a.image_url} />
 
             {/* About */}
             <View style={styles.sectionTitleRow}>

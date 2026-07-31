@@ -1,10 +1,11 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiGet, apiPost } from '@/lib/api';
 import type {
   Artist,
   ArtistEvent,
   ArtistInfo,
+  ArtistPastEvent,
   ArtistSearchResult,
   Coords,
   EventBuzz,
@@ -64,6 +65,40 @@ export function useArtistEvents(artistId: string) {
   return useQuery({
     queryKey: ['artist-events', artistId],
     queryFn: (): Promise<ArtistEvent[]> => apiGet(`/artists/${artistId}/events`),
+  });
+}
+
+/**
+ * Shows of theirs that have already happened — the "I saw them before" list.
+ *
+ * `enabled` so opening an artist page costs nothing: the catalogue's history is only
+ * read once somebody says they want to look for a past gig. Long `staleTime` because
+ * history does not change.
+ */
+export function useArtistPastEvents(artistId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['artist-past-events', artistId],
+    enabled: enabled && !!artistId,
+    staleTime: 60 * 60 * 1000,
+    queryFn: (): Promise<ArtistPastEvent[]> => apiGet(`/artists/${artistId}/past-events`),
+  });
+}
+
+/**
+ * Ask the Worker to fetch this artist's history from upstream.
+ *
+ * Safe to call more than once — the server keeps a stamp and returns without going
+ * out a second time — but still only fired on the user's say-so, because the first
+ * call is a real request to a third party.
+ */
+export function useFetchArtistHistory(artistId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (): Promise<{ ingested: number; found: boolean; past_on_file: number }> =>
+      apiPost(`/artists/${artistId}/history`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['artist-past-events', artistId] });
+    },
   });
 }
 
