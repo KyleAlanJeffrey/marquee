@@ -104,9 +104,13 @@ map still carrying the page when no article exists. The reasoning and the
   same operator. Both guards pass, so this needs a rule about differently-named
   sibling rooms — or an explicit decision to accept it.
 - [ ] **Support acts at that venue**, and a **"similar rooms nearby"** rail.
-- [ ] **Nothing re-checks an enriched venue.** `enrichment_checked_at` is written
-  once and never revisited, so a venue that had no article the day we asked will
-  never get one. Wants a staleness window, not a manual re-run.
+- [x] **Enrichment re-checks on a staleness window** (2026-07-31). An empty answer
+  is re-asked after 30 days (articles get written), a found one after 180 (articles
+  get renamed, rarely deleted) — `shouldRecheckEnrichment`, pinned in
+  `enrichment.test.ts`. One guard the window made necessary: `fetchVenueEnrichment`
+  answers EMPTY for "no article" and "Wikipedia was unreachable" alike, so a
+  re-check that comes back empty over a row with prose keeps the prose and only
+  advances the stamp.
 - [ ] **Google Places** stays the paid alternative: one Place Details call buys
   photos, ratings *and* the venue's own website (see the costing further down).
   Worth it only if a billing account is ever justified.

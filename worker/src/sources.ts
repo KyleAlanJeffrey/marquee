@@ -1251,6 +1251,35 @@ async function wikipediaBio(name: string): Promise<{ text: string; url: string |
  * with a description it will fetch again next time is strictly better than a page
  * that 500s because D1 was busy.
  */
+/**
+ * How long a "Wikipedia had nothing" answer stays believed. Articles get written —
+ * a room that had none the day we asked may well have one next month — so an empty
+ * result is re-asked on this cadence, paid for by whoever views the page next.
+ */
+const ENRICHMENT_EMPTY_RECHECK_MS = 30 * 86_400_000;
+/**
+ * And how long a *found* description does. Much longer, because an article that
+ * exists mostly just gets edited, not deleted — this exists so a renamed or
+ * corrected article is eventually picked up, not to keep prose fresh.
+ */
+const ENRICHMENT_FOUND_RECHECK_MS = 180 * 86_400_000;
+
+/**
+ * Exported for the spec. `checkedAt` written once and never revisited meant a
+ * venue that had no article the day we asked could never gain one.
+ */
+export function shouldRecheckEnrichment(
+  checkedAt: string | null,
+  description: string | null,
+  now: number,
+): boolean {
+  if (!checkedAt) return true;
+  const at = Date.parse(checkedAt);
+  // An unparseable stamp reads as "never checked" — re-asking is the cheap error.
+  if (Number.isNaN(at)) return true;
+  return now - at > (description ? ENRICHMENT_FOUND_RECHECK_MS : ENRICHMENT_EMPTY_RECHECK_MS);
+}
+
 export async function venueInfo(env: Env, venueId: string) {
   const db = getDb(env.DB);
   // Resolve the cluster head first, by primary key, then read it by primary key.
@@ -1297,8 +1326,14 @@ export async function venueInfo(env: Env, venueId: string) {
     photoLicense: row.photoLicense,
     photoLicenseUrl: row.photoLicenseUrl,
   };
-  if (!row.checkedAt) {
-    enrichment = await fetchVenueEnrichment(row);
+  if (shouldRecheckEnrichment(row.checkedAt, row.description, Date.now())) {
+    const fresh = await fetchVenueEnrichment(row);
+    // A re-check that comes back empty over a row that has prose keeps the prose.
+    // `fetchVenueEnrichment` answers EMPTY for "no article" and for "Wikipedia was
+    // unreachable" alike, and a transient failure must not delete a description
+    // people have been reading for six months. The stamp still advances either
+    // way, so a failure doesn't turn into a fetch per page view.
+    if (fresh.description || !row.description) enrichment = fresh;
     try {
       await db
         .update(venues)
