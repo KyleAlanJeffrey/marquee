@@ -230,6 +230,11 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
 
       {/* The feed — what the people you follow have been to lately. Yours only,
           and only once it has an answer; an empty graph shows a nudge, not a hole. */}
+      {isSelf && feed.isError && (
+        <View style={styles.centreBlock}>
+          <ErrorState onRetry={() => feed.refetch()} />
+        </View>
+      )}
       {isSelf && feed.isSuccess && (
         <>
           <ThemedText type="label" style={[styles.reviewsLabel, { color: theme.cyan }]}>
