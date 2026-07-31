@@ -15,6 +15,7 @@ import { ApiError } from '@/lib/api';
 import { StarRating } from '@/components/star-rating';
 import { formatEventDate } from '@/lib/format';
 import { personLabel, useFollowList, useFollowPerson, useProfile, type PublicUser } from '@/lib/people';
+import { usePersonLists } from '@/lib/curated';
 import { useBlockPerson, useFeed, useProfileReviews } from '@/lib/reviews';
 import { useWriteGate } from '@/lib/write-gate';
 
@@ -85,6 +86,7 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
   // is only fetched the first time its tab is looked at.
   const list = useFollowList(profileKey, tab, profile.isSuccess);
   const theirReviews = useProfileReviews(profileKey, profile.isSuccess);
+  const shelves = usePersonLists(profileKey, profile.isSuccess);
   // The feed lives on *your* profile — the social graph is reached through you
   // (docs/social.md's answer to the naming collision). Only fetched for self.
   const isSelfProfile = profile.data?.viewer?.isSelf ?? false;
@@ -272,6 +274,41 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
               ))}
             </GlassCard>
           )}
+        </>
+      )}
+
+      {/* Their lists — the shelves. Public ones for visitors, all of them for
+          the owner ("PRIVATE" tags the difference on the list page itself). */}
+      {shelves.isSuccess && shelves.data.lists.length > 0 && (
+        <>
+          <ThemedText type="label" style={[styles.reviewsLabel, { color: theme.primary }]}>
+            {`LISTS · ${shelves.data.lists.length}`}
+          </ThemedText>
+          <GlassCard style={styles.listCard}>
+            {shelves.data.lists.map((l) => (
+              <PressableScale
+                key={l.id}
+                haptic={false}
+                accessibilityRole="button"
+                accessibilityLabel={`Open the list ${l.title}`}
+                onPress={() => router.push(`/list/${encodeURIComponent(l.id)}`)}
+                style={[styles.reviewRow, { borderColor: theme.border }]}>
+                <View style={styles.reviewHead}>
+                  <ThemedText type="smallBold" numberOfLines={1} style={{ flex: 1 }}>
+                    {l.title}
+                  </ThemedText>
+                  <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                    {`${l.itemCount}${l.visibility === 'private' ? ' · PRIVATE' : ''}`}
+                  </ThemedText>
+                </View>
+                {!!l.description && (
+                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
+                    {l.description}
+                  </ThemedText>
+                )}
+              </PressableScale>
+            ))}
+          </GlassCard>
         </>
       )}
 

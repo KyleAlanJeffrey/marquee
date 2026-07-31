@@ -217,6 +217,25 @@ export const reviewBody = z
     message: 'a review needs a rating or some words',
   });
 
+/** A curated list, as created or edited. Caps bound the row, not the prose. */
+export const curatedListBody = z.object({
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(1000).nullish(),
+  visibility: z.enum(['public', 'private']).default('public'),
+});
+
+export const curatedListPatch = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  description: z.string().trim().max(1000).nullish(),
+  visibility: z.enum(['public', 'private']).optional(),
+});
+
+export const listItemBody = z.object({
+  refKind: z.enum(['artist', 'venue', 'event']),
+  refId: z.string().min(1).max(100),
+  note: z.string().trim().max(300).nullish(),
+});
+
 /** Going or interested — the only two answers an upcoming show asks for. */
 export const rsvpBody = z.object({
   status: z.enum(['going', 'interested']),

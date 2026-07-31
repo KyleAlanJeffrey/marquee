@@ -6,6 +6,7 @@ import { nowIso } from '../data';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
 import { events, personFollows, reviews, userBlocks, users } from '../schema';
+import { listsOf } from './curated';
 import { blockedEitherWay } from './reviews';
 
 /**
@@ -177,6 +178,18 @@ people.get('/:key/reviews', async (c) => {
 });
 
 const PROFILE_REVIEWS_MAX = 50;
+
+/** Their lists — public for everyone, all of them for the owner. */
+people.get('/:key/lists', async (c) => {
+  const db = getDb(c.env.DB);
+  const person = await findByKey(db, c.req.param('key'));
+  if (!person) return c.json({ error: 'not found' }, 404);
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (userId && userId !== person.id && (await blockedEitherWay(db, userId, person.id))) {
+    return c.json({ lists: [] });
+  }
+  return c.json({ lists: await listsOf(db, person.id, userId) });
+});
 
 /**
  * Block. Severs the relationship whole: existing follows go in both

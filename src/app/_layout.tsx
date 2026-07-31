@@ -110,6 +110,7 @@ export default function RootLayout() {
                   <Stack.Screen name="event/[id]" />
                   <Stack.Screen name="venue/[id]" />
                   <Stack.Screen name="user/[key]" />
+                  <Stack.Screen name="list/[id]" />
                   <Stack.Screen name="browse" />
                 </Stack>
               )}

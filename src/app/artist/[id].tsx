@@ -14,6 +14,7 @@ import { GalleryStrip } from '@/components/gallery-strip';
 import { GenreChip } from '@/components/genre-chip';
 import { GlassCard } from '@/components/glass-card';
 import { PageMeta } from '@/components/page-meta';
+import { AddToListButton } from '@/components/add-to-list-button';
 import { PastShowsPicker } from '@/components/past-shows-picker';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
@@ -177,6 +178,10 @@ export default function ArtistScreen() {
                   ))}
                 </View>
               </View>
+            </View>
+
+            <View style={{ paddingHorizontal: Spacing.three, marginTop: Spacing.three }}>
+              <AddToListButton refKind="artist" refId={a.id} subject={a.name} />
             </View>
 
             <View style={styles.sectionTitleRow}>

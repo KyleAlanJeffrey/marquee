@@ -13,6 +13,7 @@ import { FollowButton } from '@/components/follow-button';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { StageBackground } from '@/components/stage-background';
+import { AddToListButton } from '@/components/add-to-list-button';
 import { StatGrid, type Stat } from '@/components/stat-grid';
 import { STATS_FLOOR, useVenueReviewStats } from '@/lib/reviews';
 import { StaticMap } from '@/components/static-map';
@@ -234,6 +235,9 @@ export default function VenueScreen() {
             ) : null}
 
             <StatGrid stats={statCells} />
+            <View style={{ marginTop: Spacing.two }}>
+              <AddToListButton refKind="venue" refId={v.id} subject={title} />
+            </View>
 
             {/*
               Gated on either half, not on the prose: a photo currently only ever

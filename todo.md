@@ -95,8 +95,14 @@ History-backfill has landed, so **nothing below is blocked any more** except D o
    Blocks need no extra filter — they sever the very edge the query walks.
    Still open: pagination beyond 50, and any feed of artist/venue activity
    (this one is people only, by design).
-5. [ ] **Phase E — lists.** `lists` + `list_items`. Deliberately last — the most
-   fun to build and the least load-bearing.
+5. [~] **Phase E — curated lists.** Built 2026-07-31: `lists` + `list_items`
+   (migration 0016, hard-delete until reactions hang off them), full CRUD under
+   `/api/curated-lists` (public/private, 50 per user, 200 items, refs validated
+   and resolved on read so stale ones drop out), "Add to list" on artist, venue
+   and event pages with inline quick-create, shelves on profiles, and the
+   `/list/[id]` screen with owner controls. Verified every path against local
+   D1 with a minted token. Still open: notes on items (schema holds them, no
+   UI), reordering, and reportability once lists join the moderation kinds.
 
 **Decisions in `docs/social.md` that are Kyle's, not mine** (needed before or
 during A/B):

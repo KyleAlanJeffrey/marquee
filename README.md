@@ -1,13 +1,16 @@
 # Marquee 🎪
 
-Discover upcoming concerts near you, follow the artists you love, and get an
-on-device reminder before their next nearby show.
+Discover upcoming concerts near you, log and review the ones you went to, and
+follow the artists, venues and people whose taste you trust — Goodreads for
+concerts, with a live-music radar built in.
 
 **Stack:** an Expo (React Native + TypeScript) app talking to a **Cloudflare
 Worker** (Hono) backed by **Cloudflare D1** (SQLite). Concert data is pulled on
-demand from the Ticketmaster Discovery API; artist search uses Spotify. Follows
-and preferences live **on-device** (no account). The web build deploys to
-**Cloudflare Pages**; native builds ship via EAS.
+demand from Ticketmaster, SeatGeek and Bandsintown; artist search uses Spotify.
+Accounts are **Clerk** (Apple, Google and Spotify sign-in) — browsing needs no
+account, keeping things does: follows, saved shows, the private gig log, RSVPs,
+public reviews, profiles and curated lists all live on the account. The web
+build is served by the same Worker; native builds ship via EAS.
 
 Because D1 is SQLite (no PostGIS), the "near me" radius search is a lat/lng
 bounding-box prefilter (indexed) plus a haversine distance computed in the
@@ -19,10 +22,13 @@ Worker.
 src/
   app/            expo-router screens (Explore tab at /explore, Profile tab, search modal, artist + event detail)
   components/     UI building blocks (design system, cards, map, etc.)
-  lib/            api client (Worker), TanStack Query hooks, local follows/prefs stores, reminders
+  lib/            api client (Worker), TanStack Query hooks, account-bound list stores, auth (Clerk), reminders
 worker/
   src/index.ts    thin entry: mounts the API routers, robots/sitemap, asset SEO
-  src/routes/     per-resource Hono routers (artists, venues, events, feed, search, admin)
+  src/routes/     per-resource Hono routers (artists, venues, events, feed, search, admin,
+                  me + lists — the account mirror and its four private lists,
+                  people — profiles/follows/blocks, reviews — reviews/reports/RSVPs/feed,
+                  curated — public lists)
   src/data.ts     D1 repository (reads/writes) via Drizzle
   src/sources.ts  external APIs (Ticketmaster, Bandsintown, SeatGeek, Spotify, Bluesky)
   src/dedupe.ts   cross-source venue/show identity · src/crawl.ts crawl scheduling
@@ -68,8 +74,14 @@ SPOTIFY_CLIENT_ID=…
 SPOTIFY_CLIENT_SECRET=…
 BANDSINTOWN_APP_ID=…      # widens coverage a lot; see "API keys" below
 SEATGEEK_CLIENT_ID=…      # the club tier Ticketmaster doesn't list
-ADMIN_TOKEN=…             # enables /api/admin/* (backfill); unset = off
+ADMIN_TOKEN=…             # enables /api/admin/* (backfill, moderation queue); unset = off
+CLERK_SECRET_KEY=…        # required — the Worker verifies every session with it
 ```
+
+The client half of Clerk (`EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`) is a build-time
+variable and lives in the tracked `.env.production` — it is public by design.
+`CLERK_JWT_KEY` (the instance's PEM public key) is optional and saves a
+subrequest per verification; set it in production.
 
 `GET /api/admin/health` reports which of these are actually configured, how many
 events each source has produced, and how deep the crawl queue is — a source with
@@ -97,13 +109,23 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/nearby?lat&lng&radius` | upcoming shows near a point (bbox + haversine) |
+| `POST /api/nearby` | upcoming shows near a point (bbox + haversine). A POST, and sent without a session token: coordinates are somebody's location, and they stay out of request logs and never travel with identity |
 | `GET /api/artists/:id` · `GET /api/artists/:id/events` | artist + their upcoming shows |
 | `GET /api/events/:id` | event detail |
 | `POST /api/following` | upcoming shows for the on-device follow lists — a year ahead, no radius, one row per show (POST so the follow list stays out of request logs) |
 | `POST /api/events/by-ids` | the saved list, revalidated — upcoming shows only, soonest first (POST so a saved list stays out of request logs) |
-| `GET /api/venues/nearby?lat&lng&radius&limit` | venues with upcoming shows near a point, busiest first, one row per canonical venue |
+| `POST /api/venues/nearby` | venues with upcoming shows near a point, busiest first, one row per canonical venue |
 | `GET /api/venues/:id` · `GET /api/venues/:id/events` | venue + its upcoming shows; any member id of a cluster resolves to the canonical venue |
+| `GET/POST/DELETE /api/me` · `PUT /api/me/prefs` | the caller's mirror row: read it, refresh it from Clerk, delete the whole account (data first, identity last); radius + reminder prefs |
+| `GET/PUT /api/me/lists` | the four private lists (follows, venues, saved, log), one JSON document each |
+| `GET /api/users/:key` (+ `/followers` `/following` `/reviews` `/lists`) | public profiles by handle or id, the person graph, their reviews and lists |
+| `POST/DELETE /api/users/:key/follow` · `POST/DELETE /api/users/:key/block` | follow and block; blocking severs follows both ways and hides both parties' reviews from each other |
+| `GET /api/events/:id/reviews` · `PUT/DELETE /api/events/:id/review` | public reviews of a show (one per person, edits stamped, future shows refused) |
+| `POST /api/reviews/:id/report` · `GET/POST /api/admin/reports` | the moderation pipeline: report with a reason, triage hide/keep with an audit trail |
+| `GET /api/events/:id/rsvps` · `PUT/DELETE /api/events/:id/rsvp` | going/interested on upcoming shows — public counts, private answer |
+| `GET /api/me/feed` | recent public reviews by the people you follow |
+| `GET /api/{artists,venues}/:id/review-stats` | "good live" / "good room" aggregates behind a confidence floor |
+| `POST /api/curated-lists` (+ `GET/PUT/DELETE /:id`, `POST/DELETE /:id/items…`) | curated lists of artists, venues and events |
 | `POST /api/search-artists` | Spotify artist search |
 | `POST /api/discover-events` | pull nearby shows from Ticketmaster + SeatGeek (throttled per area) |
 | `POST /api/refresh-artist-events` | pull shows for the on-device follow list (Ticketmaster + Bandsintown) |
@@ -427,8 +449,13 @@ against its URL, so without a new URL an existing share keeps showing the old on
 
 ## How it works
 
-- **Local-first:** follows and prefs are stored on the device (AsyncStorage);
-  there's no account or server-side user state.
+- **Account-bound:** nothing lives on the device. Follows, saved shows, the
+  private log and prefs are read through React Query from the account
+  (`/api/me/lists`); browsing works signed out, keeping things doesn't.
+- **The social layer** — public profiles (`/user/:handle`), person follows,
+  reviews with report/block/hide moderation, going/interested RSVPs, a feed of
+  what the people you follow reviewed, and curated lists. The private log stays
+  private: publishing a review is its own act, never a flag on a log entry.
 - **Near Me** — the home feed calls `GET /nearby` for the device's location and
   auto-triggers `POST /discover-events` (server-throttled per area) to keep the
   area fresh. A Nearby/Following toggle filters to followed artists.

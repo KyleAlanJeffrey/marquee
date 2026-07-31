@@ -286,6 +286,38 @@ export const eventRsvps = sqliteTable(
   (t) => [primaryKey({ columns: [t.userId, t.eventId] }), index('event_rsvps_event_idx').on(t.eventId)],
 );
 
+/** Curated lists (phase E) — hard-delete until reactions hang off them; see 0016. */
+export const lists = sqliteTable(
+  'lists',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    title: text('title').notNull(),
+    description: text('description'),
+    visibility: text('visibility').notNull().default('public'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [index('lists_user_idx').on(t.userId)],
+);
+
+export const listItems = sqliteTable(
+  'list_items',
+  {
+    listId: text('list_id')
+      .notNull()
+      .references(() => lists.id),
+    refKind: text('ref_kind').notNull(),
+    refId: text('ref_id').notNull(),
+    position: integer('position').notNull(),
+    note: text('note'),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.listId, t.refKind, t.refId] })],
+);
+
 /** Blocks — one direction per row; reads hide content in both directions. */
 export const userBlocks = sqliteTable(
   'user_blocks',

@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AttendanceCard } from '@/components/attendance-card';
 import { ErrorState } from '@/components/error-state';
 import { ReviewSection } from '@/components/review-section';
+import { AddToListButton } from '@/components/add-to-list-button';
 import { RsvpRow } from '@/components/rsvp-row';
 import { GalleryStrip } from '@/components/gallery-strip';
 import { GlassCard } from '@/components/glass-card';
@@ -244,6 +245,9 @@ export default function EventScreen() {
             first public count on an event page. Upcoming shows only; a show
             that already happened asks "were you there?" above instead. */}
         {!hasHappened && <RsvpRow eventId={e.id} />}
+        <View style={{ paddingHorizontal: Spacing.three, marginTop: Spacing.two }}>
+          <AddToListButton refKind="event" refId={e.id} subject={e.name} />
+        </View>
 
         {/* Get Tickets */}
         <View style={styles.sectionTitleRow}>
