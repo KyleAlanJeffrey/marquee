@@ -42,7 +42,13 @@
           "locationWhenInUsePermission": "Marquee uses your location to find concerts near you."
         }
       ],
+      [
       "expo-notifications",
+      {
+        "icon": "./assets/images/notification-icon.png",
+        "color": "#2fff6a"
+      }
+    ],
       [
         "expo-splash-screen",
         {

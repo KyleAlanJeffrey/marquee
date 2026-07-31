@@ -807,10 +807,25 @@ Nothing else in this section depends on it.
   `ios.infoPlist.ITSAppUsesNonExemptEncryption: false` is set, so export
   compliance isn't asked on every submission (true: the app does HTTPS and nothing
   else cryptographic).
-  - [ ] Still missing: the **Android notification icon**.
-    `android-icon-monochrome.png` is the right shape but it is 1024×1024 —
-    Android wants a small monochrome asset, so this needs a resize rather than a
-    reference, and generating image assets blind is how you ship a white square.
+  - [x] **Android notification icon** — done 2026-07-31.
+    `assets/images/notification-icon.png`, 96×96 (24dp at xxxhdpi), white on
+    transparent, wired up as `["expo-notifications", { icon, color: "#2fff6a" }]`.
+
+    A resize alone would have been wrong, and measuring first is what caught it:
+    `android-icon-monochrome.png` is 1024×1024 but its glyph only occupies
+    **356×318 at (334,353)–(689,670) — 4.1% of the canvas**. Scaling that straight
+    to 96px puts a 33px speck in the middle of a 96px frame, which in a status bar
+    is a smudge. So it is cropped to the alpha bounding box first, then fitted into
+    80×80 and centred on a transparent 96×96, which brings coverage to **28.5%**.
+
+    Checked rather than assumed, in both directions: the output's own alpha bbox
+    reads back as 80×71 at (8,13), it has zero fully-opaque non-white pixels, and
+    it was rendered nearest-neighbour on `#131315` and looked at — the Marquee
+    frame-and-soundbars mark, intact. `npx expo config --type public --json`
+    confirms the plugin entry resolves and the file is on disk.
+
+    Worth knowing rather than fixing: the mark is a thin outline, so at 1x density
+    it will be delicate. That is the logo's property, not this asset's.
 - [x] **Block background location explicitly** — `blockedPermissions:
   ["android.permission.ACCESS_BACKGROUND_LOCATION"]`. The app asks for foreground
   location only (`Location.Accuracy.Balanced`,
