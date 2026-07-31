@@ -63,6 +63,13 @@ export function bearerToken(header: string | undefined | null): string | null {
  * genuine token for a different frontend of ours gets replayed at this one — so
  * it is set when we know our own origins and simply omitted when we don't, since
  * an empty allowlist would reject everything.
+ *
+ * Do not set `CLERK_AUTHORIZED_PARTIES` on a hunch. `@clerk/backend`'s check is
+ * `if (!azp || !authorizedParties.includes(azp)) throw` — a *missing* `azp` throws
+ * as hard as a wrong one, and only the web frontend is guaranteed to send one. So
+ * a well-meaning allowlist of `marquee.rocks` would lock out the iOS and Android
+ * apps and look exactly like every other "not signed in". Set it only once a real
+ * native token has been inspected and shown to carry an `azp` we can name.
  */
 export async function callerFrom(env: Env, authorization: string | undefined): Promise<Caller> {
   const secret = env.CLERK_SECRET_KEY;

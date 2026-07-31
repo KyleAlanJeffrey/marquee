@@ -385,12 +385,39 @@ isn't where anyone looks while pasting a key into the dashboard.
 - [ ] **Kyle:** add `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` under **Workers Builds →
   Build variables** (not Variables and Secrets), then redeploy. Delete the runtime
   secret of the same name; it is inert and misleading.
-- [ ] **Kyle:** `CLERK_SECRET_KEY` — still absent everywhere. This is the half that
-  makes a session mean anything to the API.
+- [x] `CLERK_SECRET_KEY` — set 2026-07-31, both halves:
+  `.dev.vars` for local dev and `wrangler secret put` for the deployed Worker.
 
 Order matters: the build variable alone gives a working sign-in whose sessions the
 server ignores. The secret key alone gives a server ready to trust sessions nobody
 can create. Both, and only then is there anything to sync.
+
+#### The server trusts sessions now, 2026-07-31
+
+`CLERK_SECRET_KEY` is in place. Verified against production rather than assumed:
+
+- `GET https://marquee.rocks/api/me` → `{"signed_in":false,"configured":true,"user":null}`
+- Same endpoint with `Authorization: Bearer not.a.jwt` → **`200`**, still
+  `signed_in:false`. Garbage stays anonymous instead of 500ing, which is
+  `callerFrom`'s "every kind of failure is the same failure" rule holding.
+- `POST https://marquee.rocks/api/me` unauthenticated → **`401`**.
+- Locally, `http://localhost:8787/api/me` → `configured:true`.
+
+`wrangler dev` **does not reload `.dev.vars`** — the first local check still said
+`configured:false` with the var already on disk. Restart the server after editing
+it, or you will debug the wrong layer.
+
+**A trap worth not stepping in:** `CLERK_AUTHORIZED_PARTIES` stays unset. Read the
+installed `@clerk/backend` rather than guessing, and its check is
+`if (!azp || !authorizedParties.includes(azp)) throw`. A *missing* `azp` throws as
+hard as a wrong one, and only the web frontend reliably sends one — so an allowlist
+of `marquee.rocks` would lock the iOS and Android apps out, presenting as a plain
+"not signed in" with nothing in the response to say why. Set it only after
+inspecting a real native token. Noted in `worker/src/auth.ts` next to the option.
+
+**Prefix, for whoever copies from Clerk's dashboard next:** it hands out
+`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, which is the Next.js convention and is read by
+nothing here. Expo inlines `EXPO_PUBLIC_*` only.
 
 #### The gate: browse open, keeping gated (decided by Kyle 2026-07-31)
 
