@@ -1,11 +1,9 @@
 {
   "cli": {
     "version": ">= 21.0.0",
-    "//": "remote: build numbers live on EAS, so nobody has to commit a bumped versionCode to ship.",
     "appVersionSource": "remote"
   },
   "build": {
-    "//": "Both native profiles set EXPO_PUBLIC_API_URL. The web build can leave it unset because the Worker serves the bundle and relative /api resolves to itself; a native build has no origin to be relative to, so unset means every request goes nowhere. See src/lib/api.ts.",
     "preview": {
       "distribution": "internal",
       "env": {

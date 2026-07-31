@@ -181,6 +181,12 @@ The web is served same-origin, so it needs no API URL. Deploy by hand with
 relative to. It's inlined at **build** time, so changing it means a rebuild, not
 a restart. Push/reminders need a dev or store build on a physical device.
 
+Both native profiles in [eas.json](eas.json) set that variable; the web build
+leaves it unset. `cli.appVersionSource` is `remote`, so build numbers live on EAS
+and nobody has to commit a bumped `versionCode` to ship. Note that EAS validates
+`eas.json` against a strict schema — a `"//"` comment key there fails the build
+with `"cli.//" is not allowed`, which is why these notes live here instead.
+
 ## API keys
 
 | Key | Where | Used by |
