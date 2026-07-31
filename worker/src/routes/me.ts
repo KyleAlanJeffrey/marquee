@@ -2,7 +2,7 @@ import { zValidator } from '@hono/zod-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 
-import { callerFrom, ensureUser, findUser, syncProfileFromClerk } from '../auth';
+import { callerFrom, deleteAccount, ensureUser, findUser, syncProfileFromClerk } from '../auth';
 import { getDb } from '../db';
 import { users } from '../schema';
 import type { AppEnv } from '../env';
@@ -62,6 +62,20 @@ me.post('/', async (c) => {
     await ensureUser(db, userId);
   }
   return c.json({ ok: true, user: await findUser(db, userId) });
+});
+
+/**
+ * Delete the account — the store-required workflow, end to end: lists and graph
+ * edges deleted, the mirror row tombstoned and cleared, the Clerk identity
+ * removed (`deleteAccount` for the ordering and why a partial failure is
+ * retryable). The session token that authorized this is dead moments later,
+ * which is the point.
+ */
+me.delete('/', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+  await deleteAccount(c.env, getDb(c.env.DB), userId);
+  return c.json({ ok: true, deleted: true });
 });
 
 /**

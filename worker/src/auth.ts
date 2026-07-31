@@ -24,7 +24,7 @@ import { eq } from 'drizzle-orm';
 
 import type { DB } from './db';
 import type { Env } from './env';
-import { users } from './schema';
+import { personFollows, userLists, users } from './schema';
 
 /** Everything downstream needs to know about the caller. */
 export type Caller = {
@@ -174,6 +174,45 @@ export async function syncProfileFromClerk(env: Env, db: DB, userId: string): Pr
       target: users.id,
       set: { ...profile, syncedAt: now, deletedAt: null },
     });
+}
+
+/**
+ * Delete the account: everything it owns, then the row's contents, then the
+ * Clerk identity itself.
+ *
+ * The order is the design. The lists and the graph edges go first and the Clerk
+ * deletion goes last, so no data of ours can outlive the identity it belongs to
+ * — and a failure partway leaves a *retryable* state: the token is still valid
+ * (Clerk still knows the user), so tapping delete again finishes the job. The
+ * other order strands a live mirror behind a dead login that nothing can
+ * authenticate as again.
+ *
+ * The row itself is tombstoned rather than dropped — reviews will point at it —
+ * but cleared: the privacy page's claim is "holds no personal data once
+ * cleared", and this is the code that claim describes.
+ */
+export async function deleteAccount(env: Env, db: DB, userId: string): Promise<void> {
+  const now = nowIso();
+  await db.batch([
+    db.delete(userLists).where(eq(userLists.userId, userId)),
+    db.delete(personFollows).where(eq(personFollows.followerId, userId)),
+    db.delete(personFollows).where(eq(personFollows.followeeId, userId)),
+    db
+      .update(users)
+      .set({
+        handle: null,
+        displayName: null,
+        avatarUrl: null,
+        radiusMiles: null,
+        remindersEnabled: null,
+        deletedAt: now,
+        syncedAt: now,
+      })
+      .where(eq(users.id, userId)),
+  ]);
+
+  const clerk = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
+  await clerk.users.deleteUser(userId);
 }
 
 /** The mirror row, or null if this user has never written anything. */
