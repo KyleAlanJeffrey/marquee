@@ -197,11 +197,17 @@ during A/B):
   Ticketmaster missing-`dateTime` listings now land pinned to noon at the venue
   with the flag set; `mergeShow` never lets the placeholder displace a real
   time and clears the flag when one arrives; matching uses a same-local-day
-  window (`TBD_SHOW_MATCH_HOURS=13`) so the placeholder and the real listing
-  become one row without collapsing two-night runs. Cards, detail pages and the
-  server-rendered pages print the date with no clock ("Time TBA" on the event
-  page), and JSON-LD publishes a date-only `startDate`. Residual: rows ingested
-  before this were skipped entirely, so flagged shows appear as sources re-crawl.
+  window (`TBD_SHOW_MATCH_HOURS=12` — 13 reached a real 11pm show the night
+  before) so the placeholder and the real listing become one row without
+  collapsing two-night runs. Everything that asks "still upcoming?" goes
+  through one `stillUpcoming` predicate that keeps a flagged show alive until
+  midnight at the venue rather than retiring it at its noon placeholder — the
+  feeds, sitemap, hub pages, noindex, the review/RSVP gates and the client's
+  hasHappened all share it. Cards, detail pages and the server-rendered pages
+  print the date with no clock ("Time TBA" on the event page), and JSON-LD
+  publishes a date-only `startDate`. Verified end-to-end on production with a
+  real flagged show from each source. Residual: rows ingested before this were
+  skipped entirely, so flagged shows appear as sources re-crawl.
 - [ ] Venue-calendar adapters for the DIY tier (WP "The Events Calendar" JSON,
   iCal). A subsystem with a robots/ToS judgement call, not an afternoon.
 - [ ] Scheduled discovery for launch cities (optional cron sweep).
