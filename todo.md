@@ -1,37 +1,85 @@
 # Marquee — TODO
 
-Local-first concert-discovery app. **Cloudflare stack:** Expo app → Cloudflare
-Worker (Hono) → D1 (SQLite). Ticketmaster + SeatGeek + Bandsintown for listings,
-Spotify/Deezer/Wikipedia for artist detail. Follows/prefs on-device (no account).
+## The brief
+
+> I want to pivot a big part of this website to adding features for concerts I've
+> been to with a rating of how the concert was, which is a page that other people
+> can leave reviews on as well. Like Goodreads but for concerts and bands. This is
+> gonna need some actual accounts to be made.
+>
+> — Kyle, 2026-07-30
+
+That is the direction everything below is now sorted against, and the accounts are
+not a footnote to it — reviews need durable identity, so **auth is a hard
+dependency of the brief, not an enhancement of it**. It is being bought rather
+than built: an off-the-shelf third-party service, chosen and being wired up now
+(**Clerk** — the reasoning is under "Accounts" in the pivot section).
+
+The full writeup — what gets rated, the data model, the account decision,
+moderation, and the phased build order — is in the **P0 · Pivot** section below.
+
+---
+
+Local-first concert app. **Cloudflare stack:** Expo app → Cloudflare Worker (Hono)
+→ D1 (SQLite). Ticketmaster + SeatGeek + Bandsintown for listings,
+Spotify/Deezer/Wikipedia for artist detail. Follows/prefs on-device.
 Production: **https://marquee.rocks**.
 
-## Status legend
+## How to read this file
+
 - [ ] not started · [~] in progress · [x] done
+- **P0** — serves the brief, or is being lost by waiting. Do these.
+- **P1** — worth doing next, and nothing is bleeding while it waits.
+- **P2** — real, but only once the pivot has shape. Includes anything needing
+  money, a partner account or somebody else's approval.
 
 Finished work isn't kept here — it's in the git log, where the reasoning sits next
 to the diff that acted on it. This file is only what's left.
 
-## What's being worked on right now
+## Priorities
 
-In this order, decided 2026-07-30:
+**P0 — in flight**
 
-1. **The reviews pivot, phase 0** — the on-device "been to" log and private
-   rating. No accounts, no new tables, no moderation. See the build order below.
-2. **Stop throwing the past away** (`sanitizeInputs`), because every day it stays
-   is a day of history that can never be recovered. Cheap, and it compounds.
-3. **App-store prep** — everything that doesn't need Kyle's Apple/Google
-   credentials. Kyle runs the builds and submissions.
+1. [~] **Reviews phase 0** — on-device "been to" log and private rating. No
+   accounts, no new tables, no moderation. The interaction test that has to pass
+   before anything public gets built.
+2. [x] **Stop throwing the past away** — done in `71dff0d`. It was P0 for a reason
+   worth remembering: history is only lost *once*, and every day the 24-hour drop
+   stayed was a day nothing could re-fetch.
+3. [ ] **Check Setlist.fm** (phase 0.5). Everything about the back-catalogue
+   depends on the answer, and it is a day's investigation, not a build.
+4. [~] **Accounts and auth — an off-the-shelf service, not ours to build.**
+   **Clerk**, picked 2026-07-30; reasoning under "Accounts" below. Wiring starts
+   now and is deliberately split around the keys, which arrive 2026-07-31:
+   - [~] **Everything that doesn't need a key** — SDKs, provider, secure token
+     cache, the Worker's verification middleware, the D1 `users` mirror and its
+     migration, `/api/me`. All of it inert while the env vars are unset, so an
+     unconfigured build behaves exactly like today's no-account app.
+   - [ ] **On the keys landing:** create the Clerk app, enable Apple + Google +
+     Spotify, set `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`, and
+     prove a token minted in Expo verifies in a Worker before building on it.
 
-Auth is **decided but not started**: Clerk, keys arriving 2026-07-31. It gates
-phase 2, not phase 0, so it does not block the work above.
+**P1 — next**
 
-**Cancelled 2026-07-30: the website/app split.** The two items under it that stand
+5. [ ] **App-store prep** — mine except the builds and submissions, which need
+   Kyle's Apple and Google credentials.
+6. [ ] **Reviews phases 1–3** — the past becomes first-class, then accounts, then
+   public reviews. Each is a section below, in order.
+7. [ ] **The venue-name bugs**, which are also SEO bugs: ingestion still writes
+   tour titles into the venue column, and 240 rooms currently render as their town.
+
+**P2 — later**
+
+8. Event-coverage widening, ticketing partners, paid enrichment, the desktop
+   layout, one palette. All below, none urgent.
+
+**Cancelled 2026-07-30: the website/app split.** The two items under it that stood
 on their own — a desktop layout for the server-rendered pages, and one palette
 rather than two — moved to "Later". Everything else there is dropped.
 
 ---
 
-## Venue pages — what's left after `ea978b9`
+## P2 · Venue pages — what's left after `ea978b9`
 
 The page now has a room in it: a licensed photo hero, Wikipedia prose behind two
 guards, a stat grid, genres, and a "recently played here" rail — with stats and
@@ -49,7 +97,7 @@ map still carrying the page when no article exists. The reasoning and the
   photos, ratings *and* the venue's own website (see the costing further down).
   Worth it only if a billing account is ever justified.
 
-## Now — bugs
+## P1 · Bugs
 
 - [~] **Artist and tour names stored as venue names — fixed on display, not at the
   source.** Handled in `195912b`: `looksLikeEventTitle` nulls the name wherever one
@@ -87,7 +135,7 @@ map still carrying the page when no article exists. The reasoning and the
   distinct venue id (two indexed lookups, as `clusterVenueIds` does) and bind an
   `in (...)`.
 
-## Pivot — concerts you've been to, and what you thought
+## P0 · Pivot — concerts you've been to, and what you thought
 
 The direction: log the shows you've been to, rate them, and let other people
 review the same show, artist and room. Goodreads for concerts and bands. This is
@@ -295,7 +343,7 @@ one, since it injects markup into the app shell and rewrites
 `__EXPO_ROUTER_HYDRATE__` to stop the bundle clearing it. Phase 3 is the moment
 that trick either gets removed or gets a second consumer.
 
-## Now — ship it to the stores
+## P1 · Ship it to the stores
 
 Kyle runs the builds and submissions (they need his Apple and Google credentials);
 everything else is mine.
@@ -327,7 +375,7 @@ everything else is mine.
   banner on the web pages rather than "Open the app" pointing at a bundle the
   visitor is already inside.
 
-## Event coverage — remaining phases
+## P2 · Event coverage — remaining phases
 
 Order still matters: canonical shows/venues before any crawl widening, or the
 crawl multiplies duplicates instead of coverage.
@@ -355,7 +403,7 @@ crawl multiplies duplicates instead of coverage.
 - [ ] **Scheduled discovery for launch cities** (optional): a Cron Trigger that
   sweeps a fixed city list so feeds are warm before the first visitor.
 
-## Later — ticketing & enrichment
+## P2 · Ticketing & enrichment
 
 - [ ] **StubHub Partner API** (Partnerize). Today the event page's StubHub option
   is a **search deep link** (`stubhub.com/explore?q=artist+city`) — there's no
@@ -392,7 +440,7 @@ crawl multiplies duplicates instead of coverage.
   Generate the CSS variables from the TS tokens, or the two surfaces will diverge
   exactly when they're meant to look related.
 
-## Operational — not fixable in this repo
+## Operational — not fixable in this repo (Kyle's, not mine)
 
 - [ ] **Rotate `ADMIN_TOKEN` and the Ticketmaster key.** Both were pasted into
   chat. `npx wrangler secret put ADMIN_TOKEN` /
