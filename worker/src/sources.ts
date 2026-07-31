@@ -469,7 +469,15 @@ export async function fetchArtistHistory(
   // else claimed it first, so this caller reads their result instead of duplicating it.
   const claimed = (claim as unknown as { meta?: { changes?: number } })?.meta?.changes ?? 1;
   if (!claimed && !opts.force) {
-    return { ...cached(claimedAt), past_on_file: await countPast() };
+    // Somebody else won the claim between our read and our write. Report *their*
+    // stamp — `claimedAt` is our losing attempt's clock, and handing it back would
+    // date the fetch to a call that never went upstream.
+    const winner = await db
+      .select({ fetchedAt: artists.pastEventsFetchedAt })
+      .from(artists)
+      .where(eq(artists.id, row.id))
+      .get();
+    return { ...cached(winner?.fetchedAt ?? claimedAt), past_on_file: await countPast() };
   }
 
   const keys = lookupKeys({

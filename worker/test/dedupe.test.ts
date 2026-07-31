@@ -85,6 +85,23 @@ describe('venue identity', () => {
     expect(sameVenue(metro, radius)).toBe(false);
   });
 
+  it('answers the same whichever side is asked first when the cities disagree', () => {
+    // Two nearby rows claiming different towns — the borough spelling against the
+    // city proper. Neither city may be dropped: dropping whichever side happened to
+    // come first made the verdict depend on argument order, and ingest calls this
+    // both ways round. One room under two city labels still joins…
+    const bowlBk = at('Brooklyn Bowl', 40.7219, -73.9575, 'Brooklyn');
+    const bowlNy = at('Brooklyn Bowl', 40.7221, -73.9573, 'New York');
+    expect(sameVenue(bowlBk, bowlNy)).toBe(sameVenue(bowlNy, bowlBk));
+    expect(sameVenue(bowlBk, bowlNy)).toBe(true);
+
+    // …and two different rooms on the block stay apart, from either direction.
+    const hill = at('Bottom of the Hill', 37.7654, -122.3961, 'San Francisco');
+    const parkside = at('Thee Parkside', 37.7667, -122.3961, 'Frisco');
+    expect(sameVenue(hill, parkside)).toBe(sameVenue(parkside, hill));
+    expect(sameVenue(hill, parkside)).toBe(false);
+  });
+
   it('still joins two spellings of one room once the town is dropped', () => {
     // The city word goes, the identifying word stays: "Metro" is what matches.
     expect(venueNamesAgree('Metro Chicago', 'Metro', 'Chicago')).toBe(true);

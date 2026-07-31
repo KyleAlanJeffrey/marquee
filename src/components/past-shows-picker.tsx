@@ -107,7 +107,13 @@ export function PastShowsPicker({
                 haptic
                 accessibilityRole="button"
                 accessibilityLabel="Try looking up past shows again"
-                onPress={() => (past.isError ? past.refetch() : history.mutate())}
+                onPress={() => {
+                  // Retry whichever half failed — both, when both did. History
+                  // first, so a repopulated upstream fetch is what the re-read
+                  // then reads.
+                  if (history.isError) history.mutate();
+                  if (past.isError) past.refetch();
+                }}
                 style={[styles.retry, { borderColor: theme.border }]}>
                 <ThemedText type="labelSm" style={{ color: theme.primary }}>
                   TRY AGAIN

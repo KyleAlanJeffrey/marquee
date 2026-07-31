@@ -30,7 +30,7 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const { follows, unfollow } = useFollows();
   const { signedIn, displayName, loading } = useAuth();
-  const { radiusMiles, setRadiusMiles, remindersEnabled, setRemindersEnabled, canChange } = usePrefs();
+  const { radiusMiles, setRadiusMiles, remindersEnabled, setRemindersEnabled, persisted } = usePrefs();
   const [toggling, setToggling] = useState(false);
 
   async function onToggleReminders(next: boolean) {
@@ -101,15 +101,15 @@ export default function ProfileScreen() {
             <View style={{ flex: 1, gap: 2 }}>
               <ThemedText type="smallBold">Show reminders</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {canChange
+                {persisted
                   ? 'A heads-up the day before a followed artist plays near you.'
-                  : 'A heads-up the day before a followed artist plays near you. Sign in to turn it on — settings live with your account.'}
+                  : 'A heads-up the day before a followed artist plays near you. Lasts this session — sign in to keep it.'}
               </ThemedText>
             </View>
             <Switch
               value={remindersEnabled}
               onValueChange={onToggleReminders}
-              disabled={toggling || !canChange}
+              disabled={toggling}
               trackColor={{ true: theme.primaryVivid, false: theme.backgroundHigh }}
               thumbColor="#fff"
             />
@@ -117,10 +117,9 @@ export default function ProfileScreen() {
         </GlassCard>
 
         <Label>SEARCH RADIUS</Label>
-        {!canChange && (
+        {!persisted && (
           <ThemedText type="small" themeColor="textSecondary" style={styles.radiusNote}>
-            Showing the default {radiusMiles} miles. Sign in to change it — settings live with your
-            account now, not on this device.
+            A change here lasts this session. Sign in to keep it — settings live with your account.
           </ThemedText>
         )}
         <View style={styles.radiusRow}>
@@ -130,7 +129,6 @@ export default function ProfileScreen() {
               <PressableScale
                 key={r}
                 haptic={false}
-                disabled={!canChange}
                 onPress={() => setRadiusMiles(r)}
                 style={[
                   styles.radiusPill,

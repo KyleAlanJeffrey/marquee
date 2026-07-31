@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 import { apiGet, apiPut } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -11,15 +11,37 @@ import { useAuth } from '@/lib/auth';
  * more (see `account-lists.tsx` for the decision), so a preference lives on the account
  * or it does not persist at all.
  *
- * Signed out, the defaults apply and a change lasts as long as the session in memory.
- * That is deliberate rather than a gap: browsing is open to anonymous visitors, so the
- * radius has to have *some* value, and 50 miles is a better answer than a sign-in wall
- * in front of looking at what's on this week.
+ * Signed out, a change still takes effect — it just lasts only as long as the app is
+ * open. That is deliberate rather than a gap: browsing is open to anonymous visitors,
+ * so the radius has to have *some* value they can adjust, and a working control that
+ * forgets is a better answer than a sign-in wall in front of looking at what's on
+ * this week.
  */
 
 export const RADIUS_OPTIONS = [10, 25, 50, 100] as const;
 
 const DEFAULTS = { radiusMiles: 50, remindersEnabled: false };
+
+// --- signed-out session prefs -------------------------------------------------
+// A module-level cell rather than component state, because every screen that reads
+// the radius must see the same value. Never written while signed in, so signing in
+// simply stops reading it and the account's values take over.
+
+type SessionPrefs = { radiusMiles?: number; remindersEnabled?: boolean };
+
+let sessionPrefs: SessionPrefs = {};
+const sessionListeners = new Set<() => void>();
+
+function patchSessionPrefs(patch: SessionPrefs) {
+  sessionPrefs = { ...sessionPrefs, ...patch };
+  sessionListeners.forEach((notify) => notify());
+}
+
+const subscribeSession = (notify: () => void) => {
+  sessionListeners.add(notify);
+  return () => sessionListeners.delete(notify);
+};
+const readSession = () => sessionPrefs;
 
 /** The same query key `/api/me` is read under elsewhere, so one fetch serves both. */
 const ME_KEY = ['me'] as const;
@@ -40,12 +62,21 @@ export function usePrefs() {
     queryFn: (): Promise<MeResponse> => apiGet('/me'),
   });
 
+  const session = useSyncExternalStore(subscribeSession, readSession, readSession);
+
   const stored = query.data?.user;
   // Null from the server means "never chosen", which is not the same as 0 or false —
   // so the fallback is `??` rather than `||`, and a radius of 0 could never be stored
-  // anyway because the route rejects it.
-  const radiusMiles = stored?.radiusMiles ?? DEFAULTS.radiusMiles;
-  const remindersEnabled = stored?.remindersEnabled == null ? DEFAULTS.remindersEnabled : !!stored.remindersEnabled;
+  // anyway because the route rejects it. Signed out, the in-memory session value
+  // stands in for the account's.
+  const radiusMiles = signedIn
+    ? (stored?.radiusMiles ?? DEFAULTS.radiusMiles)
+    : (session.radiusMiles ?? DEFAULTS.radiusMiles);
+  const remindersEnabled = signedIn
+    ? stored?.remindersEnabled == null
+      ? DEFAULTS.remindersEnabled
+      : !!stored.remindersEnabled
+    : (session.remindersEnabled ?? DEFAULTS.remindersEnabled);
 
   const save = useMutation({
     mutationFn: (patch: { radiusMiles?: number; remindersEnabled?: boolean }) => apiPut('/me/prefs', patch),
@@ -76,16 +107,16 @@ export function usePrefs() {
 
   const setRadiusMiles = useCallback(
     (miles: number) => {
-      if (!signedIn) return;
-      save.mutate({ radiusMiles: miles });
+      if (signedIn) save.mutate({ radiusMiles: miles });
+      else patchSessionPrefs({ radiusMiles: miles });
     },
     [signedIn, save],
   );
 
   const setRemindersEnabled = useCallback(
     (enabled: boolean) => {
-      if (!signedIn) return;
-      save.mutate({ remindersEnabled: enabled });
+      if (signedIn) save.mutate({ remindersEnabled: enabled });
+      else patchSessionPrefs({ remindersEnabled: enabled });
     },
     [signedIn, save],
   );
@@ -95,8 +126,8 @@ export function usePrefs() {
     remindersEnabled,
     /** True when there is nothing left to wait for — immediately so when signed out. */
     ready: !signedIn || query.isSuccess || query.isError,
-    /** False signed out: there is nowhere to keep a preference. */
-    canChange: signedIn,
+    /** False when a change only lasts the session — the copy changes, not the controls. */
+    persisted: signedIn,
     setRadiusMiles,
     setRemindersEnabled,
   };

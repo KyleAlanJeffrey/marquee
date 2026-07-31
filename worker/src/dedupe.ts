@@ -299,10 +299,14 @@ const sameTown = (a: VenuePoint, b: VenuePoint): boolean =>
 export function sameVenue(a: VenuePoint, b: VenuePoint): boolean {
   if (a.lat == null || a.lng == null || b.lat == null || b.lng == null) return false;
   const meters = metersBetween({ lat: a.lat, lng: a.lng }, { lat: b.lat, lng: b.lng });
-  // Whichever side knows its town. Two rows this close are in one town, so a single
-  // value serves both names, and the comparison stays symmetric when only one row
-  // carries a city.
-  const town = a.city ?? b.city ?? null;
+  // The town both sides answer to. One value serves both names; when the two rows
+  // *disagree* about their city (a boundary spelling — "Brooklyn" vs "New York"),
+  // no city is dropped at all, because picking either side's would make
+  // sameVenue(a, b) differ from sameVenue(b, a) and the clusters flap with
+  // processing order. Conservative and symmetric beats clever here.
+  const cityA = a.city?.trim().toLowerCase() ?? null;
+  const cityB = b.city?.trim().toLowerCase() ?? null;
+  const town = cityA && cityB ? (cityA === cityB ? a.city! : null) : (a.city ?? b.city ?? null);
   if (meters <= VENUE_SAME_SPOT_METERS && !venueNamesConflict(a.name, b.name, town)) return true;
   if (meters <= VENUE_MATCH_METERS && venueNamesAgree(a.name, b.name, town)) return true;
   return meters <= VENUE_SAME_NAME_METERS && sameTown(a, b) && venueNamesMatchStrongly(a.name, b.name, town);

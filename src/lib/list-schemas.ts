@@ -16,7 +16,9 @@
 /** Shared shape check: null or a string, which is what every stored id is. */
 export const isNullableString = (v: unknown): boolean => v === null || typeof v === 'string';
 
-const isNullableNumber = (v: unknown): boolean => v === null || typeof v === 'number';
+// Number.isFinite, not typeof: NaN and the infinities are numbers to typeof and
+// silently poison every comparison made against them later.
+const isNullableNumber = (v: unknown): boolean => v === null || Number.isFinite(v);
 
 // --- followed artists --------------------------------------------------------
 
@@ -51,7 +53,7 @@ export function isFollowedArtist(v: unknown): v is FollowedArtist {
     isNullableString(a.imageUrl) &&
     Array.isArray(a.genres) &&
     a.genres.every((g) => typeof g === 'string') &&
-    typeof a.followedAt === 'number'
+    Number.isFinite(a.followedAt)
   );
 }
 
@@ -92,7 +94,7 @@ export function isFollowedVenue(v: unknown): v is FollowedVenue {
     isNullableString(a.region) &&
     isNullableNumber(a.lat) &&
     isNullableNumber(a.lng) &&
-    typeof a.followedAt === 'number'
+    Number.isFinite(a.followedAt)
   );
 }
 
@@ -147,7 +149,7 @@ function hasShowSnapshot(a: Record<string, unknown>): boolean {
 export function isSavedShow(v: unknown): v is SavedShow {
   if (typeof v !== 'object' || v === null) return false;
   const a = v as Record<string, unknown>;
-  return hasShowSnapshot(a) && isNullableNumber(a.priceFrom) && typeof a.savedAt === 'number';
+  return hasShowSnapshot(a) && isNullableNumber(a.priceFrom) && Number.isFinite(a.savedAt);
 }
 
 export const sameSavedShow = (s: SavedShow, ref: ShowRef) => !!ref.eventId && s.eventId === ref.eventId;
@@ -216,7 +218,7 @@ export function isAttendance(v: unknown): v is Attendance {
   const a = v as Record<string, unknown>;
   return (
     hasShowSnapshot(a) &&
-    typeof a.loggedAt === 'number' &&
+    Number.isFinite(a.loggedAt) &&
     isRating(a.rating) &&
     isRating(a.venueRating) &&
     isNullableString(a.note)
