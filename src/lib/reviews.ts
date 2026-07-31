@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api';
+import type { NearbyEvent } from '@/lib/types';
 
 /**
  * Public reviews, client side — phase B of docs/social.md.
@@ -164,7 +165,23 @@ export function useSetRsvp(eventId: string) {
       console.warn('rsvp failed:', err);
       if (context?.previous) queryClient.setQueryData(rsvpKey(eventId), context.previous);
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: rsvpKey(eventId) }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: rsvpKey(eventId) });
+      // The My Shows tab lists every answer, so it learns about this one.
+      queryClient.invalidateQueries({ queryKey: ['my-rsvps'] });
+    },
+  });
+}
+
+/** A show you answered on, in the same shape the feed cards render. */
+export type MyRsvp = NearbyEvent & { rsvp_status: RsvpStatus };
+
+/** Everything you're going to or interested in that's still to come. */
+export function useMyRsvps(enabled = true) {
+  return useQuery({
+    queryKey: ['my-rsvps'],
+    enabled,
+    queryFn: (): Promise<{ items: MyRsvp[] }> => apiGet('/me/rsvps'),
   });
 }
 

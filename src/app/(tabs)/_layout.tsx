@@ -40,17 +40,20 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* One tab for everything you've marked: going, interested, saved, and
+          your lists. It grew out of "Saved" when RSVPs and shelves arrived and
+          each needed a home — this is the home. */}
       <Tabs.Screen
         name="saved"
         options={{
-          title: 'Saved',
+          title: 'My Shows',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? 'bookmark' : 'bookmark-outline'} size={size} color={color} />
           ),
         }}
       />
-      {/* Saved is what you plan to see; this is what you did. Sits next to it
-          because they are the same list either side of the night. */}
+      {/* My Shows is what you plan to see; this is what you did. Sits next to
+          it because they are the same list either side of the night. */}
       <Tabs.Screen
         name="log"
         options={{

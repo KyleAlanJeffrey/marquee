@@ -70,6 +70,9 @@ What's left is the residuals:
 
 ## P1 · Next
 
+- [ ] **Folder-structure audit** (Kyle, 2026-08-01): a bunch of `use*` hooks
+  live in `src/lib` that probably belong in `src/hooks`; sweep them over and
+  take a general pass for anything else misfiled while in there.
 - [ ] **App-store prep** — mine except the builds and submissions:
   - [ ] **Blocked on Kyle:** the EAS project id (`a9540056-…`) belongs to an
     account `eas whoami` isn't a member of. Either `eas login` as its owner or

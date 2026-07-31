@@ -13,9 +13,24 @@ import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/lib/auth';
+import { usePersonLists } from '@/lib/curated';
 import { EVENTS_BY_IDS_MAX, useSavedShowDetails } from '@/lib/hooks';
+import { useMyRsvps, type MyRsvp } from '@/lib/reviews';
 import { useSavedShows, type SavedShow } from '@/lib/saved-shows-store';
 import type { NearbyEvent } from '@/lib/types';
+
+/**
+ * My Shows — the one place everything you've marked is visible: shows you're
+ * going to, shows you're interested in, shows you saved for later, and your
+ * lists. Each of those is set somewhere else (the event page's "Your plans"
+ * card, the add-to-list button); this tab is where they all land.
+ *
+ * Grew out of the Saved tab, whose machinery it keeps: the saved section still
+ * renders instantly from stored snapshots and replaces them with revalidated
+ * rows, because a saved show is exactly the case where a stale door time costs
+ * somebody their evening.
+ */
 
 /**
  * Render a stored snapshot as a feed row, so a saved show looks the same whether
@@ -49,9 +64,12 @@ function snapshotAsEvent(s: SavedShow): NearbyEvent {
   };
 }
 
-export default function SavedScreen() {
+export default function MyShowsScreen() {
   const theme = useTheme();
+  const { userId } = useAuth();
   const { saved, unsave, isSaved, ready } = useSavedShows();
+  const rsvps = useMyRsvps(!!userId);
+  const shelves = usePersonLists(userId ?? '', !!userId);
   const [refreshing, setRefreshing] = useState(false);
 
   // Soonest first before the cap, so the shows that get live prices and door times
@@ -81,10 +99,17 @@ export default function SavedScreen() {
     return { upcoming: live, gone: snapshots.filter((e) => !found.has(e.event_id)) };
   }, [saved, details.data, details.isSuccess, isSaved]);
 
+  const going = useMemo(() => (rsvps.data?.items ?? []).filter((e) => e.rsvp_status === 'going'), [rsvps.data]);
+  const interested = useMemo(
+    () => (rsvps.data?.items ?? []).filter((e) => e.rsvp_status === 'interested'),
+    [rsvps.data],
+  );
+  const lists = shelves.data?.lists ?? [];
+
   async function onRefresh() {
     setRefreshing(true);
     try {
-      await details.refetch();
+      await Promise.all([details.refetch(), rsvps.refetch(), shelves.refetch()]);
     } finally {
       setRefreshing(false);
     }
@@ -101,26 +126,50 @@ export default function SavedScreen() {
     </PressableScale>
   );
 
+  const sectionLabel = (label: string) => (
+    <ThemedText type="label" style={[styles.sectionLabel, { color: theme.textTertiary }]}>
+      {label}
+    </ThemedText>
+  );
+
+  const rsvpRows = (items: MyRsvp[], icon: keyof typeof Ionicons.glyphMap) =>
+    items.map((e) => (
+      <SecondaryEventCard
+        key={e.event_id}
+        event={e}
+        following={false}
+        onPress={() => router.push(`/event/${e.event_id}`)}
+        action={
+          <View style={[styles.statusBadge, { borderColor: theme.primaryEdge, backgroundColor: theme.primaryFill }]}>
+            <Ionicons name={icon} size={16} color={theme.primary} />
+          </View>
+        }
+      />
+    ));
+
+  const nothingAnywhere =
+    saved.length === 0 && going.length === 0 && interested.length === 0 && lists.length === 0;
+
   return (
     <View style={{ flex: 1 }}>
       <PageMeta
-        title="Saved shows"
-        description="The concerts you put aside on Marquee, soonest first, with live prices and door times."
+        title="My shows"
+        description="Everything you've marked on Marquee — going, interested, saved for later, and your lists."
       />
       <StageBackground />
       <TopBar onSearchPress={() => router.push('/search')} />
 
       {!ready ? (
-        // The disk read hasn't landed; "nothing saved" here would be a lie that
+        // The disk read hasn't landed; "nothing here" would be a lie that
         // flashes over a full list every cold start.
         <View style={styles.center}>
           <ActivityIndicator color={theme.primary} />
         </View>
-      ) : saved.length === 0 ? (
+      ) : nothingAnywhere ? (
         <EmptyState
           icon="bookmark-outline"
-          title="Nothing saved"
-          message="Tap the bookmark on a show to put it aside and it will wait for you here."
+          title="Nothing here yet"
+          message="Going, interested, saved and your lists all land here. Open a show and make a plan."
           actionLabel="Find shows"
           onAction={() => router.push('/explore')}
         />
@@ -134,50 +183,99 @@ export default function SavedScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />
           }
           ListHeaderComponent={
-            <View style={styles.head}>
-              <ThemedText type="headline">Saved</ThemedText>
-              <View style={styles.subRow}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {saved.length} {saved.length === 1 ? 'show' : 'shows'} put aside
-                  {/* Say it rather than quietly showing stale times for the rest. */}
-                  {saved.length > ids.length ? ` · live times for the first ${ids.length}` : ''}
-                </ThemedText>
-                {details.isFetching && !refreshing ? (
-                  <ActivityIndicator size="small" color={theme.textTertiary} />
+            <View>
+              <View style={styles.head}>
+                <ThemedText type="headline">My Shows</ThemedText>
+                <View style={styles.subRow}>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {[
+                      going.length ? `${going.length} going` : null,
+                      interested.length ? `${interested.length} interested` : null,
+                      saved.length ? `${saved.length} saved` : null,
+                      lists.length ? `${lists.length} ${lists.length === 1 ? 'list' : 'lists'}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'Plans land here'}
+                    {/* Say it rather than quietly showing stale times for the rest. */}
+                    {saved.length > ids.length ? ` · live times for the first ${ids.length}` : ''}
+                  </ThemedText>
+                  {(details.isFetching || rsvps.isFetching) && !refreshing ? (
+                    <ActivityIndicator size="small" color={theme.textTertiary} />
+                  ) : null}
+                </View>
+                {/* A failed refresh doesn't hide anything — what's below is
+                    still the user's. It just says so, and offers another go. */}
+                {(details.isError || rsvps.isError) && !details.isFetching && !rsvps.isFetching ? (
+                  <View style={styles.errorRow}>
+                    <ThemedText type="labelSm" style={{ color: theme.textTertiary, flex: 1 }}>
+                      COULDN&rsquo;T CHECK FOR CHANGES &mdash; SHOWING WHAT&rsquo;S KNOWN
+                    </ThemedText>
+                    <PressableScale
+                      accessibilityRole="button"
+                      accessibilityLabel="Try refreshing again"
+                      onPress={onRefresh}>
+                      <ThemedText type="labelSm" style={{ color: theme.primary }}>
+                        TRY AGAIN
+                      </ThemedText>
+                    </PressableScale>
+                  </View>
                 ) : null}
               </View>
-              {/* A failed refresh doesn't hide the list — the snapshots below are
-                  still the user's shows. It just says so, and offers another go. */}
-              {details.isError && !details.isFetching ? (
-                <View style={styles.errorRow}>
-                  <ThemedText type="labelSm" style={{ color: theme.textTertiary, flex: 1 }}>
-                    COULDN&rsquo;T CHECK FOR CHANGES &mdash; SHOWING WHAT YOU SAVED
-                  </ThemedText>
-                  <PressableScale
-                    accessibilityRole="button"
-                    accessibilityLabel="Try refreshing saved shows again"
-                    onPress={() => details.refetch()}>
-                    <ThemedText type="labelSm" style={{ color: theme.primary }}>
-                      TRY AGAIN
-                    </ThemedText>
-                  </PressableScale>
+
+              {going.length > 0 && (
+                <View>
+                  {sectionLabel('GOING')}
+                  {rsvpRows(going, 'checkmark-circle')}
                 </View>
-              ) : null}
+              )}
+              {interested.length > 0 && (
+                <View>
+                  {sectionLabel('INTERESTED')}
+                  {rsvpRows(interested, 'sparkles')}
+                </View>
+              )}
+
+              {lists.length > 0 && (
+                <View>
+                  {sectionLabel('YOUR LISTS')}
+                  <View style={styles.shelfRow}>
+                    {lists.map((l) => (
+                      <PressableScale
+                        key={l.id}
+                        haptic={false}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open your list ${l.title}`}
+                        onPress={() => router.push(`/list/${l.id}`)}
+                        style={[styles.shelfChip, { borderColor: theme.border, backgroundColor: theme.backgroundElevated }]}>
+                        <Ionicons name="albums-outline" size={14} color={theme.cyan} />
+                        <ThemedText type="smallBold" numberOfLines={1} style={styles.shelfTitle}>
+                          {l.title}
+                        </ThemedText>
+                        <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                          {String(l.itemCount)}
+                        </ThemedText>
+                      </PressableScale>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {(saved.length > 0 || upcoming.length > 0) && sectionLabel('SAVED FOR LATER')}
             </View>
           }
           ListEmptyComponent={
-            <EmptyState
-              icon="calendar-outline"
-              title="Nothing coming up"
-              message="Nothing you saved is still to come. The list below remembers them anyway."
-            />
+            saved.length > 0 ? (
+              <EmptyState
+                icon="calendar-outline"
+                title="Nothing coming up"
+                message="Nothing you saved is still to come. The list below remembers them anyway."
+              />
+            ) : null
           }
           ListFooterComponent={
             gone.length > 0 ? (
               <View>
-                <ThemedText type="label" style={[styles.sectionLabel, { color: theme.textTertiary }]}>
-                  PAST OR NO LONGER LISTED
-                </ThemedText>
+                {sectionLabel('PAST OR NO LONGER LISTED')}
                 {gone.map((e) => (
                   <View key={e.event_id} style={styles.dim}>
                     <SecondaryEventCard
@@ -211,9 +309,34 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.three },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingTop: Spacing.two },
   content: { paddingBottom: Spacing.six + Spacing.four },
-  head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, paddingBottom: Spacing.three, gap: 2 },
+  head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, paddingBottom: Spacing.two, gap: 2 },
   subRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   sectionLabel: { paddingHorizontal: Spacing.three, paddingTop: Spacing.three, paddingBottom: Spacing.two, letterSpacing: 1.5 },
+  shelfRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+  },
+  shelfChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one + 2,
+    paddingHorizontal: Spacing.two + 2,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    maxWidth: '100%',
+  },
+  shelfTitle: { maxWidth: 180 },
+  statusBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // A show that has passed or been pulled is still yours to look at, just not news.
   dim: { opacity: 0.55 },
   remove: {

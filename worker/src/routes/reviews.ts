@@ -3,7 +3,7 @@ import { and, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { callerFrom, ensureUser } from '../auth';
-import { isoAt, nowIso, TBD_GRACE_MS } from '../data';
+import { eventsByIds, isoAt, nowIso, TBD_GRACE_MS } from '../data';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
 import { eventRsvps, events, personFollows, reports, reviews, userBlocks, users } from '../schema';
@@ -338,6 +338,28 @@ reviewRoutes.delete('/events/:id/rsvp', async (c) => {
  * construction.
  */
 const FEED_PAGE = 50;
+
+/**
+ * Everything the caller said they're going to or interested in that hasn't
+ * happened yet — the forward-looking shelf on the My Shows tab. Rows come back
+ * in the `/events/by-ids` shape so the client renders the same cards, with the
+ * caller's own answer riding along. Answers on past shows simply drop out
+ * (`eventsByIds` only returns what's still to come), which is the RSVP
+ * lifecycle working as designed rather than data loss.
+ */
+reviewRoutes.get('/me/rsvps', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+
+  const db = getDb(c.env.DB);
+  const mine = await db
+    .select({ eventId: eventRsvps.eventId, status: eventRsvps.status })
+    .from(eventRsvps)
+    .where(eq(eventRsvps.userId, userId));
+  const statusOf = new Map(mine.map((r) => [r.eventId, r.status]));
+  const items = await eventsByIds(db, [...statusOf.keys()]);
+  return c.json({ items: items.map((e) => ({ ...e, rsvp_status: statusOf.get(e.event_id) })) });
+});
 
 reviewRoutes.get('/me/feed', async (c) => {
   const { userId } = await callerFrom(c.env, c.req.header('authorization'));

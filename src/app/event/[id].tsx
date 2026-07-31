@@ -10,7 +10,7 @@ import { AttendanceCard } from '@/components/attendance-card';
 import { ErrorState } from '@/components/error-state';
 import { ReviewSection } from '@/components/review-section';
 import { AddToListButton } from '@/components/add-to-list-button';
-import { RsvpRow } from '@/components/rsvp-row';
+import { EventActions } from '@/components/event-actions';
 import { GalleryStrip } from '@/components/gallery-strip';
 import { GlassCard } from '@/components/glass-card';
 import { GradientButton } from '@/components/gradient-button';
@@ -111,6 +111,23 @@ export default function EventScreen() {
 
   const following = isFollowing({ artistId: e.artist.id, spotifyId: e.artist.spotify_id });
   const saved = isSaved({ eventId: e.id });
+  // One snapshot builder for both save affordances (the top-bar bookmark and
+  // the actions card), so they can never drift apart on what gets stored.
+  const toggleSave = () =>
+    toggleSaved({
+      eventId: e.id,
+      name: e.name,
+      startsAt: e.starts_at,
+      timeUnknown: e.time_unknown,
+      artistId: e.artist.id,
+      artistName: e.artist.name,
+      artistImageUrl: e.artist.image_url,
+      venueId: e.venue?.id ?? null,
+      venueName: e.venue?.name ?? null,
+      venueCity: e.venue?.city ?? null,
+      venueTimezone: e.venue?.timezone ?? null,
+      priceFrom: e.price_from,
+    });
   const hasTickets = !!e.ticket_url;
   const sources = ticketSources(e);
   const primaryUrl = e.ticket_url ?? sources[sources.length - 1].url;
@@ -250,13 +267,22 @@ export default function EventScreen() {
           </>
         ) : null}
 
-        {/* Going / interested — the forward-looking half of the log, and the
-            first public count on an event page. Upcoming shows only; a show
-            that already happened asks "were you there?" above instead. */}
-        {!hasHappened && <RsvpRow eventId={e.id} />}
-        <View style={{ paddingHorizontal: Spacing.three, marginTop: Spacing.two }}>
-          <AddToListButton refKind="event" refId={e.id} subject={e.name} />
-        </View>
+        {/* Your plans — going/interested, save, and shelves in one card. The
+            forward-looking half of the log; a show that already happened asks
+            "were you there?" above instead, and keeps just the shelf button. */}
+        {!hasHappened ? (
+          <>
+            <View style={styles.sectionTitleRow}>
+              <View style={[styles.accentBar, { backgroundColor: theme.cyan }]} />
+              <ThemedText type="title">Your Plans</ThemedText>
+            </View>
+            <EventActions eventId={e.id} subject={e.name} saved={saved} onToggleSave={toggleSave} />
+          </>
+        ) : (
+          <View style={{ paddingHorizontal: Spacing.three, marginTop: Spacing.two }}>
+            <AddToListButton refKind="event" refId={e.id} subject={e.name} />
+          </View>
+        )}
 
         {/* Get Tickets */}
         <View style={styles.sectionTitleRow}>
@@ -487,22 +513,7 @@ export default function EventScreen() {
               accessibilityRole="button"
               accessibilityState={{ selected: saved }}
               accessibilityLabel={saved ? `Remove ${e.name} from saved` : `Save ${e.name} for later`}
-              onPress={() =>
-                toggleSaved({
-                  eventId: e.id,
-                  name: e.name,
-                  startsAt: e.starts_at,
-                  timeUnknown: e.time_unknown,
-                  artistId: e.artist.id,
-                  artistName: e.artist.name,
-                  artistImageUrl: e.artist.image_url,
-                  venueId: e.venue?.id ?? null,
-                  venueName: e.venue?.name ?? null,
-                  venueCity: e.venue?.city ?? null,
-                  venueTimezone: tz,
-                  priceFrom: e.price_from,
-                })
-              }
+              onPress={toggleSave}
               style={styles.saveTop}>
               <Ionicons
                 name={saved ? 'bookmark' : 'bookmark-outline'}
