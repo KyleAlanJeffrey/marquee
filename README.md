@@ -191,12 +191,16 @@ a restart. Push/reminders need a dev or store build on a physical device.
 | SeatGeek client id | seatgeek.com/account/develop | discover-events, admin discover-seatgeek |
 | Clerk publishable + secret key | dashboard.clerk.com | accounts, `/api/me`, anything that publishes |
 
-**Clerk** is the identity provider — see "Accounts" in `todo.md` for why it was
-bought rather than built. Four variables, and only the first two are needed:
+**Clerk** is the identity provider (`@clerk/expo` on the client, `@clerk/backend`
+in the Worker) — see "Accounts" in `todo.md` for why it was bought rather than
+built. Four variables, and only the first two are needed:
 
 - `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` (client, in `.env`) — publishable by design;
   it names the Clerk instance and authorises nothing.
-- `CLERK_SECRET_KEY` (Worker, in `.dev.vars` / `wrangler secret put`).
+- `CLERK_SECRET_KEY` (Worker, in `.dev.vars` / `wrangler secret put`). **Set this
+  whenever the publishable key is set.** The two halves apart is the one bad
+  configuration: the app would sign somebody in while the Worker verifies nothing,
+  so it looks signed-in and every write 401s.
 - `CLERK_JWT_KEY` (Worker, optional) — the PEM public key from **API keys → Show
   JWT public key**. With it, verifying a session is pure computation; without it
   the SDK fetches the JWKS from Clerk's API on a cache miss, and a Worker's

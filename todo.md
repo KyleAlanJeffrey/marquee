@@ -333,10 +333,55 @@ decision about what happens to a deleted user's public reviews — anonymise and
 keep, or remove. Anonymise-and-keep is the norm and is much kinder to the
 aggregate scores.
 
-- [ ] **On day one with the keys:** create the Clerk app, enable Apple + Google +
-  Spotify, set `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` and the Worker's
-  `CLERK_SECRET_KEY`, and confirm a token minted in Expo verifies in a Worker
-  before building anything on top of it.
+#### The instance, and what arrived 2026-07-31
+
+Kyle set up a Clerk app and handed over the publishable key. Decoding it names the
+instance: **`kind-redfish-41.clerk.accounts.dev`**, a `pk_test_` development
+instance. The key lives in `.env` (gitignored) and its name is in `.env.example`.
+It is not a secret — a publishable key ships inside the client bundle by design,
+names the instance and authorises nothing.
+
+**Half-configured is the state we're in, and it is worth naming**: the client can
+now load Clerk and sign somebody in, but the Worker has no `CLERK_SECRET_KEY`, so
+it still verifies nothing and answers `configured:false`. A session would be real
+in the app and invisible to the API. That is a *worse* state to leave sitting than
+having no keys at all, because the app would look signed-in while every write 401s.
+
+- [ ] **Still needed from Kyle:** `CLERK_SECRET_KEY` into `.dev.vars` for local dev
+  and `npx wrangler secret put CLERK_SECRET_KEY` for production. Until then, don't
+  build sign-in UI that implies the server knows who you are.
+
+#### Package correction: `@clerk/expo`, not `@clerk/clerk-expo`
+
+Clerk's own current Expo guide (the one Kyle sent) installs **`@clerk/expo`**.
+That is the maintained line — **4.1.2**, against `@clerk/clerk-expo`'s 2.19.31,
+which is not marked deprecated but has clearly stopped moving. Peers check out
+against this repo: `expo >=54 <58` (we're 56), `react ^19`, `react-native >=0.75`,
+`expo-secure-store >=12.4.0`. Migrated on 2026-07-31, and it deletes code: the
+package exports a `tokenCache` from `@clerk/expo/token-cache`, so the hand-rolled
+SecureStore wrapper in `src/lib/auth.tsx` is gone.
+
+#### Where the guide does *not* fit Marquee
+
+The quickstart is written for an app where being signed in is the point. Two of its
+steps would be actively wrong here, so they are deliberately not being followed:
+
+- **It gates the whole app.** Its `(home)/_layout.tsx` does
+  `if (!isSignedIn) return <Redirect href="/(auth)/sign-in" />`. Marquee is
+  browse-first: exploring, following, saving, reminders and the private log all
+  work signed out and must keep working that way. Sign-in is for *publishing*, so
+  the gate belongs on the write, not on the app.
+- **It builds email/password flows.** We are not doing email/password — there is no
+  email infrastructure (see the constraints above), which is most of why Clerk was
+  bought. It's Apple + Google + Spotify OAuth, which is a different custom flow.
+
+What *does* transfer directly: `<ClerkProvider publishableKey tokenCache>` at the
+root (already done, in `src/lib/auth.tsx` rather than `_layout.tsx` so the keyless
+path stays possible), and `useAuth` / `useUser` / `useClerk().signOut`.
+
+- [ ] **On day one with the secret key:** enable Apple + Google + Spotify in the
+  Clerk dashboard, set `CLERK_SECRET_KEY` on the Worker, and confirm a token minted
+  in Expo verifies in a Worker before building anything on top of it.
 
 ### Moderation, because public writing invites it
 

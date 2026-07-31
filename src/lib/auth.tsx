@@ -18,10 +18,9 @@
  *    reason this is a context of our own rather than a re-export.
  */
 
-import { ClerkProvider, useAuth as useClerkAuth, useUser } from '@clerk/clerk-expo';
-import * as SecureStore from 'expo-secure-store';
+import { ClerkProvider, useAuth as useClerkAuth, useUser } from '@clerk/expo';
+import { tokenCache } from '@clerk/expo/token-cache';
 import { createContext, useContext, useEffect, useMemo } from 'react';
-import { Platform } from 'react-native';
 
 import { setTokenProvider } from '@/lib/api';
 
@@ -63,36 +62,6 @@ const SIGNED_OUT: AuthState = {
 
 const AuthContext = createContext<AuthState>(SIGNED_OUT);
 
-/**
- * Where Clerk keeps the session between launches.
- *
- * `expo-secure-store` is the Keychain on iOS and EncryptedSharedPreferences on
- * Android. It has no web implementation, so on web this is left undefined and
- * Clerk falls back to its own browser storage — passing a broken shim would be
- * worse than passing nothing.
- */
-const tokenCache =
-  Platform.OS === 'web'
-    ? undefined
-    : {
-        getToken: async (key: string) => {
-          try {
-            return await SecureStore.getItemAsync(key);
-          } catch {
-            // A corrupt or unreadable entry must read as "no session", not as a
-            // crash on launch — the recovery is signing in again.
-            return null;
-          }
-        },
-        saveToken: async (key: string, value: string) => {
-          try {
-            await SecureStore.setItemAsync(key, value);
-          } catch (err) {
-            console.warn('auth: could not persist the session', err);
-          }
-        },
-      };
-
 /** Reads Clerk's hooks. Only ever rendered inside a real `<ClerkProvider>`. */
 function ClerkBridge({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn, userId, getToken, signOut } = useClerkAuth();
@@ -127,6 +96,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // and the point is that this configuration runs.
   if (!authConfigured) return <>{children}</>;
   return (
+    // `tokenCache` is Clerk's own: SecureStore (Keychain / EncryptedSharedPreferences)
+    // on native, and deliberately `undefined` on web, where Clerk uses browser
+    // storage instead. It also deletes a corrupt entry rather than reading it as an
+    // empty session, which is why it replaced the wrapper that used to live here.
     <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
       <ClerkBridge>{children}</ClerkBridge>
     </ClerkProvider>

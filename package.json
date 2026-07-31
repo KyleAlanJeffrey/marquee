@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@clerk/backend": "3.14.0",
-    "@clerk/clerk-expo": "^2.19.31",
+    "@clerk/expo": "^4.1.2",
     "@expo-google-fonts/anybody": "^0.4.2",
     "@expo/vector-icons": "^15.0.2",
     "@hono/zod-validator": "^0.9.0",
