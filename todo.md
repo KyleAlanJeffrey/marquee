@@ -89,12 +89,16 @@ What's left is the residuals:
     falling back to a 302 at the upstream URL. First consumer: og:image +
     JSON-LD on the SSR pages. Next consumers: venue photos (Wikimedia
     discourages hotlinking), Clerk avatars, then the API's artist rows.
-  - [ ] **Review likes** — `review_likes` table, heart on review rows,
-    "popular reviews" ordering on event/artist pages. Also the trigger the
-    0016 migration named for list tombstones.
-  - [ ] **Feed placement** — out of the profile basement: top of Profile, or
-    a PEOPLE segment on Following (overlaps Kyle's "what does follow mean"
-    decision below).
+  - [x] **Review likes** — migration 0018 (a like is a fact keyed
+    (review_id, user_id); like/unlike are idempotent PUT/DELETE, verified
+    double-tap-safe against local D1), heart + count on review rows behind
+    the write gate, event reviews ordered most-liked-first with newest as
+    tiebreak. Remaining trigger: likes on *lists* is what 0016 named for
+    turning list deletion into a tombstone.
+  - [x] **Feed placement** (`9e6f786`) — the follow feed now leads your own
+    profile instead of sitting under the follower lists. A PEOPLE segment on
+    Following stays open as the bolder option (Kyle's "what does follow
+    mean" decision below).
   - [ ] **Generated OG cards from R2** — per-entity share images; the
     highest-leverage share/SEO item left.
   - [ ] Delight tier: four favorite artists on profiles, list cover

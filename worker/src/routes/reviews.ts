@@ -6,7 +6,7 @@ import { callerFrom, ensureUser } from '../auth';
 import { eventsByIds, isoAt, nowIso, TBD_GRACE_MS } from '../data';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
-import { eventRsvps, events, personFollows, reports, reviews, userBlocks, users } from '../schema';
+import { eventRsvps, events, personFollows, reports, reviewLikes, reviews, userBlocks, users } from '../schema';
 import { reportBody, reviewBody, rsvpBody } from '../schemas';
 
 /**
@@ -78,6 +78,10 @@ reviewRoutes.get('/events/:id/reviews', async (c) => {
   const eventId = c.req.param('id');
   const { userId } = await callerFrom(c.env, c.req.header('authorization'));
 
+  // Counted live, never denormalised — a like is a row, count(*) is the truth
+  // (0018). Most-liked first is "popular reviews" as soon as popular means
+  // anything; newest-first is the tiebreak until it does.
+  const likeCount = sql<number>`(select count(*) from review_likes where review_id = ${reviews.id})`;
   const publicRows = await db
     .select({
       id: reviews.id,
@@ -86,6 +90,8 @@ reviewRoutes.get('/events/:id/reviews', async (c) => {
       body: reviews.body,
       createdAt: reviews.createdAt,
       editedAt: reviews.editedAt,
+      likeCount,
+      likedByMe: sql<number>`exists (select 1 from review_likes where review_id = ${reviews.id} and user_id = ${userId ?? ''})`,
       ...AUTHOR_FIELDS,
     })
     .from(reviews)
@@ -98,7 +104,7 @@ reviewRoutes.get('/events/:id/reviews', async (c) => {
         ...(userId ? [noBlockBetween(userId)] : []),
       ),
     )
-    .orderBy(desc(reviews.createdAt))
+    .orderBy(desc(likeCount), desc(reviews.createdAt))
     .limit(REVIEWS_PAGE);
 
   const mine = userId
@@ -118,10 +124,64 @@ reviewRoutes.get('/events/:id/reviews', async (c) => {
     : null;
 
   return c.json({
-    reviews: publicRows.filter((r) => r.authorId !== userId),
+    reviews: publicRows
+      .filter((r) => r.authorId !== userId)
+      .map((r) => ({ ...r, likedByMe: !!r.likedByMe })),
     mine,
     limit: REVIEWS_PAGE,
   });
+});
+
+/**
+ * Like / unlike someone's review — the cheapest verb in the social layer.
+ *
+ * Both directions are idempotent by construction: the like is a row keyed
+ * (review_id, user_id), so a doubled PUT inserts nothing and a doubled DELETE
+ * deletes nothing, and either way the response carries the count that is now
+ * true. Hidden, deleted and estranged-author reviews all answer 404 — the
+ * same "not served to you" the read path already enforces, and a block plus
+ * a like from the same person would be a strange thing to store.
+ */
+const likeTarget = async (db: DB, reviewId: string, userId: string) => {
+  const row = await db
+    .select({ id: reviews.id, authorId: reviews.userId })
+    .from(reviews)
+    .where(and(eq(reviews.id, reviewId), eq(reviews.visibility, 'public'), isNull(reviews.deletedAt)))
+    .get();
+  if (!row || (row.authorId !== userId && (await blockedEitherWay(db, userId, row.authorId)))) return null;
+  return row;
+};
+
+const likeCountOf = async (db: DB, reviewId: string): Promise<number> =>
+  (
+    await db
+      .select({ n: sql<number>`count(*)` })
+      .from(reviewLikes)
+      .where(eq(reviewLikes.reviewId, reviewId))
+      .get()
+  )?.n ?? 0;
+
+reviewRoutes.put('/reviews/:id/like', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+  const db = getDb(c.env.DB);
+  const reviewId = c.req.param('id');
+  if (!(await likeTarget(db, reviewId, userId))) return c.json({ error: 'not found' }, 404);
+  await db
+    .insert(reviewLikes)
+    .values({ reviewId, userId, createdAt: nowIso() })
+    .onConflictDoNothing();
+  return c.json({ liked: true, likeCount: await likeCountOf(db, reviewId) });
+});
+
+reviewRoutes.delete('/reviews/:id/like', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+  const db = getDb(c.env.DB);
+  const reviewId = c.req.param('id');
+  if (!(await likeTarget(db, reviewId, userId))) return c.json({ error: 'not found' }, 404);
+  await db.delete(reviewLikes).where(and(eq(reviewLikes.reviewId, reviewId), eq(reviewLikes.userId, userId)));
+  return c.json({ liked: false, likeCount: await likeCountOf(db, reviewId) });
 });
 
 /** Write or rewrite your review of a show that has actually happened. */

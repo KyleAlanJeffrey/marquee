@@ -11,7 +11,8 @@ import { ThemedText } from '@/components/themed-text';
 import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatEventDate } from '@/lib/format';
-import { useEventReviews, useReportReview, type PublicReview } from '@/lib/reviews';
+import { useEventReviews, useLikeReview, useReportReview, type PublicReview } from '@/lib/reviews';
+import { useWriteGate } from '@/lib/write-gate';
 
 /**
  * Everyone else's public reviews of one show. Yours is written, edited and
@@ -26,12 +27,22 @@ function authorLabel(r: PublicReview): string {
 }
 
 /** One public review, with the report control tucked behind an arm step. */
-function ReviewRow({ review, first }: { review: PublicReview; first?: boolean }) {
+function ReviewRow({ review, eventId, first }: { review: PublicReview; eventId: string; first?: boolean }) {
   const theme = useTheme();
+  const gate = useWriteGate();
+  const like = useLikeReview(eventId);
   const report = useReportReview();
   const [reporting, setReporting] = useState(false);
   const [reason, setReason] = useState('');
   const [sent, setSent] = useState(false);
+
+  const onLike = () => {
+    if (!gate.allowed) {
+      if (!gate.pending) gate.deny('like reviews');
+      return;
+    }
+    like.mutate({ reviewId: review.id, like: !review.likedByMe });
+  };
 
   return (
     <View style={[styles.reviewRow, { borderColor: theme.border }, first && styles.firstRow]}>
@@ -61,7 +72,32 @@ function ReviewRow({ review, first }: { review: PublicReview; first?: boolean })
       )}
 
       <View style={styles.reviewFoot}>
-        <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+        {/* The heart: the cheapest agreement there is, and what "popular
+            reviews" ordering runs on. */}
+        <PressableScale
+          haptic
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityState={{ selected: review.likedByMe }}
+          accessibilityLabel={
+            review.likedByMe ? 'Unlike this review' : `Like ${authorLabel(review)}'s review`
+          }
+          onPress={onLike}
+          style={styles.likeBtn}>
+          <Ionicons
+            name={review.likedByMe ? 'heart' : 'heart-outline'}
+            size={15}
+            color={review.likedByMe ? theme.primary : theme.textTertiary}
+          />
+          {review.likeCount > 0 && (
+            <ThemedText
+              type="labelSm"
+              style={{ color: review.likedByMe ? theme.primary : theme.textTertiary }}>
+              {review.likeCount}
+            </ThemedText>
+          )}
+        </PressableScale>
+        <ThemedText type="labelSm" style={[{ color: theme.textTertiary }, styles.footDate]}>
           {formatEventDate(review.createdAt, null).toUpperCase()}
           {review.editedAt ? ' · EDITED' : ''}
         </ThemedText>
@@ -131,7 +167,7 @@ export function ReviewSection({ eventId }: { eventId: string }) {
           No public reviews of this show yet.
         </ThemedText>
       ) : (
-        data!.reviews.map((r, i) => <ReviewRow key={r.id} review={r} first={i === 0} />)
+        data!.reviews.map((r, i) => <ReviewRow key={r.id} review={r} eventId={eventId} first={i === 0} />)
       )}
     </GlassCard>
   );
@@ -161,6 +197,8 @@ const styles = StyleSheet.create({
   authorRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   avatar: { width: 24, height: 24, borderRadius: 12 },
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
-  reviewFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  reviewFoot: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  footDate: { flex: 1 },
   reportRow: { flexDirection: 'row', gap: Spacing.two, alignItems: 'center' },
 });

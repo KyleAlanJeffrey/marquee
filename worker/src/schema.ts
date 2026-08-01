@@ -288,6 +288,24 @@ export const eventRsvps = sqliteTable(
   (t) => [primaryKey({ columns: [t.userId, t.eventId] }), index('event_rsvps_event_idx').on(t.eventId)],
 );
 
+/**
+ * A like on a review — a fact, not a counter (see 0018): the primary key
+ * makes like/unlike idempotent, and counts are always count(*).
+ */
+export const reviewLikes = sqliteTable(
+  'review_likes',
+  {
+    reviewId: text('review_id')
+      .notNull()
+      .references(() => reviews.id),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.reviewId, t.userId] })],
+);
+
 /** Curated lists (phase E) — hard-delete until reactions hang off them; see 0016. */
 export const lists = sqliteTable(
   'lists',

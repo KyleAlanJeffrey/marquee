@@ -19,6 +19,8 @@ export type PublicReview = {
   body: string | null;
   createdAt: string;
   editedAt: string | null;
+  likeCount: number;
+  likedByMe: boolean;
   authorId: string;
   authorHandle: string | null;
   authorName: string | null;
@@ -92,6 +94,42 @@ export function useDeleteReview(eventId: string) {
       queryClient.invalidateQueries({ queryKey: eventReviewsKey(eventId) });
       queryClient.invalidateQueries({ queryKey: ['profile-reviews'] });
     },
+  });
+}
+
+/**
+ * Like or unlike a review on one event's page. Optimistic: the heart flips
+ * and the count moves before the server answers, and a failure rolls the
+ * cache back to what the server last said — both verbs are idempotent
+ * upserts server-side, so a retry can never overcount.
+ */
+export function useLikeReview(eventId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reviewId, like }: { reviewId: string; like: boolean }) =>
+      like
+        ? apiPut(`/reviews/${encodeURIComponent(reviewId)}/like`, {})
+        : apiDelete(`/reviews/${encodeURIComponent(reviewId)}/like`),
+    onMutate: async ({ reviewId, like }) => {
+      const key = eventReviewsKey(eventId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<{ reviews: PublicReview[]; mine: MyReview | null }>(key);
+      if (previous) {
+        queryClient.setQueryData(key, {
+          ...previous,
+          reviews: previous.reviews.map((r) =>
+            r.id === reviewId
+              ? { ...r, likedByMe: like, likeCount: Math.max(0, r.likeCount + (like ? 1 : -1)) }
+              : r,
+          ),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(eventReviewsKey(eventId), ctx.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: eventReviewsKey(eventId) }),
   });
 }
 
