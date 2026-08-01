@@ -54,8 +54,10 @@ What's left is the residuals:
    fabricated-looking review markup is a manual-action category.
 4. [~] **Phase D residuals** — feed pagination beyond 50; any feed of
    artist/venue activity (this one is people only, by design).
-5. [~] **Phase E residuals** — notes on list items (schema holds them, no UI),
-   reordering, and reportability once lists join the moderation kinds.
+5. [~] **Phase E residual** — reportability once lists join the moderation
+   kinds. (Item notes and reordering landed 2026-07-31: `PUT
+   /:id/items/:kind/:refId` patches the note and/or swaps a place up or down,
+   with owner controls and note display on the list screen.)
 
 **Decisions in `docs/social.md` that are Kyle's, not mine:**
 

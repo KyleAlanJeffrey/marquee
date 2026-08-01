@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ErrorState } from '@/components/error-state';
 import { GlassCard } from '@/components/glass-card';
@@ -10,10 +10,17 @@ import { PressableScale } from '@/components/pressable-scale';
 import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
-import { Radius, Spacing } from '@/constants/theme';
+import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api';
-import { useDeleteList, useList, useRemoveFromList, useUpdateList, type ListItem } from '@/lib/curated';
+import {
+  useDeleteList,
+  useList,
+  useRemoveFromList,
+  useUpdateList,
+  useUpdateListItem,
+  type ListItem,
+} from '@/lib/curated';
 import { formatEventDate } from '@/lib/format';
 
 /** Where an item's row leads — the same detail pages everything else opens. */
@@ -28,8 +35,12 @@ export default function ListScreen() {
   const list = useList(id ?? '');
   const update = useUpdateList(id ?? '');
   const removeItem = useRemoveFromList(id ?? '');
+  const updateItem = useUpdateListItem(id ?? '');
   const deleteList = useDeleteList(id ?? '');
   const [armed, setArmed] = useState(false);
+  // One note editor open at a time, keyed like the rows are.
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
 
   if (list.isLoading || !id) {
     return (
@@ -112,43 +123,135 @@ export default function ListScreen() {
           </ThemedText>
         ) : (
           <GlassCard style={styles.listCard}>
-            {items.map((item) => (
-              <View key={`${item.refKind}:${item.refId}`} style={[styles.row, { borderColor: theme.border }]}>
-                {/* Title navigates; remove sits beside it. Siblings, never nested —
-                    a button inside a button is invalid HTML on web. */}
-                <PressableScale
-                  haptic={false}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${item.name}`}
-                  onPress={() => router.push(routeFor(item))}
-                  style={styles.rowBody}>
-                  <Ionicons name={KIND_ICON[item.refKind]} size={16} color={theme.textTertiary} />
-                  <View style={{ flex: 1 }}>
-                    <ThemedText type="smallBold" numberOfLines={1}>
-                      {item.name}
-                    </ThemedText>
-                    {!!item.detail && (
-                      <ThemedText type="labelSm" style={{ color: theme.textTertiary }} numberOfLines={1}>
-                        {item.refKind === 'event'
-                          ? formatEventDate(item.detail, null).toUpperCase()
-                          : item.detail.toUpperCase()}
-                      </ThemedText>
+            {items.map((item, index) => {
+              const key = `${item.refKind}:${item.refId}`;
+              const editing = editingKey === key;
+              return (
+                <View key={key} style={[styles.row, { borderColor: theme.border }]}>
+                  <View style={styles.rowTop}>
+                    {/* Title navigates; the controls sit beside it. Siblings,
+                        never nested — a button inside a button is invalid HTML
+                        on web. */}
+                    <PressableScale
+                      haptic={false}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open ${item.name}`}
+                      onPress={() => router.push(routeFor(item))}
+                      style={styles.rowBody}>
+                      <Ionicons name={KIND_ICON[item.refKind]} size={16} color={theme.textTertiary} />
+                      <View style={{ flex: 1 }}>
+                        <ThemedText type="smallBold" numberOfLines={1}>
+                          {item.name}
+                        </ThemedText>
+                        {!!item.detail && (
+                          <ThemedText type="labelSm" style={{ color: theme.textTertiary }} numberOfLines={1}>
+                            {item.refKind === 'event'
+                              ? formatEventDate(item.detail, null).toUpperCase()
+                              : item.detail.toUpperCase()}
+                          </ThemedText>
+                        )}
+                      </View>
+                    </PressableScale>
+                    {isOwner && (
+                      <View style={styles.rowControls}>
+                        <PressableScale
+                          haptic
+                          hitSlop={6}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Move ${item.name} up`}
+                          accessibilityState={{ disabled: index === 0 }}
+                          onPress={() =>
+                            index > 0 && updateItem.mutate({ refKind: item.refKind, refId: item.refId, move: 'up' })
+                          }
+                          style={[styles.ctlBtn, { backgroundColor: theme.backgroundHigh, opacity: index === 0 ? 0.35 : 1 }]}>
+                          <Ionicons name="chevron-up" size={14} color={theme.textSecondary} />
+                        </PressableScale>
+                        <PressableScale
+                          haptic
+                          hitSlop={6}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Move ${item.name} down`}
+                          accessibilityState={{ disabled: index === items.length - 1 }}
+                          onPress={() =>
+                            index < items.length - 1 &&
+                            updateItem.mutate({ refKind: item.refKind, refId: item.refId, move: 'down' })
+                          }
+                          style={[
+                            styles.ctlBtn,
+                            { backgroundColor: theme.backgroundHigh, opacity: index === items.length - 1 ? 0.35 : 1 },
+                          ]}>
+                          <Ionicons name="chevron-down" size={14} color={theme.textSecondary} />
+                        </PressableScale>
+                        <PressableScale
+                          haptic
+                          hitSlop={6}
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            item.note ? `Edit your note on ${item.name}` : `Add a note to ${item.name}`
+                          }
+                          onPress={() => {
+                            setEditingKey(editing ? null : key);
+                            setDraft(item.note ?? '');
+                          }}
+                          style={[styles.ctlBtn, { backgroundColor: theme.backgroundHigh }]}>
+                          <Ionicons
+                            name={item.note ? 'create' : 'create-outline'}
+                            size={14}
+                            color={item.note ? theme.cyan : theme.textSecondary}
+                          />
+                        </PressableScale>
+                        <PressableScale
+                          haptic
+                          hitSlop={6}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${item.name} from this list`}
+                          onPress={() => removeItem.mutate({ refKind: item.refKind, refId: item.refId })}
+                          style={[styles.ctlBtn, { backgroundColor: theme.backgroundHigh }]}>
+                          <Ionicons name="close" size={14} color={theme.textSecondary} />
+                        </PressableScale>
+                      </View>
                     )}
                   </View>
-                </PressableScale>
-                {isOwner && (
-                  <PressableScale
-                    haptic
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Remove ${item.name} from this list`}
-                    onPress={() => removeItem.mutate({ refKind: item.refKind, refId: item.refId })}
-                    style={[styles.removeBtn, { backgroundColor: theme.backgroundHigh }]}>
-                    <Ionicons name="close" size={14} color={theme.textSecondary} />
-                  </PressableScale>
-                )}
-              </View>
-            ))}
+                  {/* The note: why this one is on the shelf. */}
+                  {!!item.note && !editing && (
+                    <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
+                      {item.note}
+                    </ThemedText>
+                  )}
+                  {editing && (
+                    <View style={styles.noteEditor}>
+                      <TextInput
+                        value={draft}
+                        onChangeText={setDraft}
+                        placeholder="Why is this one on the list?"
+                        placeholderTextColor={theme.textTertiary}
+                        accessibilityLabel={`Note on ${item.name}`}
+                        maxLength={300}
+                        multiline
+                        style={[styles.noteInput, { color: theme.text, borderColor: theme.border }]}
+                      />
+                      <PressableScale
+                        haptic
+                        accessibilityRole="button"
+                        accessibilityLabel="Save the note"
+                        onPress={() => {
+                          updateItem.mutate({
+                            refKind: item.refKind,
+                            refId: item.refId,
+                            note: draft.trim() || null,
+                          });
+                          setEditingKey(null);
+                        }}
+                        style={[styles.smallBtn, { borderColor: theme.primaryEdge, backgroundColor: theme.primaryFill }]}>
+                        <ThemedText type="labelSm" style={{ color: theme.primary }}>
+                          SAVE
+                        </ThemedText>
+                      </PressableScale>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </GlassCard>
         )}
       </ScrollView>
@@ -170,13 +273,24 @@ const styles = StyleSheet.create({
   empty: { textAlign: 'center', paddingVertical: Spacing.three },
   listCard: { gap: Spacing.two, padding: Spacing.two + 2 },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
+    gap: Spacing.one + 2,
     padding: Spacing.two,
     borderRadius: Radius.lg,
     borderWidth: 1,
   },
+  rowTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   rowBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  removeBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  rowControls: { flexDirection: 'row', gap: Spacing.one },
+  ctlBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  note: { paddingLeft: Spacing.two + 16 + Spacing.two },
+  noteEditor: { gap: Spacing.two },
+  noteInput: {
+    borderWidth: 1,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.two + 2,
+    paddingVertical: Spacing.two,
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    minHeight: 44,
+  },
 });

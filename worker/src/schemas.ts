@@ -236,6 +236,20 @@ export const listItemBody = z.object({
   note: z.string().trim().max(300).nullish(),
 });
 
+/**
+ * Edit an item already on a shelf: change its note, nudge it a place up or
+ * down, or both. At least one of the two must be present — an empty patch is
+ * a client bug, not a no-op to swallow.
+ */
+export const listItemPatch = z
+  .object({
+    note: z.string().trim().max(300).nullable().optional(),
+    move: z.enum(['up', 'down']).optional(),
+  })
+  .refine((b) => b.note !== undefined || b.move !== undefined, {
+    message: 'nothing to change',
+  });
+
 /** Going or interested — the only two answers an upcoming show asks for. */
 export const rsvpBody = z.object({
   status: z.enum(['going', 'interested']),

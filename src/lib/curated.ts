@@ -94,6 +94,25 @@ export function useAddToList() {
   });
 }
 
+/** Edit an item on the shelf: its note, its place in the order, or both. */
+export function useUpdateListItem(listId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      refKind,
+      refId,
+      ...patch
+    }: {
+      refKind: string;
+      refId: string;
+      note?: string | null;
+      move?: 'up' | 'down';
+    }) =>
+      apiPut(`/curated-lists/${encodeURIComponent(listId)}/items/${refKind}/${encodeURIComponent(refId)}`, patch),
+    onSettled: () => invalidateShelves(queryClient),
+  });
+}
+
 export function useRemoveFromList(listId: string) {
   const queryClient = useQueryClient();
   return useMutation({
