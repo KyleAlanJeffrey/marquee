@@ -14,6 +14,7 @@ import { search } from './routes/search';
 import { venues } from './routes/venues';
 import { curated } from './routes/curated';
 import { cityPage } from './cities';
+import { artistImage } from './images';
 import { submitFresh } from './indexnow';
 import { landingPage } from './landing';
 import { privacyPage } from './policy';
@@ -106,6 +107,16 @@ app.get('/:file{[A-Za-z0-9-]+\\.txt}', async (c, next) => {
 app.get('/sitemap.xml', async (c) =>
   c.body(await sitemapIndex(c.env, siteOrigin(c)), 200, SITEMAP_HEADERS),
 );
+
+/**
+ * The image mirror: an artist's image from our R2 instead of a hotlink, mirrored
+ * on first demand and redirecting to the upstream URL on any miss or failure —
+ * this route can serve worse than the hotlink did, never nothing.
+ */
+app.get('/img/artist/:id', async (c) => {
+  const resp = await artistImage(c.env, c.req.param('id'));
+  return resp ?? c.notFound();
+});
 
 /**
  * The children the index points at: `/sitemap-pages.xml`, `/sitemap-events-3.xml`.

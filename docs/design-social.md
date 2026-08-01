@@ -118,7 +118,10 @@ bucket's job is to make the images ours. In build order:
    card's key includes a version of its inputs, so when something goes
    private, gets deleted, or its author blocks — the page re-keys to a fresh
    card and the old object is deleted, not merely orphaned behind a stale
-   shared URL.
+   shared URL. Which also means OG cards are the one image class that is
+   **never served immutable**: deleting the R2 object doesn't purge copies
+   already sitting at the edge, so cards get a short max-age and revocation
+   means "gone within the TTL", stated as such.
 4. **List cover collages**, pre-composed at write time.
 5. **Later, behind Kyle's moderation decision: user gig photos** on reviews.
    R2 is ready for it; the report/hide pipeline isn't scoped for images yet,

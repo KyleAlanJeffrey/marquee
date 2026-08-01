@@ -1,8 +1,14 @@
-import type { D1Database, Fetcher } from '@cloudflare/workers-types';
+import type { D1Database, Fetcher, R2Bucket } from '@cloudflare/workers-types';
 
 export type Env = {
   DB: D1Database;
   ASSETS: Fetcher;
+  /**
+   * The image mirror (R2 bucket `marquee`) behind `/img/…`. Optional: without
+   * it every image route falls back to redirecting at the upstream URL, so a
+   * dev setup with no bucket keeps working — it just doesn't mirror.
+   */
+  IMAGES?: R2Bucket;
   TICKETMASTER_API_KEY?: string;
   SPOTIFY_CLIENT_ID?: string;
   SPOTIFY_CLIENT_SECRET?: string;

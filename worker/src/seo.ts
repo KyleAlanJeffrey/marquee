@@ -416,7 +416,10 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
     // A time-unknown show's timestamp is noon at the venue; it isn't over —
     // and shouldn't fall out of the index — until midnight there.
     noindex: row.startsAt < (row.timeUnknown ? isoAt(Date.now() - TBD_GRACE_MS) : nowIso()),
-    image: row.artistImage,
+    // Through the mirror, not the hotlink: /img serves from our R2 (falling
+    // back to a redirect at the upstream URL), so a shared link's preview
+    // image survives the source CDN rotating its URLs.
+    image: row.artistImage ? `/img/artist/${row.artistId}` : null,
     body: eventBody({
       id,
       name: row.name,
@@ -446,7 +449,7 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       startDate: row.timeUnknown ? row.startsAt.slice(0, 10) : row.startsAt,
       eventStatus: 'https://schema.org/EventScheduled',
       eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
-      image: row.artistImage ?? absolute(origin, OG_IMAGE),
+      image: row.artistImage ? absolute(origin, `/img/artist/${row.artistId}`) : absolute(origin, OG_IMAGE),
       location,
       performer: { '@type': 'MusicGroup', name: row.artistName },
       ...(row.ticketUrl
@@ -517,7 +520,8 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
     // shows". There are tens of thousands of those in the catalogue and indexing
     // them teaches Google the site is mostly empty pages.
     noindex: shows.length === 0,
-    image: row.image,
+    // Same mirror as eventSeo — see the comment there.
+    image: row.image ? `/img/artist/${id}` : null,
     body: artistBody({
       id,
       name: row.name,
@@ -540,7 +544,7 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
       '@type': 'MusicGroup',
       name: row.name,
       url: `${origin}/artist/${id}`,
-      ...(row.image ? { image: row.image } : null),
+      ...(row.image ? { image: absolute(origin, `/img/artist/${id}`) } : null),
       ...(genres.length ? { genre: genres } : null),
       event: shows.slice(0, 10).map((s) => ({
         '@type': 'MusicEvent',

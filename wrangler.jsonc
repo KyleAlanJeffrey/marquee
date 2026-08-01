@@ -34,6 +34,15 @@
   "vars": {
     "PRIMARY_HOST": "marquee.rocks",
   },
+  // The image mirror. `/img/…` serves artist images from here (cache-aside:
+  // mirrored from the source CDN on first request) instead of hotlinking
+  // Spotify/Ticketmaster/SeatGeek URLs that rot and rate-limit.
+  "r2_buckets": [
+    {
+      "binding": "IMAGES",
+      "bucket_name": "marquee",
+    },
+  ],
   "d1_databases": [
     {
       "binding": "DB",
