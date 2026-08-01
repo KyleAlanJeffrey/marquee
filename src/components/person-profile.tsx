@@ -232,12 +232,14 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
 
       {/* The feed — what the people you follow have been to lately. Yours only,
           and only once it has an answer; an empty graph shows a nudge, not a hole. */}
-      {isSelf && feed.isError && (
+      {/* A failed *older-page* fetch must not blank pages already on screen —
+          the full-width error is only for having nothing to show at all. */}
+      {isSelf && feed.isError && !feed.data && (
         <View style={styles.centreBlock}>
           <ErrorState onRetry={() => feed.refetch()} />
         </View>
       )}
-      {isSelf && feed.isSuccess && (
+      {isSelf && !!feed.data && (
         <>
           <ThemedText type="label" style={[styles.reviewsLabel, { color: theme.cyan }]}>
             FROM PEOPLE YOU FOLLOW
@@ -278,9 +280,16 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
                   accessibilityRole="button"
                   accessibilityLabel="Show older reviews from people you follow"
                   onPress={() => !feed.isFetchingNextPage && feed.fetchNextPage()}
-                  style={[styles.moreBtn, { borderColor: theme.border }]}>
-                  <ThemedText type="labelSm" themeColor="textSecondary">
-                    {feed.isFetchingNextPage ? 'LOADING…' : 'SHOW OLDER'}
+                  style={[styles.moreBtn, { borderColor: feed.isFetchNextPageError ? theme.error : theme.border }]}>
+                  <ThemedText
+                    type="labelSm"
+                    themeColor={feed.isFetchNextPageError ? undefined : 'textSecondary'}
+                    style={feed.isFetchNextPageError ? { color: theme.error } : undefined}>
+                    {feed.isFetchingNextPage
+                      ? 'LOADING…'
+                      : feed.isFetchNextPageError
+                        ? 'COULDN’T LOAD — TRY AGAIN'
+                        : 'SHOW OLDER'}
                   </ThemedText>
                 </PressableScale>
               )}

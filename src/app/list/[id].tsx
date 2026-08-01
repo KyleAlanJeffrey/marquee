@@ -239,7 +239,10 @@ export default function ListScreen() {
                         onPress={() =>
                           updateItem.mutate(
                             { refKind: item.refKind, refId: item.refId, note: draft.trim() || null },
-                            { onSuccess: () => setEditingKey(null) },
+                            // Close only if this editor is still the open one —
+                            // a slow save must not shut an editor the user has
+                            // since opened on another item.
+                            { onSuccess: () => setEditingKey((k) => (k === key ? null : k)) },
                           )
                         }
                         style={[styles.smallBtn, { borderColor: theme.primaryEdge, backgroundColor: theme.primaryFill }]}>

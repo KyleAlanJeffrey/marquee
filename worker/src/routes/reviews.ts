@@ -368,8 +368,18 @@ reviewRoutes.get('/me/feed', async (c) => {
   // `?before=<createdAt>|<id>` pages into older reviews. Compound, because
   // created_at is second-precision and two reviews can share a second — a
   // timestamp-only cursor would skip whichever one landed on the boundary.
+  // Only the cursor this route itself minted is accepted; anything else is a
+  // 400, not a silently-wrong window.
   const before = c.req.query('before')?.trim() || null;
-  const [beforeAt, beforeId] = before ? before.split('|') : [null, null];
+  let beforeAt: string | null = null;
+  let beforeId: string | null = null;
+  if (before) {
+    const parts = before.split('|');
+    if (parts.length !== 2 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(parts[0]) || !parts[1]) {
+      return c.json({ error: 'bad cursor' }, 400);
+    }
+    [beforeAt, beforeId] = parts;
+  }
 
   const db = getDb(c.env.DB);
   const items = await db
