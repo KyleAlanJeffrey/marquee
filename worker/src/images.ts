@@ -56,6 +56,36 @@ const urlHash = async (url: string): Promise<string> => {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
 };
 
+/**
+ * Read a body up to `max` bytes, cancelling the moment it goes over. The
+ * declared content-length is a hint, not a promise — a chunked response has
+ * none at all — so the cap has to be enforced while reading, not before.
+ * Null means "too big or unreadable"; the caller falls back to the redirect.
+ */
+const readCapped = async (resp: Response, max: number): Promise<Uint8Array | null> => {
+  if (!resp.body) return null;
+  const reader = resp.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.byteLength;
+  }
+  return out;
+};
+
 const cacheHeaders = (contentType: string) => ({
   'Content-Type': contentType,
   // Immutable is honest here — the key hashes the upstream URL — and it's
@@ -75,7 +105,9 @@ export async function artistImage(env: Env, artistId: string): Promise<Response 
     .where(eq(artists.id, artistId))
     .get();
   const upstream = row?.imageUrl ?? null;
-  if (!upstream) return null;
+  // An unparseable stored URL is "no image", not a fallback target —
+  // Response.redirect throws on anything it can't parse.
+  if (!upstream || !URL.canParse(upstream)) return null;
 
   const fallback = () => Response.redirect(upstream, 302);
 
@@ -103,8 +135,8 @@ export async function artistImage(env: Env, artistId: string): Promise<Response 
     if (!contentType.startsWith('image/')) return fallback();
     const declared = Number(resp.headers.get('content-length') ?? '0');
     if (declared > MAX_BYTES) return fallback();
-    const bytes = await resp.arrayBuffer();
-    if (bytes.byteLength === 0 || bytes.byteLength > MAX_BYTES) return fallback();
+    const bytes = await readCapped(resp, MAX_BYTES);
+    if (!bytes || bytes.byteLength === 0) return fallback();
 
     await env.IMAGES.put(key, bytes, { httpMetadata: { contentType } });
     return new Response(bytes, { headers: cacheHeaders(contentType) });
