@@ -72,6 +72,30 @@ What's left is the residuals:
 
 ## P1 · Next
 
+- [~] **Social design pass** (Kyle, 2026-07-31) — the thinking is
+  **[`docs/design-social.md`](docs/design-social.md)**; the slices, in the
+  order the doc argues for:
+  - [ ] **Unified log/review flow** — one "log this night" act with a
+    make-it-public toggle, replacing the two parallel star forms on past-event
+    pages. Presentation only; a review stays its own request and row.
+  - [ ] **Log as poster grid + profile stats line** — nights as artist-image
+    tiles (date + stars), profiles lead with shows · this year · venues ·
+    followers. Client-only, no new data.
+  - [ ] **R2 binding + artist-image mirroring** — bucket `marquee` exists
+    (Kyle, 2026-07-31). Bind in wrangler.jsonc with its first consumer:
+    `GET /img/:key`, mirror artist images content-addressed at enrichment,
+    then venue photos (Wikimedia discourages hotlinking) and Clerk avatars.
+  - [ ] **Review likes** — `review_likes` table, heart on review rows,
+    "popular reviews" ordering on event/artist pages. Also the trigger the
+    0016 migration named for list tombstones.
+  - [ ] **Feed placement** — out of the profile basement: top of Profile, or
+    a PEOPLE segment on Following (overlaps Kyle's "what does follow mean"
+    decision below).
+  - [ ] **Generated OG cards from R2** — per-entity share images; the
+    highest-leverage share/SEO item left.
+  - [ ] Delight tier: four favorite artists on profiles, list cover
+    collages, year-in-review stats.
+  - User gig photos stay parked behind Kyle's moderation decision.
 - [x] **Folder-structure audit** (Kyle, 2026-07-31) — done the same day. The
   real offender was `src/lib/hooks.ts`: 19 catalogue-query hooks in a file
   literally named "hooks" outside the hooks directory; it moved to
@@ -173,8 +197,10 @@ What's left is the residuals:
 - [ ] Setlist.fm as a live-proxied, attributed, never-stored setlist on past-show
   pages — their terms allow that and nothing more, and it's off the table
   entirely once there's revenue.
-- [ ] A desktop layout for the server-rendered pages (`worker/src/page.ts` is one
-  narrow mobile column; the reference design is a desktop document).
+- Desktop layout for the server-rendered pages landed 2026-07-31 (`80cab8e`) —
+  the stale part of the old note was blaming `page.ts`, which was already a
+  desktop document; `detail.ts` was the narrow column, and now splits into
+  content + sticky facts card at ≥960px.
 
 ## Operational — Kyle's, not fixable in this repo
 
