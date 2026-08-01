@@ -255,14 +255,14 @@ export default function EventScreen() {
                 venueTimezone: tz,
               }}
             />
-            {/* Public reviews — a separate section and a separate act from the
-                log above it: the log is private, this is under your name. */}
+            {/* Everyone else's reviews — yours is written inside the log card
+                above, as the public step of the same act. */}
             <View style={styles.sectionTitleRow}>
               <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
               <ThemedText type="title">Reviews</ThemedText>
             </View>
             <View style={{ paddingHorizontal: Spacing.three }}>
-              <ReviewSection eventId={e.id} venueName={e.venue?.name ?? null} />
+              <ReviewSection eventId={e.id} />
             </View>
           </>
         ) : null}
