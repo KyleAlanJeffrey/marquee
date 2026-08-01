@@ -33,7 +33,7 @@ import {
   tierFor,
 } from './crawl';
 import { getDb, type DB } from './db';
-import { dashBillingVenueName, guessUtcOffsetHours } from './dedupe';
+import { cleanVenueName, dashBillingVenueName, guessUtcOffsetHours, nameCarriesAct } from './dedupe';
 import { utcMsFromLocal, zoneFor } from './timezone';
 import { fetchVenueEnrichment, type VenueEnrichment } from './venue-info';
 import type { Env } from './env';
@@ -311,6 +311,26 @@ async function bitFetchByKeys(
   return { events: [], key: found, found: found !== null };
 }
 
+/**
+ * The venue name Bandsintown should have sent. Two repairs, in order of trust:
+ * a billing stays untouched (the junk path owns it — cleaning "THE WORD ALIVE -
+ * ...TOUR" down to the band's name would *rescue* junk into a plausible-looking
+ * room), and otherwise any tour-shaped dash segment is stripped, recovering
+ * "York Barbican" from "YORK BARBICAN - A Happy Christmas Tour 2026" — unless
+ * what's left carries the act, which is a billing by another route.
+ */
+export function bitVenueName(
+  rawName: unknown,
+  city: unknown,
+  artistName: string,
+): string {
+  const name = typeof rawName === 'string' && rawName ? rawName : 'Unknown venue';
+  if (dashBillingVenueName(name, typeof city === 'string' ? city : null, artistName)) return name;
+  const cleaned = cleanVenueName(name);
+  if (cleaned && !nameCarriesAct(cleaned, artistName)) return cleaned;
+  return name;
+}
+
 /** Pure mapping, so it can be tested against a recorded payload. */
 export function bitToEventInputs(artist: BitArtist, bitEvents: any[]): EventInput[] {
   return bitEvents.flatMap((e: any) => {
@@ -338,7 +358,7 @@ export function bitToEventInputs(artist: BitArtist, bitEvents: any[]): EventInpu
           ? {
               source: 'bandsintown',
               source_venue_id: String(e.venue.id ?? `${e.venue.name}-${e.venue.city}`),
-              name: e.venue.name ?? 'Unknown venue',
+              name: bitVenueName(e.venue.name, e.venue.city, artist.name),
               // "MGMT DJ SET - San Francisco" filed as the venue: the billing
               // class only separates from real dash-named rooms with the
               // listing's own artist and city in hand, so it's judged here

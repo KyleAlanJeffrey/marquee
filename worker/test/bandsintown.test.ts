@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { bitToEventInputs, bitUtc, type BitArtist } from '../src/sources';
+import { bitToEventInputs, bitUtc, bitVenueName, type BitArtist } from '../src/sources';
 import fixture from './fixtures/bandsintown-events.json';
 
 // Recorded from rest.bandsintown.com (Wednesday, upcoming) so the mapping is
@@ -84,6 +84,25 @@ describe('bitToEventInputs', () => {
     expect(mapped.venue?.junk_name).toBe(true);
     // The real payload's venues are all rooms — none should carry the mark.
     expect(inputs.every((i) => i.venue?.junk_name === undefined)).toBe(true);
+  });
+
+  it('repairs a tour-suffixed venue name without rescuing a billing', () => {
+    // The room survives its booking...
+    expect(bitVenueName('YORK BARBICAN - A Happy Christmas Tour 2026', 'York', 'Aled Jones')).toBe(
+      'YORK BARBICAN',
+    );
+    // ...but a billing is the junk path's case: cleaning "THE WORD ALIVE -
+    // ...TOUR" down to the band's name would dress junk up as a room.
+    expect(
+      bitVenueName('THE WORD ALIVE - THE DECEIVER & DARK MATTER TOUR', 'Detroit', 'The Word Alive'),
+    ).toBe('THE WORD ALIVE - THE DECEIVER & DARK MATTER TOUR');
+    // A dash-billing keeps its raw name too — junk_name owns it downstream.
+    expect(bitVenueName('MGMT DJ SET - San Francisco', 'San Francisco', 'MGMT')).toBe(
+      'MGMT DJ SET - San Francisco',
+    );
+    // Nothing to repair passes through, and a missing name stays the fallback.
+    expect(bitVenueName('Bottom of the Hill', 'San Francisco', 'Wednesday')).toBe('Bottom of the Hill');
+    expect(bitVenueName(null, 'San Francisco', 'Wednesday')).toBe('Unknown venue');
   });
 
   it('drops events with an unusable datetime instead of losing the artist', () => {

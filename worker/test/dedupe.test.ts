@@ -4,6 +4,7 @@ import { representative } from '../src/data';
 import {
   agreesWithCluster,
   bestVenueMatch,
+  cleanVenueName,
   dashBillingVenueName,
   guessUtcOffsetHours,
   isPlaceholderPoint,
@@ -321,6 +322,27 @@ describe('dash-separated billings', () => {
     // themselves so a billing suffixed with 東京 is still tellable in Tokyo.
     expect(dashBillingVenueName('BABYMETAL WORLD TOUR - 東京', '東京', 'Babymetal')).toBe(true);
     expect(dashBillingVenueName('Zepp DiverCity - 東京', '東京', 'Babymetal')).toBe(false);
+  });
+
+  it('strips tour-shaped dash segments and keeps the room', () => {
+    // Real production rows, 2026-07-31: a UK Christmas tour filed eleven venues
+    // as "ROOM - tour title", and one act filed "TOUR - room - city".
+    expect(cleanVenueName('YORK BARBICAN - A Happy Christmas Tour 2026')).toBe('YORK BARBICAN');
+    expect(cleanVenueName('MANCHESTER, BRIDGEWATER HALL - A Happy Christmas Tour 2026')).toBe(
+      'MANCHESTER, BRIDGEWATER HALL',
+    );
+    expect(cleanVenueName('UK TOUR 2026 - The Cluny 2 - Newcastle')).toBe('The Cluny 2 - Newcastle');
+  });
+
+  it('returns null when there is nothing to strip, or nothing left', () => {
+    // No tour segment: not this function's business.
+    expect(cleanVenueName('PALAIS DES CONGRES - SALLE MAURICE RAVEL')).toBeNull();
+    expect(cleanVenueName('Fox Theater - Oakland')).toBeNull();
+    // All tour segments: that's looksLikeEventTitle's case, not a repair.
+    expect(cleanVenueName('The Deceiver & Dark Matter Tour')).toBeNull();
+    // No spaced dash at all — including names where "tour" is just a word.
+    expect(cleanVenueName('Tour Eiffel')).toBeNull();
+    expect(cleanVenueName(null)).toBeNull();
   });
 
   it('still misses the club-night brand, knowingly', () => {

@@ -118,6 +118,24 @@ export function looksLikeEventTitle(name: string | null | undefined): boolean {
 }
 
 /**
+ * The venue name with any tour-shaped dash segment removed, or null when there
+ * is nothing to strip. "YORK BARBICAN - A Happy Christmas Tour 2026" is a real
+ * room wearing this season's booking; "UK TOUR 2026 - The Cluny 2 - Newcastle"
+ * wears it as a prefix instead. Segments are judged by `looksLikeTourName` —
+ * the same rule that already suppresses whole names — so this creates no new
+ * false-positive class, and a name that is only tour segments comes back null
+ * untouched (that's `looksLikeEventTitle`'s case, not a repair).
+ */
+export function cleanVenueName(name: string | null | undefined): string | null {
+  const n = name?.trim();
+  if (!n || !n.includes(' - ')) return null;
+  const segments = n.split(' - ').map((s) => s.trim());
+  const kept = segments.filter((s) => s && !looksLikeTourName(s));
+  if (kept.length === 0 || kept.length === segments.filter(Boolean).length) return null;
+  return kept.join(' - ');
+}
+
+/**
  * Is this "venue name" a dash-separated billing — "MGMT DJ SET - San Francisco",
  * "JOURNEY OF A LIFETIME - MIAMI" — rather than a room?
  *
@@ -159,11 +177,19 @@ export function dashBillingVenueName(
       : suffix.toLowerCase() === town.toLowerCase();
   if (!suffixIsTown) return false;
   if (looksLikeTourName(prefix)) return true;
-  // Whole tokens, not substrings: the band War must not claim Warlord Theater.
+  return nameCarriesAct(prefix, artistName);
+}
+
+/**
+ * Does this name carry the act's own name, whole tokens only? No room is named
+ * after tonight's act, so a "venue" that is, is the billing. Whole tokens, not
+ * substrings: the band War must not claim Warlord Theater.
+ */
+export function nameCarriesAct(name: string, artistName: string | null | undefined): boolean {
   const actTokens = normalizeWords(artistName ?? '');
   if (actTokens.length === 0) return false;
-  const prefixTokens = new Set(normalizeWords(prefix));
-  return actTokens.every((t) => prefixTokens.has(t));
+  const nameTokens = new Set(normalizeWords(name));
+  return actTokens.every((t) => nameTokens.has(t));
 }
 
 const normalizeWords = (s: string): string[] =>

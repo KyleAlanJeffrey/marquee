@@ -103,13 +103,19 @@ What's left is the residuals:
     - "PROGRESSIVE HOUSE NEVER DIED - Seattle" itself still escapes — a
       club-night brand with no artist token; nothing in the listing separates
       it from a room. Accepted, pinned as a known miss.
-    - Legacy repair not built: rows like "YORK BARBICAN - A Happy Christmas
-      Tour 2026" have the *real venue as prefix* and the tour as suffix — a
-      strip-the-tour-suffix repair could recover ~11 UK rooms already in the
-      table.
-    - Legacy billing rows already stored (JOURNEY OF A LIFETIME etc.) stay
-      until a repair pass or a re-crawl adoption touches them; the fix is
-      ingest-side only.
+    - Tour-segment stripping landed 2026-07-31: `cleanVenueName` drops
+      tour-shaped dash segments at ingest (guarded so a billing is never
+      "rescued" into a room — the cleaned name must not carry the act), and
+      the legacy repair recovered **83 production rows** (measured 723 dash
+      rows → 123 candidates → guards vs the artist table, each row's own
+      acts, and its own city/region cut 40 → hand review culled 6 billing
+      families). Ryman Auditorium, York Barbican, the 100 Club et al. now
+      wear their names. The renamed rows may duplicate existing rows for the
+      same rooms — the production `repair-duplicates` run already on the
+      operational list will fold them.
+    - Legacy *billing* rows already stored (JOURNEY OF A LIFETIME etc.) stay
+      until a repair pass or a re-crawl adoption touches them; the billing fix
+      is ingest-side only.
   - [ ] **240 venues render as their town** — no real name exists in the table
     to promote. Reverse-geocoding is the only route; same missing capability as
     the 29 placeholder-pinned rows.
