@@ -157,25 +157,20 @@ export default function ListScreen() {
                         <PressableScale
                           haptic
                           hitSlop={6}
+                          disabled={index === 0}
                           accessibilityRole="button"
                           accessibilityLabel={`Move ${item.name} up`}
-                          accessibilityState={{ disabled: index === 0 }}
-                          onPress={() =>
-                            index > 0 && updateItem.mutate({ refKind: item.refKind, refId: item.refId, move: 'up' })
-                          }
+                          onPress={() => updateItem.mutate({ refKind: item.refKind, refId: item.refId, move: 'up' })}
                           style={[styles.ctlBtn, { backgroundColor: theme.backgroundHigh, opacity: index === 0 ? 0.35 : 1 }]}>
                           <Ionicons name="chevron-up" size={14} color={theme.textSecondary} />
                         </PressableScale>
                         <PressableScale
                           haptic
                           hitSlop={6}
+                          disabled={index === items.length - 1}
                           accessibilityRole="button"
                           accessibilityLabel={`Move ${item.name} down`}
-                          accessibilityState={{ disabled: index === items.length - 1 }}
-                          onPress={() =>
-                            index < items.length - 1 &&
-                            updateItem.mutate({ refKind: item.refKind, refId: item.refId, move: 'down' })
-                          }
+                          onPress={() => updateItem.mutate({ refKind: item.refKind, refId: item.refId, move: 'down' })}
                           style={[
                             styles.ctlBtn,
                             { backgroundColor: theme.backgroundHigh, opacity: index === items.length - 1 ? 0.35 : 1 },
@@ -230,18 +225,23 @@ export default function ListScreen() {
                         multiline
                         style={[styles.noteInput, { color: theme.text, borderColor: theme.border }]}
                       />
+                      {/* The editor closes only when the save lands; a failed
+                          request keeps the draft on screen with the reason. */}
+                      {updateItem.isError && (
+                        <ThemedText type="labelSm" style={{ color: theme.error }}>
+                          COULDN&rsquo;T SAVE — TRY AGAIN
+                        </ThemedText>
+                      )}
                       <PressableScale
                         haptic
                         accessibilityRole="button"
                         accessibilityLabel="Save the note"
-                        onPress={() => {
-                          updateItem.mutate({
-                            refKind: item.refKind,
-                            refId: item.refId,
-                            note: draft.trim() || null,
-                          });
-                          setEditingKey(null);
-                        }}
+                        onPress={() =>
+                          updateItem.mutate(
+                            { refKind: item.refKind, refId: item.refId, note: draft.trim() || null },
+                            { onSuccess: () => setEditingKey(null) },
+                          )
+                        }
                         style={[styles.smallBtn, { borderColor: theme.primaryEdge, backgroundColor: theme.primaryFill }]}>
                         <ThemedText type="labelSm" style={{ color: theme.primary }}>
                           SAVE

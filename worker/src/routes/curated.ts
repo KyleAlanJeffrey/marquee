@@ -237,8 +237,13 @@ curated.put('/:id/items/:kind/:refId', zValidator('json', listItemPatch), async 
   if (!item) return c.json({ error: 'not found' }, 404);
 
   const body = c.req.valid('json');
+  // Every write in one batch — D1 runs a batch atomically, so a note change
+  // and a swap land together or not at all. (The neighbour read stays outside;
+  // D1 has no interactive transactions, and the worst interleaving of two
+  // concurrent moves is a position tie the next move resolves.)
+  const writes: Parameters<typeof db.batch>[0][number][] = [];
   if (body.note !== undefined) {
-    await db.update(listItems).set({ note: body.note || null }).where(itemWhere);
+    writes.push(db.update(listItems).set({ note: body.note || null }).where(itemWhere));
   }
   if (body.move) {
     // Swap positions with the neighbour on that side. At the end of the shelf
@@ -257,7 +262,7 @@ curated.put('/:id/items/:kind/:refId', zValidator('json', listItemPatch), async 
       .limit(1)
       .get();
     if (neighbour) {
-      await db.batch([
+      writes.push(
         db.update(listItems).set({ position: neighbour.position }).where(itemWhere),
         db
           .update(listItems)
@@ -269,10 +274,11 @@ curated.put('/:id/items/:kind/:refId', zValidator('json', listItemPatch), async 
               eq(listItems.refId, neighbour.refId),
             ),
           ),
-      ]);
+      );
     }
   }
-  await db.update(lists).set({ updatedAt: nowIso() }).where(eq(lists.id, list.id));
+  writes.push(db.update(lists).set({ updatedAt: nowIso() }).where(eq(lists.id, list.id)));
+  await db.batch(writes as [(typeof writes)[number], ...typeof writes]);
   return c.json({ ok: true });
 });
 
