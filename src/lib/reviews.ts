@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api';
 import type { NearbyEvent } from '@/lib/types';
@@ -111,14 +111,18 @@ export type FeedItem = ProfileReview & {
 };
 
 /**
- * The feed: recent public reviews by the people you follow. Signed-in only —
- * the query is "my follows", and there is no anonymous version of that.
+ * The feed: recent public reviews by the people you follow, oldest pages on
+ * demand. Signed-in only — the query is "my follows", and there is no
+ * anonymous version of that.
  */
 export function useFeed(enabled: boolean) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['feed'],
     enabled,
-    queryFn: (): Promise<{ items: FeedItem[] }> => apiGet('/me/feed'),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }): Promise<{ items: FeedItem[]; nextCursor: string | null }> =>
+      apiGet(`/me/feed${pageParam ? `?before=${encodeURIComponent(pageParam)}` : ''}`),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
   });
 }
 

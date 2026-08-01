@@ -242,13 +242,13 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
           <ThemedText type="label" style={[styles.reviewsLabel, { color: theme.cyan }]}>
             FROM PEOPLE YOU FOLLOW
           </ThemedText>
-          {feed.data.items.length === 0 ? (
+          {feed.data.pages[0].items.length === 0 ? (
             <ThemedText type="small" themeColor="textSecondary" style={styles.emptyNote}>
               Nothing yet. Follow people and their public reviews land here.
             </ThemedText>
           ) : (
             <GlassCard style={styles.listCard}>
-              {feed.data.items.map((item) => (
+              {feed.data.pages.flatMap((p) => p.items).map((item) => (
                 <PressableScale
                   key={item.id}
                   haptic={false}
@@ -272,6 +272,18 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
                   )}
                 </PressableScale>
               ))}
+              {feed.hasNextPage && (
+                <PressableScale
+                  haptic
+                  accessibilityRole="button"
+                  accessibilityLabel="Show older reviews from people you follow"
+                  onPress={() => !feed.isFetchingNextPage && feed.fetchNextPage()}
+                  style={[styles.moreBtn, { borderColor: theme.border }]}>
+                  <ThemedText type="labelSm" themeColor="textSecondary">
+                    {feed.isFetchingNextPage ? 'LOADING…' : 'SHOW OLDER'}
+                  </ThemedText>
+                </PressableScale>
+              )}
             </GlassCard>
           )}
         </>
@@ -379,6 +391,12 @@ const styles = StyleSheet.create({
   },
   centreBlock: { alignItems: 'center', padding: Spacing.four },
   emptyNote: { textAlign: 'center', paddingVertical: Spacing.three },
+  moreBtn: {
+    alignItems: 'center',
+    paddingVertical: Spacing.two + 2,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
   listCard: { gap: Spacing.two, padding: Spacing.two + 2 },
   personRow: {
     flexDirection: 'row',

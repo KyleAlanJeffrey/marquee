@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator';
-import { and, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { callerFrom, ensureUser } from '../auth';
@@ -365,6 +365,12 @@ reviewRoutes.get('/me/feed', async (c) => {
   const { userId } = await callerFrom(c.env, c.req.header('authorization'));
   if (!userId) return c.json({ error: 'sign in required' }, 401);
 
+  // `?before=<createdAt>|<id>` pages into older reviews. Compound, because
+  // created_at is second-precision and two reviews can share a second — a
+  // timestamp-only cursor would skip whichever one landed on the boundary.
+  const before = c.req.query('before')?.trim() || null;
+  const [beforeAt, beforeId] = before ? before.split('|') : [null, null];
+
   const db = getDb(c.env.DB);
   const items = await db
     .select({
@@ -385,11 +391,27 @@ reviewRoutes.get('/me/feed', async (c) => {
     )
     .innerJoin(users, and(eq(users.id, reviews.userId), isNull(users.deletedAt)))
     .innerJoin(events, eq(events.id, reviews.eventId))
-    .where(eq(personFollows.followerId, userId))
-    .orderBy(desc(reviews.createdAt))
+    .where(
+      and(
+        eq(personFollows.followerId, userId),
+        beforeAt
+          ? or(
+              lt(reviews.createdAt, beforeAt),
+              beforeId ? and(eq(reviews.createdAt, beforeAt), lt(reviews.id, beforeId)) : undefined,
+            )
+          : undefined,
+      ),
+    )
+    .orderBy(desc(reviews.createdAt), desc(reviews.id))
     .limit(FEED_PAGE);
 
-  return c.json({ items, limit: FEED_PAGE });
+  const last = items[items.length - 1];
+  return c.json({
+    items,
+    limit: FEED_PAGE,
+    // Full page ⇒ probably more; the cursor is where this page ended.
+    nextCursor: items.length === FEED_PAGE ? `${last.createdAt}|${last.id}` : null,
+  });
 });
 
 /**
