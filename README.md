@@ -120,7 +120,8 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `GET/PUT /api/me/lists` | the four private lists (follows, venues, saved, log), one JSON document each |
 | `GET /api/users/:key` (+ `/followers` `/following` `/reviews` `/lists`) | public profiles by handle or id, the person graph, their reviews and lists |
 | `POST/DELETE /api/users/:key/follow` · `POST/DELETE /api/users/:key/block` | follow and block; blocking severs follows both ways and hides both parties' reviews from each other |
-| `GET /api/events/:id/reviews` · `PUT/DELETE /api/events/:id/review` | public reviews of a show (one per person, edits stamped, future shows refused) |
+| `GET /api/events/:id/reviews` · `PUT/DELETE /api/events/:id/review` | public reviews of a show (one per person, edits stamped, future shows refused), most-liked first |
+| `PUT/DELETE /api/reviews/:id/like` | like/unlike a review — idempotent both ways (a like is a row, not a counter) |
 | `POST /api/reviews/:id/report` · `GET/POST /api/admin/reports` | the moderation pipeline: report with a reason, triage hide/keep with an audit trail |
 | `GET /api/events/:id/rsvps` · `PUT/DELETE /api/events/:id/rsvp` | going/interested on upcoming shows — public counts, private answer |
 | `GET /api/me/feed` | recent public reviews by the people you follow |
@@ -138,6 +139,7 @@ One Worker serves the web build (static assets) and the API under `/api/*`.
 | `POST /api/admin/repair-duplicates?after=` | cluster venues, collapse shows stored twice; idempotent. Resume with the `next_artist_id` it returns, or run [scripts/repair-duplicates.sh](scripts/repair-duplicates.sh) (needs `ADMIN_TOKEN`) |
 | `POST /api/admin/backfill-bandsintown?limit&offset` | one-off Bandsintown sweep over known artists (needs `ADMIN_TOKEN`) |
 | `GET /robots.txt` · `GET /sitemap.xml` | crawler entry points (a sitemap index; children at `/sitemap-pages.xml`, `/sitemap-events-N.xml`, …) |
+| `GET /img/artist/:id` | the image mirror: artist images served from our R2 (mirrored from the source CDN on first request, allowlisted + capped), falling back to a redirect at the upstream URL |
 | `GET /` | server-rendered landing page — real HTML, no JS, built live from D1 |
 | `GET /concerts` | 301 to `/`, where the landing page lives now |
 | `GET /concerts/:town` | one server-rendered page per town (`/concerts/austin-tx`); 301 for another spelling of one, 404 for a slug no town answers to |
