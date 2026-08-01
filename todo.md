@@ -179,9 +179,11 @@ What's left is the residuals:
 - [ ] **Rotate the pasted keys**: `ADMIN_TOKEN`, `TICKETMASTER_API_KEY`, and the
   Clerk secret (all went through chat). `npx wrangler secret put …`, then update
   root `.dev.vars`; the Clerk one rotates in their dashboard.
-- [ ] **Run `POST /api/admin/repair-duplicates` on production** — re-evaluates
-  existing clusters (Manchester, Dallas) under the fixed comparators. Needs
-  `ADMIN_TOKEN`, cursor-paged (`afterArtistId`) until done.
+- [x] **Run `POST /api/admin/repair-duplicates` on production** — done
+  2026-07-31: full cursor-paged sweep (six pages, `?after=` — note the cursor
+  is a query param, not a body field), 58 duplicate shows merged, ending
+  `truncated: false`. Also folded any duplicates created by the same day's
+  83 venue renames.
 - [ ] **Delete the inert Worker secret `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`** —
   runtime secrets are invisible to `expo export`; it does nothing and reads as
   if it did.
