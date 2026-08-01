@@ -324,7 +324,8 @@ export function bitVenueName(
   city: unknown,
   artistName: string,
 ): string {
-  const name = typeof rawName === 'string' && rawName ? rawName : 'Unknown venue';
+  const trimmed = typeof rawName === 'string' ? rawName.trim() : '';
+  const name = trimmed || 'Unknown venue';
   if (dashBillingVenueName(name, typeof city === 'string' ? city : null, artistName)) return name;
   const cleaned = cleanVenueName(name);
   if (cleaned && !nameCarriesAct(cleaned, artistName)) return cleaned;
@@ -341,11 +342,14 @@ export function bitToEventInputs(artist: BitArtist, bitEvents: any[]): EventInpu
     const startsAt = bitUtc(e.datetime, place);
     if (!startsAt) return [];
     const endsAt = bitUtc(e.ends_at, place);
+    // Computed once, used for both the venue row and the fallback event title —
+    // "Artist @ ROOM - Tour 2026" would put the tour right back in the title.
+    const venueName = e.venue ? bitVenueName(e.venue.name, e.venue.city, artist.name) : null;
     return [
       {
         source: 'bandsintown',
         source_event_id: String(e.id),
-        name: e.title || `${artist.name} @ ${e.venue?.name ?? 'TBA'}`,
+        name: e.title || `${artist.name} @ ${venueName ?? 'TBA'}`,
         starts_at: startsAt,
         ends_at: endsAt,
         ticket_url: e.offers?.[0]?.url ?? e.url ?? null,
@@ -358,7 +362,7 @@ export function bitToEventInputs(artist: BitArtist, bitEvents: any[]): EventInpu
           ? {
               source: 'bandsintown',
               source_venue_id: String(e.venue.id ?? `${e.venue.name}-${e.venue.city}`),
-              name: bitVenueName(e.venue.name, e.venue.city, artist.name),
+              name: venueName!,
               // "MGMT DJ SET - San Francisco" filed as the venue: the billing
               // class only separates from real dash-named rooms with the
               // listing's own artist and city in hand, so it's judged here
