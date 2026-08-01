@@ -31,15 +31,15 @@ const STYLE = `<style>
    come first; plain 'Anybody' covers the case where the webfont came from the
    server-rendered pages instead. */
 #mq-sr{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:#131315;color:#e5e1e4;
-  font:400 16px/1.6 Anybody_400Regular,Anybody,system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 20px 64px}
-#mq-sr .in{max-width:760px;margin:0 auto}
+  font:400 16px/1.6 Anybody_400Regular,Anybody,system-ui,-apple-system,"Segoe UI",sans-serif;padding:clamp(24px,4vw,40px) clamp(20px,4vw,44px) 72px}
+#mq-sr .in{max-width:1100px;margin:0 auto}
 #mq-sr a{color:#2fff6a}
 #mq-sr .crumbs{font-size:13px;letter-spacing:.04em;text-transform:uppercase;opacity:.6;margin:0 0 18px}
 #mq-sr .crumbs a{color:inherit;text-decoration:none}
-#mq-sr h1{font:italic 800 clamp(26px,5vw,40px)/1.15 Anybody_800ExtraBold_Italic,Anybody,system-ui,sans-serif;
+#mq-sr h1{font:italic 800 clamp(26px,4.6vw,56px)/1.1 Anybody_800ExtraBold_Italic,Anybody,system-ui,sans-serif;
   margin:0 0 10px;letter-spacing:-.03em;text-transform:uppercase}
-#mq-sr .lede{font-size:17px;opacity:.78;margin:0 0 24px}
-#mq-sr h2{font:700 19px/1.3 Anybody_700Bold,Anybody,system-ui,sans-serif;margin:34px 0 12px}
+#mq-sr .lede{font-size:clamp(17px,1.6vw,19px);opacity:.78;margin:0 0 24px;max-width:64ch}
+#mq-sr h2{font:700 clamp(19px,2vw,25px)/1.3 Anybody_700Bold,Anybody,system-ui,sans-serif;margin:34px 0 12px}
 /* Lime is far too bright for white text, so the CTA label is the near-black. */
 #mq-sr .cta{display:inline-block;background:#2fff6a;color:#00230f;font-weight:700;text-decoration:none;
   padding:12px 20px;border-radius:4px;margin:6px 0 4px}
@@ -52,6 +52,24 @@ const STYLE = `<style>
 #mq-sr .facts dt{opacity:.6;min-width:88px;font-size:14px}
 #mq-sr .facts dd{margin:0}
 #mq-sr .more{font-size:14px;opacity:.7}
+/* The facts-and-tickets block reads as a card at every width... */
+#mq-sr .side{border:1px solid rgba(229,225,228,.12);border-radius:12px;padding:20px 22px;background:rgba(32,31,33,.5)}
+#mq-sr .side .facts{margin-bottom:14px}
+#mq-sr .side .facts div:first-child{border-top:none;padding-top:0}
+/* ...and on a desktop it rides shotgun, sticky beside the list — the same
+   ticket-stub role the landing hero gives its stat panel. Mobile keeps the
+   source order: facts first, then the dates. */
+@media(min-width:960px){
+  #mq-sr .split{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:56px;align-items:start}
+  #mq-sr .split .side{order:2;position:sticky;top:24px}
+  #mq-sr .split h2:first-child{margin-top:0}
+}
+/* Printed-listings rows once there's room: what's-on left, where/when right. */
+@media(min-width:720px){
+  #mq-sr li{display:flex;align-items:baseline;justify-content:space-between;gap:24px}
+  #mq-sr li b{font-size:17px}
+  #mq-sr li span{text-align:right;flex:none;max-width:46%}
+}
 </style>`;
 
 const CRUMB_HOME = '<a href="/">Marquee</a>';
@@ -180,9 +198,13 @@ export function eventBody(d: EventBody): string {
           ? `in ${esc(where)}`
           : 'live'
     }${t.day ? ` on ${esc(t.day)}` : ''}${t.time ? `, doors around ${esc(t.time)}` : ''}.</p>
-<dl class="facts">${facts}</dl>
-${tickets ? `<a class="cta" rel="nofollow noopener" href="${esc(tickets)}">Get tickets</a>` : ''}
-${tour}`,
+${(() => {
+  // The facts and the ticket link are one card. With a tour list beside it the
+  // page splits into desktop columns; without one the card just flows.
+  const side = `<aside class="side"><dl class="facts">${facts}</dl>
+${tickets ? `<a class="cta" rel="nofollow noopener" href="${esc(tickets)}">Get tickets</a>` : ''}</aside>`;
+  return tour ? `<div class="split">${side}<div>${tour}</div></div>` : side;
+})()}`,
   );
 }
 
