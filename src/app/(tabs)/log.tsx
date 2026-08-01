@@ -1,4 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
@@ -15,22 +17,41 @@ import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAttendances, type Attendance } from '@/lib/attendances-store';
-import { formatEventDate } from '@/lib/format';
+import { formatEventDate, formatEventDateParts } from '@/lib/format';
 
 /** The year a show happened, for the rules between them. */
 const yearOf = (iso: string) => iso.slice(0, 4);
 
+/** Tiles per wall row. Chunked by hand: FlatList numColumns can't mix in
+    full-width year rules, and flexGrow in a wrapped row stretches the last
+    orphan tile poster-wide. */
+const WALL_COLUMNS = 3;
+
+const chunk = <T,>(xs: T[], size: number): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += size) out.push(xs.slice(i, i + size));
+  return out;
+};
+
+/** One FlatList row, in either view: a year rule, a list entry, or a wall row. */
+type Row =
+  | { kind: 'year'; year: string }
+  | { kind: 'show'; show: Attendance }
+  | { kind: 'tiles'; key: string; shows: Attendance[] };
+
 /**
- * Everything you've been to, newest night first.
+ * Everything you've been to, newest night first — as a wall of posters.
  *
- * Phase 0 of the reviews pivot, and it is on the device only — nothing here has
- * been published, because there is nothing yet to publish to. The screen is
- * therefore a personal history rather than a profile, and it is written to read
- * like one: years as rules, a count, and the two scores if they were given.
+ * The wall is the point (a year of gigs as a grid of artist images is the
+ * screenshot people share), but it is deliberately look-only: rating in
+ * place and removing live in the list view behind the toggle, because a
+ * tile is too small to carry five stars, a remove pill and a navigation
+ * target without mis-taps. The log itself is unchanged and private.
  */
 export default function LogScreen() {
   const theme = useTheme();
   const { attended, ready, unlog, rate } = useAttendances();
+  const [view, setView] = useState<'wall' | 'list'>('wall');
 
   /**
    * Which row's remove button is armed, if any.
@@ -46,7 +67,7 @@ export default function LogScreen() {
 
   /** Rows with a year header inserted wherever the year changes. */
   const rows = useMemo(() => {
-    const out: ({ kind: 'year'; year: string } | { kind: 'show'; show: Attendance })[] = [];
+    const out: Row[] = [];
     let year = '';
     for (const show of attended) {
       const y = yearOf(show.startsAt);
@@ -59,12 +80,44 @@ export default function LogScreen() {
     return out;
   }, [attended]);
 
+  /** The same log for the wall: year rules, then rows of up to three tiles. */
+  const wallRows = useMemo(() => {
+    const out: Row[] = [];
+    let year = '';
+    let current: Attendance[] = [];
+    const flush = () => {
+      for (const shows of chunk(current, WALL_COLUMNS)) {
+        out.push({ kind: 'tiles', key: `${year}-${shows[0].eventId}`, shows });
+      }
+      current = [];
+    };
+    for (const show of attended) {
+      const y = yearOf(show.startsAt);
+      if (y !== year) {
+        flush();
+        year = y;
+        out.push({ kind: 'year', year: y });
+      }
+      current.push(show);
+    }
+    flush();
+    return out;
+  }, [attended]);
+
   const rated = attended.filter((a) => a.rating != null);
   // Only over the shows actually scored — averaging in the unrated ones as zero
   // would make a log of mostly-unrated nights look like a log of terrible ones.
   const average = rated.length
     ? (rated.reduce((sum, a) => sum + (a.rating ?? 0), 0) / rated.length).toFixed(1)
     : null;
+  // The stats line, Letterboxd-shaped: how much, how recently, how widely.
+  // Lazy initializer for the same reason as the event page's useNow: reading
+  // the clock in the component body is impure, and once per mount is enough.
+  const [currentYear] = useState(() => String(new Date().getFullYear()));
+  const thisYear = attended.filter((a) => yearOf(a.startsAt) === currentYear).length;
+  const venueCount = new Set(
+    attended.map((a) => a.venueId ?? a.venueName).filter((v): v is string => !!v),
+  ).size;
 
   return (
     <View style={{ flex: 1 }}>
@@ -97,15 +150,45 @@ export default function LogScreen() {
         </View>
       ) : (
         <FlatList
-          data={rows}
-          keyExtractor={(r) => (r.kind === 'year' ? `y-${r.year}` : r.show.eventId)}
+          data={view === 'wall' ? wallRows : rows}
+          keyExtractor={(r) =>
+            r.kind === 'year' ? `y-${r.year}` : r.kind === 'tiles' ? r.key : r.show.eventId
+          }
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
           ListHeaderComponent={
             <View style={styles.head}>
-              <ThemedText type="headline">Your Log</ThemedText>
+              <View style={styles.headTop}>
+                <ThemedText type="headline" style={{ flex: 1 }}>
+                  Your Log
+                </ThemedText>
+                {/* The wall is for looking; the list is for tending — inline
+                    stars and the remove pill live there. */}
+                {(['wall', 'list'] as const).map((mode) => (
+                  <PressableScale
+                    key={mode}
+                    haptic
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: view === mode }}
+                    accessibilityLabel={mode === 'wall' ? 'Show the log as a wall of posters' : 'Show the log as a list'}
+                    onPress={() => setView(mode)}
+                    style={[
+                      styles.viewBtn,
+                      { borderColor: view === mode ? theme.primaryEdge : theme.border },
+                      view === mode && { backgroundColor: theme.primaryFill },
+                    ]}>
+                    <Ionicons
+                      name={mode === 'wall' ? 'grid-outline' : 'list-outline'}
+                      size={16}
+                      color={view === mode ? theme.primary : theme.textTertiary}
+                    />
+                  </PressableScale>
+                ))}
+              </View>
               <ThemedText type="small" themeColor="textSecondary">
                 {attended.length} {attended.length === 1 ? 'show' : 'shows'}
+                {thisYear ? ` · ${thisYear} this year` : ''}
+                {venueCount > 1 ? ` · ${venueCount} venues` : ''}
                 {average ? ` · ${average} average` : ''}
                 {' · private to you'}
               </ThemedText>
@@ -118,6 +201,63 @@ export default function LogScreen() {
                 <ThemedText type="label" style={[styles.year, { color: theme.textTertiary }]}>
                   {item.year}
                 </ThemedText>
+              );
+            }
+            if (item.kind === 'tiles') {
+              return (
+                <Animated.View
+                  entering={FadeInDown.delay(Math.min(index * 35, 300)).duration(340)}
+                  style={styles.tileRow}>
+                  {item.shows.map((show) => {
+                    const parts = formatEventDateParts(show.startsAt, show.venueTimezone);
+                    const name = show.artistName ?? show.name;
+                    return (
+                      <PressableScale
+                        key={show.eventId}
+                        haptic={false}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Open ${name}, ${formatEventDate(show.startsAt, show.venueTimezone)}${
+                          show.rating != null ? `, rated ${show.rating} of 5` : ''
+                        }`}
+                        disabled={show.eventId.startsWith('manual-')}
+                        onPress={() => router.push(`/event/${show.eventId}`)}
+                        style={styles.tile}>
+                        <View style={[styles.tileArt, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
+                          {show.artistImageUrl ? (
+                            <Image
+                              source={{ uri: show.artistImageUrl }}
+                              style={StyleSheet.absoluteFill}
+                              contentFit="cover"
+                              transition={200}
+                            />
+                          ) : (
+                            <View style={styles.tileFallback}>
+                              <Ionicons name="musical-notes" size={26} color={theme.textTertiary} />
+                            </View>
+                          )}
+                          <LinearGradient
+                            colors={['transparent', 'rgba(0,0,0,0.78)']}
+                            style={styles.tileFade}
+                            pointerEvents="none"
+                          />
+                          <ThemedText type="labelSm" style={styles.tileDate}>
+                            {parts.month} {parts.day}
+                          </ThemedText>
+                        </View>
+                        <ThemedText type="labelSm" numberOfLines={1} style={{ color: theme.textSecondary }}>
+                          {name}
+                        </ThemedText>
+                        {show.rating != null && (
+                          <StarRating value={show.rating} size={10} subject={name} />
+                        )}
+                      </PressableScale>
+                    );
+                  })}
+                  {/* Fillers keep a short last row from stretching its tiles. */}
+                  {Array.from({ length: WALL_COLUMNS - item.shows.length }, (_, i) => (
+                    <View key={`fill-${i}`} style={styles.tile} />
+                  ))}
+                </Animated.View>
               );
             }
             const show = item.show;
@@ -225,6 +365,40 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.three },
   content: { paddingBottom: Spacing.six + Spacing.four },
   head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, paddingBottom: Spacing.three, gap: 2 },
+  headTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  viewBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    marginBottom: Spacing.two + 2,
+  },
+  tile: { flex: 1, gap: 4 },
+  tileArt: {
+    aspectRatio: 1,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  tileFallback: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '45%' },
+  tileDate: { color: '#fff', padding: Spacing.one + 2, letterSpacing: 1 },
   year: {
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.four,
