@@ -84,17 +84,29 @@ What's left is the residuals:
     The *profile* stats-line half is parked: a public profile can only count
     public reviews — the log is private — so profile walls wait on Kyle's
     contributed-shows/visibility decisions below.
-  - [x] **R2 binding + artist-image mirror** (`ebb8aae`) — `GET
-    /img/artist/:id`, cache-aside with a production-measured allowlist,
-    falling back to a 302 at the upstream URL. First consumer: og:image +
-    JSON-LD on the SSR pages. Next consumers: venue photos (Wikimedia
-    discourages hotlinking), Clerk avatars, then the API's artist rows.
-  - [x] **Review likes** — migration 0018 (a like is a fact keyed
-    (review_id, user_id); like/unlike are idempotent PUT/DELETE, verified
-    double-tap-safe against local D1), heart + count on review rows behind
-    the write gate, event reviews ordered most-liked-first with newest as
-    tiebreak. Remaining trigger: likes on *lists* is what 0016 named for
-    turning list deletion into a tombstone.
+  - [x] **R2 binding + artist-image mirror** (`ebb8aae`, hardened `62898cf`)
+    — `GET /img/artist/:id`, cache-aside with a production-measured
+    allowlist (every stored artist image is s1.ticketm.net /
+    seatgeekimages.com / i.scdn.co — 891/591/48), a capped body reader, and
+    a 302 at the upstream URL on any failure. First consumer: og:image +
+    JSON-LD on the SSR pages. **Verified live on marquee.rocks 2026-07-31**:
+    the route serves a mirrored 179KB JPEG and artist pages' og:image points
+    through it. Next consumers: venue photos (Wikimedia discourages
+    hotlinking), Clerk avatars, then the API's artist rows (needs an origin
+    at the data.ts mapping layer — native clients want absolute URLs).
+  - [x] **Review likes** (`813aa49`) — migration 0018 applied local *and*
+    remote (a like is a fact keyed (review_id, user_id); like/unlike are
+    idempotent PUT/DELETE, verified double-tap-safe against local D1 with a
+    minted session), heart + count on review rows behind the write gate,
+    event reviews ordered most-liked-first with newest as tiebreak. The
+    production route is live (401s unauthenticated). Remaining trigger:
+    likes on *lists* is what 0016 named for turning list deletion into a
+    tombstone.
+    - [ ] One admin loose end: the likes batch (`813aa49`+`d60c3fe`) hasn't
+      had its CodeRabbit pass — the free CLI allowance rate-limited
+      (~00:50Z, 33-min reset). A re-run was queued in that session; if it
+      never reported, run `coderabbit review --agent -t committed --base
+      9e6f786` and judge the findings.
   - [x] **Feed placement** (`9e6f786`) — the follow feed now leads your own
     profile instead of sitting under the follower lists. A PEOPLE segment on
     Following stays open as the bolder option (Kyle's "what does follow
