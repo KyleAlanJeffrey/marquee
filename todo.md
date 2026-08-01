@@ -75,16 +75,20 @@ What's left is the residuals:
 - [~] **Social design pass** (Kyle, 2026-07-31) — the thinking is
   **[`docs/design-social.md`](docs/design-social.md)**; the slices, in the
   order the doc argues for:
-  - [ ] **Unified log/review flow** — one "log this night" act with a
-    make-it-public toggle, replacing the two parallel star forms on past-event
-    pages. Presentation only; a review stays its own request and row.
-  - [ ] **Log as poster grid + profile stats line** — nights as artist-image
-    tiles (date + stars), profiles lead with shows · this year · venues ·
-    followers. Client-only, no new data.
-  - [ ] **R2 binding + artist-image mirroring** — bucket `marquee` exists
-    (Kyle, 2026-07-31). Bind in wrangler.jsonc with its first consumer:
-    `GET /img/:key`, mirror artist images content-addressed at enrichment,
-    then venue photos (Wikimedia discourages hotlinking) and Clerk avatars.
+  - [x] **Unified log/review flow** (`5589ae0`) — the composer lives inside
+    the log card as its public step, seeded from the log's stars on first
+    open. The note still never crosses over; ReviewSection is now purely
+    everyone else's.
+  - [x] **Log as poster wall** (`fa204b8`) — artist-image tiles with date +
+    stars, years as rules, list view behind a toggle for rating/removing.
+    The *profile* stats-line half is parked: a public profile can only count
+    public reviews — the log is private — so profile walls wait on Kyle's
+    contributed-shows/visibility decisions below.
+  - [x] **R2 binding + artist-image mirror** (`ebb8aae`) — `GET
+    /img/artist/:id`, cache-aside with a production-measured allowlist,
+    falling back to a 302 at the upstream URL. First consumer: og:image +
+    JSON-LD on the SSR pages. Next consumers: venue photos (Wikimedia
+    discourages hotlinking), Clerk avatars, then the API's artist rows.
   - [ ] **Review likes** — `review_likes` table, heart on review rows,
     "popular reviews" ordering on event/artist pages. Also the trigger the
     0016 migration named for list tombstones.

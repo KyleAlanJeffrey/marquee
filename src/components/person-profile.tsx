@@ -178,60 +178,10 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
         )}
       </GlassCard>
 
-      {/* The two counts are the tabs: tapping one is asking to see the list. */}
-      <View style={styles.tabsRow}>
-        {(['followers', 'following'] as const).map((t) => {
-          const active = t === tab;
-          const n = counts[t];
-          return (
-            <PressableScale
-              key={t}
-              haptic={false}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              onPress={() => setTab(t)}
-              style={[
-                styles.tab,
-                active
-                  ? { backgroundColor: theme.primary, borderColor: theme.primary }
-                  : { backgroundColor: theme.backgroundElevated, borderColor: theme.border },
-              ]}>
-              <ThemedText type="label" style={{ color: active ? theme.onPrimary : theme.text }}>
-                {`${n} ${(n === 1 ? t.replace(/s$/, '') : t).toUpperCase()}`}
-              </ThemedText>
-            </PressableScale>
-          );
-        })}
-      </View>
-
-      {list.isLoading ? (
-        <View style={styles.centreBlock}>
-          <ActivityIndicator color={theme.primary} />
-        </View>
-      ) : list.isError ? (
-        <View style={styles.centreBlock}>
-          <ErrorState onRetry={() => list.refetch()} />
-        </View>
-      ) : (list.data?.people.length ?? 0) === 0 ? (
-        <ThemedText type="small" themeColor="textSecondary" style={styles.emptyNote}>
-          {tab === 'followers'
-            ? isSelf
-              ? 'Nobody follows you yet. Share your profile link to change that.'
-              : 'Nobody follows them yet.'
-            : isSelf
-              ? "You aren't following anyone yet. Open a friend's profile to follow them."
-              : "They aren't following anyone yet."}
-        </ThemedText>
-      ) : (
-        <GlassCard style={styles.listCard}>
-          {list.data!.people.map((p) => (
-            <PersonRow key={p.id} person={p} />
-          ))}
-        </GlassCard>
-      )}
-
       {/* The feed — what the people you follow have been to lately. Yours only,
-          and only once it has an answer; an empty graph shows a nudge, not a hole. */}
+          first thing on your own profile: it's the reason to open the tab
+          twice a day, so it doesn't live under the follower lists any more.
+          Only once it has an answer; an empty graph shows a nudge, not a hole. */}
       {/* A failed *older-page* fetch must not blank pages already on screen —
           the full-width error is only for having nothing to show at all. */}
       {isSelf && feed.isError && !feed.data && (
@@ -296,6 +246,58 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
             </GlassCard>
           )}
         </>
+      )}
+
+      {/* The two counts are the tabs: tapping one is asking to see the list. */}
+      <View style={styles.tabsRow}>
+        {(['followers', 'following'] as const).map((t) => {
+          const active = t === tab;
+          const n = counts[t];
+          return (
+            <PressableScale
+              key={t}
+              haptic={false}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              onPress={() => setTab(t)}
+              style={[
+                styles.tab,
+                active
+                  ? { backgroundColor: theme.primary, borderColor: theme.primary }
+                  : { backgroundColor: theme.backgroundElevated, borderColor: theme.border },
+              ]}>
+              <ThemedText type="label" style={{ color: active ? theme.onPrimary : theme.text }}>
+                {`${n} ${(n === 1 ? t.replace(/s$/, '') : t).toUpperCase()}`}
+              </ThemedText>
+            </PressableScale>
+          );
+        })}
+      </View>
+
+      {list.isLoading ? (
+        <View style={styles.centreBlock}>
+          <ActivityIndicator color={theme.primary} />
+        </View>
+      ) : list.isError ? (
+        <View style={styles.centreBlock}>
+          <ErrorState onRetry={() => list.refetch()} />
+        </View>
+      ) : (list.data?.people.length ?? 0) === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.emptyNote}>
+          {tab === 'followers'
+            ? isSelf
+              ? 'Nobody follows you yet. Share your profile link to change that.'
+              : 'Nobody follows them yet.'
+            : isSelf
+              ? "You aren't following anyone yet. Open a friend's profile to follow them."
+              : "They aren't following anyone yet."}
+        </ThemedText>
+      ) : (
+        <GlassCard style={styles.listCard}>
+          {list.data!.people.map((p) => (
+            <PersonRow key={p.id} person={p} />
+          ))}
+        </GlassCard>
       )}
 
       {/* Their lists — the shelves. Public ones for visitors, all of them for
