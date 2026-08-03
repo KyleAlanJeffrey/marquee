@@ -381,16 +381,42 @@ export function bitToEventInputs(artist: BitArtist, bitEvents: any[]): EventInpu
 }
 
 /**
+ * The artist photo riding in a Bandsintown payload, if it's a real one.
+ *
+ * Bandsintown answers "no photo" with a URL anyway — a stock silhouette at
+ * `photos.bandsintown.com/artist<Size>.jpg` (Lessa, measured 2026-08-03,
+ * wears `artistLarge.jpg`). Storing that would put the same grey figure on
+ * thousands of acts, which is worse than the app's own fallback art, so the
+ * stock paths are treated as null. Real photos live under sized directories
+ * (`/large/12345.jpeg`) and pass.
+ */
+export function bitImageUrl(artist: unknown): string | null {
+  const url =
+    typeof (artist as { image_url?: unknown })?.image_url === 'string'
+      ? ((artist as { image_url: string }).image_url ?? '').trim()
+      : '';
+  if (!/^https:\/\//.test(url)) return null;
+  if (/photos\.bandsintown\.com\/artist[A-Za-z]*\.(jpe?g|png|gif|webp)(\?|$)/i.test(url)) return null;
+  return url;
+}
+
+/**
  * Learn an artist's Bandsintown id (and MusicBrainz id) from an event payload,
  * so the next lookup is by id instead of by name. Every event embeds the artist
- * it was fetched for, so this costs no extra request.
+ * it was fetched for, so this costs no extra request — and since 2026-08-03 the
+ * same free ride fills in a missing artist photo: 2,152 of the 2,208
+ * Bandsintown-linked artists in production had no image because this function
+ * was already holding one and not writing it. Fill-if-null only — a Spotify or
+ * Ticketmaster image is sharper and must never be displaced by a crawl.
  */
 async function rememberBitIdentity(db: DB, artistId: string, raw: any): Promise<void> {
   const a = raw?.artist;
   if (!a?.id) return;
-  const set: Record<string, string> = { bandsintownId: String(a.id) };
+  const set: Record<string, unknown> = { bandsintownId: String(a.id) };
   if (typeof a.name === 'string' && a.name) set.bandsintownName = a.name;
   if (typeof a.mbid === 'string' && a.mbid) set.mbid = a.mbid;
+  const image = bitImageUrl(a);
+  if (image) set.imageUrl = sql`coalesce(${artists.imageUrl}, ${image})`;
   await db.update(artists).set(set).where(eq(artists.id, artistId)).catch(() => {});
 }
 

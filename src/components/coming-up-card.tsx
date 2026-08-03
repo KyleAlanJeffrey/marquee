@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { ArtistArt } from '@/components/artist-art';
 import { PressableScale } from '@/components/pressable-scale';
 import { RsvpCounts } from '@/components/rsvp-counts';
 import { ThemedText } from '@/components/themed-text';
@@ -29,12 +29,7 @@ export function ComingUpCard({ event, onPress }: { event: NearbyEvent; onPress: 
       scaleTo={0.98}
       style={[styles.card, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
       <View style={styles.imageWrap}>
-        <Image
-          source={event.artist_image_url ? { uri: event.artist_image_url } : undefined}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          transition={200}
-        />
+        <ArtistArt uri={event.artist_image_url} style={StyleSheet.absoluteFill} iconSize={30} />
         <View style={styles.imageScrim} />
         <View style={[styles.dateChip, { backgroundColor: 'rgba(0,0,0,0.45)', borderColor: theme.border }]}>
           <ThemedText type="labelSm" style={{ color: theme.primary }}>

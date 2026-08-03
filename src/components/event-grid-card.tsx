@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { ArtistArt } from '@/components/artist-art';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -31,12 +31,7 @@ export function EventGridCard({
       scaleTo={0.98}
       style={[styles.card, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
       <View style={styles.imageWrap}>
-        <Image
-          source={event.artist_image_url ? { uri: event.artist_image_url } : undefined}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          transition={200}
-        />
+        <ArtistArt uri={event.artist_image_url} style={StyleSheet.absoluteFill} iconSize={30} />
         <Pressable
           onPress={onToggleFollow}
           hitSlop={8}

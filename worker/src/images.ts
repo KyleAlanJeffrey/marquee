@@ -35,6 +35,8 @@ const ALLOWED_HOSTS = new Set([
   'i.scdn.co',
   'upload.wikimedia.org',
   'commons.wikimedia.org',
+  // Artist photos backfilled from the Bandsintown crawl (2026-08-03).
+  'photos.bandsintown.com',
 ]);
 
 /** Big enough for every 640px-ish source image, small enough that a surprise

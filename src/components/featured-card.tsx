@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
+import { ArtistArt } from '@/components/artist-art';
 import { PressableScale } from '@/components/pressable-scale';
 import { RsvpCounts } from '@/components/rsvp-counts';
 import { ThemedText } from '@/components/themed-text';
@@ -29,12 +29,7 @@ export function FeaturedCard({ event, following, onPress, onToggleFollow }: Prop
       onPress={onPress}
       scaleTo={0.99}
       style={[styles.card, { borderColor: theme.border }, Glow.lift]}>
-      <Image
-        source={event.artist_image_url ? { uri: event.artist_image_url } : undefined}
-        style={StyleSheet.absoluteFill}
-        contentFit="cover"
-        transition={250}
-      />
+      <ArtistArt uri={event.artist_image_url} style={StyleSheet.absoluteFill} iconSize={44} />
       <LinearGradient
         colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.1)', theme.background]}
         locations={[0, 0.4, 1]}

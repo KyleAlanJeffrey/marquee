@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ArtistArt } from '@/components/artist-art';
 import { AttendanceCard } from '@/components/attendance-card';
 import { ErrorState } from '@/components/error-state';
 import { ReviewSection } from '@/components/review-section';
@@ -327,11 +328,7 @@ export default function EventScreen() {
           <PressableScale
             onPress={() => router.push(`/artist/${e.artist.id}`)}
             style={[styles.headliner, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
-            <Image
-              source={e.artist.image_url ? { uri: e.artist.image_url } : undefined}
-              style={[styles.headlinerImg, { backgroundColor: theme.backgroundHigh }]}
-              contentFit="cover"
-            />
+            <ArtistArt uri={e.artist.image_url} style={styles.headlinerImg} iconSize={22} />
             <View style={{ flex: 1 }}>
               <ThemedText type="labelSm" style={{ color: theme.cyan }}>
                 HEADLINER

@@ -1,8 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { ArtistArt } from '@/components/artist-art';
 import { PressableScale } from '@/components/pressable-scale';
 import { RsvpCounts } from '@/components/rsvp-counts';
 import { ThemedText } from '@/components/themed-text';
@@ -37,12 +37,7 @@ export function SecondaryEventCard({
         { backgroundColor: theme.backgroundElevated, borderColor: following ? theme.cyanEdge : theme.border },
       ]}>
       <PressableScale onPress={onPress} style={styles.main}>
-      <Image
-        source={event.artist_image_url ? { uri: event.artist_image_url } : undefined}
-        style={[styles.img, { backgroundColor: theme.backgroundHigh }]}
-        contentFit="cover"
-        transition={200}
-      />
+      <ArtistArt uri={event.artist_image_url} style={styles.img} iconSize={26} />
       <View style={styles.body}>
         <View style={styles.topRow}>
           <ThemedText type="labelSm" style={{ color: theme.primary, flex: 1 }} numberOfLines={1}>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { bitToEventInputs, bitUtc, bitVenueName, type BitArtist } from '../src/sources';
+import { bitImageUrl, bitToEventInputs, bitUtc, bitVenueName, type BitArtist } from '../src/sources';
 import fixture from './fixtures/bandsintown-events.json';
 
 // Recorded from rest.bandsintown.com (Wednesday, upcoming) so the mapping is
@@ -115,5 +115,26 @@ describe('bitToEventInputs', () => {
       { id: '9', datetime: '2026-08-01T20:00:00', title: '', venue: { name: 'The Independent', city: 'San Francisco' } },
     ]);
     expect(only.name).toBe('Wednesday @ The Independent');
+  });
+});
+
+describe('bitImageUrl', () => {
+  it('accepts a real artist photo', () => {
+    expect(bitImageUrl({ image_url: 'https://photos.bandsintown.com/large/12345678.jpeg' })).toBe(
+      'https://photos.bandsintown.com/large/12345678.jpeg',
+    );
+  });
+
+  it('rejects the stock silhouette Bandsintown sends for "no photo"', () => {
+    // Measured on production 2026-08-03: Lessa's payload carries exactly this.
+    expect(bitImageUrl({ image_url: 'https://photos.bandsintown.com/artistLarge.jpg' })).toBeNull();
+    expect(bitImageUrl({ image_url: 'https://photos.bandsintown.com/artistThumb.jpg' })).toBeNull();
+  });
+
+  it('rejects non-https and missing values', () => {
+    expect(bitImageUrl({ image_url: 'http://photos.bandsintown.com/large/1.jpg' })).toBeNull();
+    expect(bitImageUrl({ image_url: '' })).toBeNull();
+    expect(bitImageUrl({})).toBeNull();
+    expect(bitImageUrl(undefined)).toBeNull();
   });
 });
