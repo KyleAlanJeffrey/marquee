@@ -43,8 +43,12 @@ the follow feed, curated lists), each verified against local D1 with minted
 session tokens and the moderation loop demonstrated end-to-end on production.
 What's left is the residuals:
 
-1. [~] **Phase A residual** — no discovery surface: you reach a profile from
-   settings or a shared link, nothing else, until reviews put people on pages.
+1. [x] **Phase A residual closed** (Kyle, 2026-08-03) — people are now
+   findable: `GET /api/users/search` (name/handle, block-aware, escaped
+   LIKE, 2-char floor, 20-row cap) and a PEOPLE section on the search
+   screen; review rows were already linking authors to profiles. What's
+   left of discovery is *suggestion*, not lookup — "people who reviewed
+   this show" style rails, once there are enough people to suggest.
 2. [~] **Phase B residuals** — Kyle's end-to-end pass in the UI; a content
    *filter* beyond report/block/hide if store review demands one; and the store
    submission itself, which this phase shares a deadline with (guideline 1.2).
@@ -102,15 +106,22 @@ What's left is the residuals:
     production route is live (401s unauthenticated). Remaining trigger:
     likes on *lists* is what 0016 named for turning list deletion into a
     tombstone.
-    - [ ] One admin loose end: the likes batch (`813aa49`+`d60c3fe`) hasn't
-      had its CodeRabbit pass — the free CLI allowance rate-limited
-      (~00:50Z, 33-min reset). A re-run was queued in that session; if it
-      never reported, run `coderabbit review --agent -t committed --base
-      9e6f786` and judge the findings.
+    - [~] The likes batch's owed CodeRabbit pass is folded into the
+      2026-08-03 review (base `9e6f786`, which spans it plus people search
+      and the RSVP-count surfacing).
   - [x] **Feed placement** (`9e6f786`) — the follow feed now leads your own
     profile instead of sitting under the follower lists. A PEOPLE segment on
     Following stays open as the bolder option (Kyle's "what does follow
     mean" decision below).
+  - [x] **People search** (Kyle, 2026-08-03; `a964b09`) — see the phase A
+    residual above.
+  - [x] **RSVP counts on events** (Kyle, 2026-08-03; `b6a0704`) — every
+    event payload carries live going/interested counts; cards and the event
+    hero wear "2 GOING · 5 INTERESTED" in cyan, hidden at zero, upcoming
+    shows only. Next rung when the numbers justify it: *whose* faces —
+    "3 going, including @x" needs a join to public profiles and a privacy
+    read of docs/social.md first (RSVPs are public counts, private answers
+    today).
   - [ ] **Generated OG cards from R2** — per-entity share images; the
     highest-leverage share/SEO item left.
   - [ ] Delight tier: four favorite artists on profiles, list cover
