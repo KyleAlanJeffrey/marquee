@@ -33,7 +33,10 @@ export default function BrowseScreen() {
   const radiusMiles = parseRadius(params.radius);
   // Set when Browse was opened from a town in search, rather than from "near me".
   const town = scalar(params.town)?.trim().slice(0, 60) || null;
-  const q = useInfiniteNearby(coords, radiusMiles);
+  // Ranked by default: the long tail of unknown acts is most of the
+  // catalogue, and by-date order buried every show anyone has heard of.
+  const [sort, setSort] = useState<'featured' | 'date'>('featured');
+  const q = useInfiniteNearby(coords, radiusMiles, 12, sort);
 
   const [genre, setGenre] = useState(ALL);
   const [mode, setMode] = useState<'grid' | 'list'>('grid');
@@ -130,6 +133,32 @@ export default function BrowseScreen() {
                   {filtered.length}
                   {q.hasNextPage ? '+' : ''}
                 </ThemedText>
+              </View>
+              {/* Top billing, or everything by date — the ranked default and
+                  the flat list are the same shows, differently sorted. */}
+              <View style={styles.toggle}>
+                {(
+                  [
+                    { key: 'featured', label: 'TOP' },
+                    { key: 'date', label: 'BY DATE' },
+                  ] as const
+                ).map((s) => (
+                  <Pressable
+                    key={s.key}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: sort === s.key }}
+                    accessibilityLabel={
+                      s.key === 'featured' ? 'Rank notable shows first' : 'Show everything by date'
+                    }
+                    onPress={() => setSort(s.key)}
+                    style={[styles.toggleBtn, sort === s.key && { backgroundColor: theme.backgroundHigh }]}>
+                    <ThemedText
+                      type="labelSm"
+                      style={{ color: sort === s.key ? theme.primary : theme.textTertiary }}>
+                      {s.label}
+                    </ThemedText>
+                  </Pressable>
+                ))}
               </View>
               <View style={styles.toggle}>
                 {(['grid', 'list'] as const).map((m) => (

@@ -14,8 +14,8 @@ export const feed = new Hono<AppEnv>();
 // a query string puts them in every request log between here and the client. The
 // body carries them; logs see only the path.
 feed.post('/nearby', zValidator('json', nearbyQuery), async (c) => {
-  const { lat, lng, radius, limit, offset } = c.req.valid('json');
-  return c.json(await nearbyEvents(getDb(c.env.DB), lat, lng, radius, limit, offset));
+  const { lat, lng, radius, limit, offset, sort } = c.req.valid('json');
+  return c.json(await nearbyEvents(getDb(c.env.DB), lat, lng, radius, limit, offset, sort));
 });
 
 // Read: upcoming shows for the artists and venues held on the device. POST because

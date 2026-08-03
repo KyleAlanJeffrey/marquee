@@ -55,16 +55,22 @@ export function useNearbyEvents(coords: Coords | null, radiusMiles: number) {
   });
 }
 
-/** Paginated nearby shows for infinite scroll (Browse). */
-export function useInfiniteNearby(coords: Coords | null, radiusMiles: number, pageSize = 12) {
+/** Paginated nearby shows for infinite scroll (Browse). `featured` ranks the
+ *  notable acts first (server-side score); `date` is the flat list. */
+export function useInfiniteNearby(
+  coords: Coords | null,
+  radiusMiles: number,
+  pageSize = 12,
+  sort: 'featured' | 'date' = 'date',
+) {
   return useInfiniteQuery({
-    queryKey: ['nearby-infinite', coords, radiusMiles],
+    queryKey: ['nearby-infinite', coords, radiusMiles, sort],
     enabled: coords != null,
     initialPageParam: 0,
     queryFn: ({ pageParam }): Promise<Page<NearbyEvent>> =>
       apiPost(
         '/nearby',
-        { lat: coords!.lat, lng: coords!.lng, radius: radiusMiles, limit: pageSize, offset: pageParam },
+        { lat: coords!.lat, lng: coords!.lng, radius: radiusMiles, limit: pageSize, offset: pageParam, sort },
         { anonymous: true },
       ),
     getNextPageParam: (last) => last.nextCursor,

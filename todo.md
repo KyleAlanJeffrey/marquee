@@ -76,20 +76,23 @@ What's left is the residuals:
 
 ## P1 · Next
 
-- [ ] **Smarter ranking for area shows** (Kyle, 2026-08-03) — the nearby
-  feeds are full of small acts nobody knows, and the important shows drown.
-  Two halves:
-  - [ ] Bubble the notable shows to the top. Signals already in the
-    database, no new sources needed: artist has a Spotify id (enriched =
-    somebody looked), Ticketmaster-sourced (major venues/promoters), genre
-    presence, venue size proxy (how many shows the room hosts), RSVP counts,
-    review/rating volume, follower counts once there are users. Probably a
-    scored `ORDER BY` in `nearbyEvents` behind a `sort=featured` default
-    rather than a new endpoint. Decide the weights by measuring against a
-    city we know (what *should* rank in SF/NYC this month?).
-  - [ ] Keep the flat list reachable — an "everything, by date" toggle next
-    to the ranked default, because the long tail is also the point of the
-    catalogue.
+- [~] **Smarter ranking for area shows** (Kyle, 2026-08-03) — first cut
+  landed the same day: a `notability` score in `nearbyEvents` behind
+  `sort=featured` (TM id +3, Spotify id +2, image +1, genres +1, RSVPs up
+  to +6), coarse integer bands so date order still rules within a band.
+  Weights measured against production SF: the ranked top reads Toto / Tori
+  Amos / J. Cole / Noah Kahan / David Byrne / Childish Gambino where date
+  order read "Official Dailey & Vincent" and "Open Mic Night"; 187 id-less
+  long-tail rows sink. Browse defaults to TOP with a BY DATE toggle beside
+  the grid/list one. Residuals:
+  - [ ] A venue-scale signal — IVE at Oakland Arena scores the same 5 as a
+    club act with identical metadata; nothing in the database says "arena"
+    yet. Venue busyness (upcoming-show count per room) is the cheap proxy,
+    a capacity source the real one.
+  - [ ] Revisit weights when RSVPs/reviews have volume — the social term is
+    capped at +6 and should eventually dominate the metadata guesses.
+  - [ ] Explore's own rails (featured hero, Trending Nearby) still run on
+    date order — decide whether they switch to `sort=featured` too.
 
 - [~] **Social design pass** (Kyle, 2026-07-31) — the thinking is
   **[`docs/design-social.md`](docs/design-social.md)**; the slices, in the

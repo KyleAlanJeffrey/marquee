@@ -1,4 +1,4 @@
-import { and, between, desc, eq, gte, inArray, lt, lte, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, between, desc, eq, gte, inArray, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/sqlite-core';
 
 import { getDb, type DB } from './db';
@@ -162,6 +162,34 @@ const rsvpCounts = {
   rsvp_interested: sql<number>`(select count(*) from event_rsvps where event_id = ${events.id} and status = 'interested')`,
 };
 
+/**
+ * How much a show matters, coarsely — the ranked feed's ORDER BY.
+ *
+ * Weights were chosen by measuring production SF (45 days, 2026-08-03): under
+ * this score the top of the feed reads Toto, Tori Amos, J. Cole, Noah Kahan,
+ * David Byrne, Childish Gambino; under plain date order it read "Official
+ * Dailey & Vincent" and "Open Mic Night". The bands are deliberately coarse
+ * integers — 13 shows scored 6–7, 175 scored 5 (the Ticketmaster tier), 187
+ * scored ≤1 (the id-less long tail) — so within a band the order stays
+ * soonest-first and a headline show four months out doesn't bury tonight.
+ *
+ * Signals, strongest first, all already in the database: a Ticketmaster id
+ * (somebody sells real tickets through the majors), a Spotify id (enrichment
+ * ran, which today means somebody cared enough to open the page), an image
+ * and genres (realness proxies that cost nothing), and the RSVP counts —
+ * zero almost everywhere today, but it's the term that lets actual people
+ * outvote metadata as the social layer fills in.
+ */
+const notability = sql<number>`
+  (case when ${artists.ticketmasterId} is not null then 3 else 0 end)
+  + (case when ${artists.spotifyId} is not null then 2 else 0 end)
+  + (case when ${artists.imageUrl} is not null then 1 else 0 end)
+  + (case when ${artists.genres} is not null and ${artists.genres} != '[]' then 1 else 0 end)
+  + min((select count(*) * 2 from event_rsvps where event_id = ${events.id} and status = 'going')
+      + (select count(*) from event_rsvps where event_id = ${events.id} and status = 'interested'), 6)`;
+
+export type NearbySort = 'featured' | 'date';
+
 export async function nearbyEvents(
   db: DB,
   lat: number,
@@ -169,6 +197,7 @@ export async function nearbyEvents(
   radiusMiles: number,
   limit = 400,
   offset = 0,
+  sort: NearbySort = 'date',
 ) {
   const latDelta = radiusMiles / 69;
   const lngDelta = radiusMiles / (69 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
@@ -216,7 +245,9 @@ export async function nearbyEvents(
         between(venues.lng, lng - lngDelta, lng + lngDelta),
       ),
     )
-    .orderBy(events.startsAt)
+    // Featured: notable first, soonest within a band. Paging stays stable
+    // because the score is deterministic per row.
+    .orderBy(...(sort === 'featured' ? [desc(notability), asc(events.startsAt)] : [asc(events.startsAt)]))
     .limit(limit)
     .offset(offset);
 

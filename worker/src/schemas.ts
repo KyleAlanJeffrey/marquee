@@ -25,6 +25,9 @@ export const nearbyQuery = z.object({
   radius: z.coerce.number().positive().max(1000).optional().default(50),
   limit: z.coerce.number().int().positive().max(400).optional().default(400),
   offset: z.coerce.number().int().min(0).optional().default(0),
+  /** 'featured' ranks notable shows first (see `notability` in data.ts);
+   *  the default stays plain date order so existing consumers don't move. */
+  sort: z.enum(['featured', 'date']).optional().default('date'),
 });
 
 export const nearbyVenuesQuery = z.object({
