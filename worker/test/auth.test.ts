@@ -60,20 +60,30 @@ describe('callerFrom', () => {
     debug.mockRestore();
   });
 
-  it('never reports a caller without verifying a signature', async () => {
+  // Generous timeout on top: the SDK's retry backoff spends ~3s of the 5s
+  // default even with fetch stubbed, and this assertion must never lose to a
+  // clock.
+  it('never reports a caller without verifying a signature', { timeout: 15_000 }, async () => {
     // The shape of a real Clerk session token, with a plausible `sub`, unsigned.
     // If this ever returns a user id, verification has been bypassed.
     //
-    // Slow (~3s) because a well-formed header sends the SDK looking for the JWKS
-    // that matches its `kid`, and the fake secret key gets it nowhere. The result
-    // is the same offline — an unreachable JWKS is one more way not to verify —
-    // so this is a slow test rather than a flaky one.
+    // A well-formed header sends the SDK looking for the JWKS that matches its
+    // `kid`. Left alone that's a real network request to Clerk with a fake key
+    // — which made this test slow when the request failed fast and *flaky*
+    // when it dawdled past vitest's timeout (it failed five separate full runs
+    // before this stub). An unreachable JWKS is one more way not to verify, so
+    // fetch is pinned to fail immediately: same assertion, no network, no dice.
     const header = btoa(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: 'ins_x' }));
     const payload = btoa(JSON.stringify({ sub: 'user_2abcdef', exp: 4102444800 }));
     const forged = `${header}.${payload}.`;
     const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
-    const caller = await callerFrom(env({ CLERK_SECRET_KEY: 'sk_test_x' }), `Bearer ${forged}`);
-    expect(caller.userId).toBe(null);
-    debug.mockRestore();
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('no network in this test')));
+    try {
+      const caller = await callerFrom(env({ CLERK_SECRET_KEY: 'sk_test_x' }), `Bearer ${forged}`);
+      expect(caller.userId).toBe(null);
+    } finally {
+      vi.unstubAllGlobals();
+      debug.mockRestore();
+    }
   });
 });
