@@ -13,6 +13,10 @@ export type NearbyEvent = {
   artist_image_url: string | null;
   artist_spotify_id: string | null;
   artist_genres: string[];
+  /** Live going/interested counts — the social proof a card wears. Optional
+   *  because saved-show snapshots re-rendered as events never carry them. */
+  rsvp_going?: number;
+  rsvp_interested?: number;
   /** Our canonical venue id, so a followed venue can be matched against a show. */
   venue_id: string | null;
   venue_name: string | null;
@@ -62,6 +66,8 @@ export type ArtistEvent = {
   time_unknown: boolean;
   ticket_url: string | null;
   price_from: number | null;
+  rsvp_going?: number;
+  rsvp_interested?: number;
   venue_id: string | null;
   venue_name: string | null;
   venue_city: string | null;
@@ -77,6 +83,8 @@ export type EventDetail = {
   ticket_url: string | null;
   price_from: number | null;
   source: string;
+  rsvp_going: number;
+  rsvp_interested: number;
   artist: {
     id: string;
     name: string;
@@ -103,6 +111,8 @@ export type VenueEvent = {
   time_unknown: boolean;
   ticket_url: string | null;
   price_from: number | null;
+  rsvp_going?: number;
+  rsvp_interested?: number;
   artist_id: string;
   artist_name: string;
   artist_image_url: string | null;

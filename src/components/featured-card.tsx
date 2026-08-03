@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
+import { RsvpCounts } from '@/components/rsvp-counts';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -83,6 +84,7 @@ export function FeaturedCard({ event, following, onPress, onToggleFollow }: Prop
               {formatVenue(event.venue_name, event.venue_city, event.venue_region)}
             </ThemedText>
           </View>
+          <RsvpCounts going={event.rsvp_going} interested={event.rsvp_interested} />
         </View>
         <View style={styles.priceCol}>
           <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>

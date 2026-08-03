@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
+import { RsvpCounts } from '@/components/rsvp-counts';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -68,6 +69,7 @@ export function SecondaryEventCard({
             {formatVenue(event.venue_name, event.venue_city, event.venue_region)}
           </ThemedText>
         </View>
+        <RsvpCounts going={event.rsvp_going} interested={event.rsvp_interested} />
         {distance && (
           <View style={styles.bottomRow}>
             <View style={[styles.distChip, { backgroundColor: theme.cyanFill }]}>

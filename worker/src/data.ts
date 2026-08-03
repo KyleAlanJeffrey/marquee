@@ -149,6 +149,19 @@ export type ArtistIdentity = {
 
 // --- Reads (feed / detail) --------------------------------------------------
 
+/**
+ * Correlated going/interested counts for an event row — the social proof a
+ * card wears. Counted live off event_rsvps' primary key (plus its event_id
+ * index), never denormalised: same call as review likes, and at this volume
+ * count(*) is the truth for free. Deliberately absent from past-show reads —
+ * a count of people who *were going* reads as stale plans, and the log and
+ * reviews are the record of a night that happened.
+ */
+const rsvpCounts = {
+  rsvp_going: sql<number>`(select count(*) from event_rsvps where event_id = ${events.id} and status = 'going')`,
+  rsvp_interested: sql<number>`(select count(*) from event_rsvps where event_id = ${events.id} and status = 'interested')`,
+};
+
 export async function nearbyEvents(
   db: DB,
   lat: number,
@@ -176,6 +189,7 @@ export async function nearbyEvents(
       artist_image_url: artists.imageUrl,
       artist_spotify_id: artists.spotifyId,
       artist_genres: artists.genres,
+      ...rsvpCounts,
       // Everything the client sees comes from the canonical row, so a card, the
       // venue page it opens and /venues/nearby agree on which room this is and
       // where it is. The bounding box below still filters on the row the event is
@@ -373,6 +387,7 @@ export async function eventsByIds(db: DB, ids: string[]) {
         artist_image_url: artists.imageUrl,
         artist_spotify_id: artists.spotifyId,
         artist_genres: artists.genres,
+        ...rsvpCounts,
         venue_id: canon.id,
         venue_name: canon.name,
         venue_city: canon.city,
@@ -519,6 +534,7 @@ export async function followingEvents(
     artist_image_url: artists.imageUrl,
     artist_spotify_id: artists.spotifyId,
     artist_genres: artists.genres,
+    ...rsvpCounts,
     venue_id: canon.id,
     venue_name: canon.name,
     venue_city: canon.city,
@@ -664,6 +680,7 @@ export async function artistEvents(db: DB, id: string) {
       time_unknown: events.timeUnknown,
       ticket_url: events.ticketUrl,
       price_from: events.priceFrom,
+      ...rsvpCounts,
       venue_id: venues.id,
       venue_name: venues.name,
       venue_city: venues.city,
@@ -692,6 +709,7 @@ export async function eventById(db: DB, id: string) {
       ticket_url: events.ticketUrl,
       price_from: events.priceFrom,
       source: events.source,
+      ...rsvpCounts,
       a_id: artists.id,
       a_name: artists.name,
       a_spotify: artists.spotifyId,
@@ -723,6 +741,8 @@ export async function eventById(db: DB, id: string) {
     ticket_url: r.ticket_url,
     price_from: r.price_from,
     source: r.source,
+    rsvp_going: r.rsvp_going,
+    rsvp_interested: r.rsvp_interested,
     artist: {
       id: r.a_id,
       name: r.a_name,
@@ -1011,6 +1031,7 @@ export async function venueEvents(db: DB, id: string, limit = 20, offset = 0) {
       artist_name: artists.name,
       artist_image_url: artists.imageUrl,
       artist_genres: artists.genres,
+      ...rsvpCounts,
     })
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))

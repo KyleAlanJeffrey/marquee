@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
+import { RsvpCounts } from '@/components/rsvp-counts';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -54,6 +55,7 @@ export function ComingUpCard({ event, onPress }: { event: NearbyEvent; onPress: 
             {formatVenue(event.venue_name, event.venue_city, event.venue_region)}
           </ThemedText>
         </View>
+        <RsvpCounts going={event.rsvp_going} interested={event.rsvp_interested} />
         <View style={styles.footer}>
           <ThemedText type="smallBold" style={{ color: theme.cyan }}>
             {formatPrice(event.price_from)}

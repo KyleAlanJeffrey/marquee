@@ -16,6 +16,7 @@ import { GlassCard } from '@/components/glass-card';
 import { GradientButton } from '@/components/gradient-button';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
+import { RsvpCounts } from '@/components/rsvp-counts';
 import { StaticMap } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
@@ -205,6 +206,10 @@ export default function EventScreen() {
                 {formatVenue(e.venue?.name ?? null, e.venue?.city ?? null, e.venue?.region ?? null)}
               </ThemedText>
             </View>
+            {/* Social proof in the hero, upcoming shows only — for a past show
+                "3 were going" reads as stale plans, and the log below is the
+                record of the night that actually happened. */}
+            {!hasHappened && <RsvpCounts going={e.rsvp_going} interested={e.rsvp_interested} />}
           </View>
         </View>
 
