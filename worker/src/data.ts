@@ -364,6 +364,8 @@ export async function eventsByIds(db: DB, ids: string[]) {
     artist_image_url: string | null;
     artist_spotify_id: string | null;
     artist_genres: string | null;
+    rsvp_going: number;
+    rsvp_interested: number;
     venue_id: string | null;
     venue_name: string | null;
     venue_city: string | null;

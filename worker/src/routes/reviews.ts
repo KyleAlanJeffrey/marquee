@@ -167,6 +167,10 @@ reviewRoutes.put('/reviews/:id/like', async (c) => {
   const db = getDb(c.env.DB);
   const reviewId = c.req.param('id');
   if (!(await likeTarget(db, reviewId, userId))) return c.json({ error: 'not found' }, 404);
+  // Same as every other first write: the caller's mirror row may not exist
+  // yet (fresh account racing its own POST /me), and the like's foreign key
+  // needs it to.
+  await ensureUser(db, userId);
   await db
     .insert(reviewLikes)
     .values({ reviewId, userId, createdAt: nowIso() })

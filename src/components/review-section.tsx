@@ -41,6 +41,9 @@ function ReviewRow({ review, eventId, first }: { review: PublicReview; eventId: 
       if (!gate.pending) gate.deny('like reviews');
       return;
     }
+    // One mutation at a time per row: a second tap mid-flight would race the
+    // first and could land the heart out of order.
+    if (like.isPending) return;
     like.mutate({ reviewId: review.id, like: !review.likedByMe });
   };
 
@@ -78,7 +81,7 @@ function ReviewRow({ review, eventId, first }: { review: PublicReview; eventId: 
           haptic
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityState={{ selected: review.likedByMe }}
+          accessibilityState={{ selected: review.likedByMe, disabled: like.isPending }}
           accessibilityLabel={
             review.likedByMe ? 'Unlike this review' : `Like ${authorLabel(review)}'s review`
           }

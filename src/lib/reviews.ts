@@ -118,7 +118,9 @@ export function useLikeReview(eventId: string) {
         queryClient.setQueryData(key, {
           ...previous,
           reviews: previous.reviews.map((r) =>
-            r.id === reviewId
+            // No-op when the cache already agrees — moving the count anyway
+            // would double-step it on a repeated fire.
+            r.id === reviewId && r.likedByMe !== like
               ? { ...r, likedByMe: like, likeCount: Math.max(0, r.likeCount + (like ? 1 : -1)) }
               : r,
           ),
