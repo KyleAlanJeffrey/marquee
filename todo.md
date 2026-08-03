@@ -106,9 +106,12 @@ What's left is the residuals:
     production route is live (401s unauthenticated). Remaining trigger:
     likes on *lists* is what 0016 named for turning list deletion into a
     tombstone.
-    - [~] The likes batch's owed CodeRabbit pass is folded into the
-      2026-08-03 review (base `9e6f786`, which spans it plus people search
-      and the RSVP-count surfacing).
+    - [x] The likes batch's owed CodeRabbit pass ran 2026-08-03 (base
+      `9e6f786`, spanning it plus people search and RSVP-count surfacing):
+      four findings, all confirmed and fixed in `146b8d8` — ensureUser
+      before the like insert, tap-while-pending guard, optimistic no-op
+      when the cache already agrees, eventsByIds row type admitting the
+      counts.
   - [x] **Feed placement** (`9e6f786`) — the follow feed now leads your own
     profile instead of sitting under the follower lists. A PEOPLE segment on
     Following stays open as the bolder option (Kyle's "what does follow
