@@ -64,7 +64,9 @@ export function useInfiniteNearby(
   sort: 'featured' | 'date' = 'date',
 ) {
   return useInfiniteQuery({
-    queryKey: ['nearby-infinite', coords, radiusMiles, sort],
+    // pageSize is in the key because it's in the request: two callers with
+    // different page sizes must not share one pagination cache.
+    queryKey: ['nearby-infinite', coords, radiusMiles, sort, pageSize],
     enabled: coords != null,
     initialPageParam: 0,
     queryFn: ({ pageParam }): Promise<Page<NearbyEvent>> =>

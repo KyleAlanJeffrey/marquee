@@ -245,9 +245,15 @@ export async function nearbyEvents(
         between(venues.lng, lng - lngDelta, lng + lngDelta),
       ),
     )
-    // Featured: notable first, soonest within a band. Paging stays stable
-    // because the score is deterministic per row.
-    .orderBy(...(sort === 'featured' ? [desc(notability), asc(events.startsAt)] : [asc(events.startsAt)]))
+    // Featured: notable first, soonest within a band. The id tiebreak is what
+    // makes offset paging safe — equal score and equal start time is common
+    // (same-night club shows), and unspecified order across pages skips and
+    // duplicates rows, the same failure the feed cursor once had.
+    .orderBy(
+      ...(sort === 'featured'
+        ? [desc(notability), asc(events.startsAt), asc(events.id)]
+        : [asc(events.startsAt), asc(events.id)]),
+    )
     .limit(limit)
     .offset(offset);
 
