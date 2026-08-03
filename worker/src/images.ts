@@ -58,6 +58,30 @@ const urlHash = async (url: string): Promise<string> => {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
 };
 
+/** More hops than any real CDN uses; a chain longer than this is a game. */
+const MAX_REDIRECTS = 3;
+
+/**
+ * Fetch a URL following redirects manually, validating every hop against the
+ * allowlist before requesting it. Null means the chain left the list, looped
+ * too long, or a redirect arrived without a destination.
+ */
+const fetchWithinAllowlist = async (url: string): Promise<Response | null> => {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (!allowed(current)) return null;
+    const resp = await fetch(current, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      redirect: 'manual',
+    });
+    if (resp.status < 300 || resp.status >= 400) return resp;
+    const location = resp.headers.get('location');
+    if (!location) return null;
+    current = new URL(location, current).toString();
+  }
+  return null;
+};
+
 /**
  * Read a body up to `max` bytes, cancelling the moment it goes over. The
  * declared content-length is a hint, not a promise — a chunked response has
@@ -126,13 +150,11 @@ export async function artistImage(env: Env, artistId: string): Promise<Response 
       });
     }
 
-    const resp = await fetch(upstream, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      redirect: 'follow',
-    });
-    // A redirect chain that leaves the allowlist doesn't get its bytes stored
-    // under our name — resp.url is where the body actually came from.
-    if (!resp.ok || !allowed(resp.url)) return fallback();
+    // Redirects are walked by hand so every hop is checked *before* it is
+    // requested — with `redirect: 'follow'` an off-list target would already
+    // have been fetched by the time the final URL failed validation.
+    const resp = await fetchWithinAllowlist(upstream);
+    if (!resp || !resp.ok) return fallback();
     const contentType = resp.headers.get('content-type')?.split(';')[0].trim() ?? '';
     if (!contentType.startsWith('image/')) return fallback();
     const declared = Number(resp.headers.get('content-length') ?? '0');

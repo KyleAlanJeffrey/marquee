@@ -395,8 +395,19 @@ export function bitImageUrl(artist: unknown): string | null {
     typeof (artist as { image_url?: unknown })?.image_url === 'string'
       ? ((artist as { image_url: string }).image_url ?? '').trim()
       : '';
-  if (!/^https:\/\//.test(url)) return null;
-  if (/photos\.bandsintown\.com\/artist[A-Za-z]*\.(jpe?g|png|gif|webp)(\?|$)/i.test(url)) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:') return null;
+  if (
+    parsed.hostname === 'photos.bandsintown.com' &&
+    /^\/artist[A-Za-z]*\.(?:jpe?g|png|gif|webp)$/i.test(parsed.pathname)
+  ) {
+    return null;
+  }
   return url;
 }
 
