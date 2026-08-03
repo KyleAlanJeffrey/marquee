@@ -48,6 +48,19 @@ export function useProfile(key: string) {
   });
 }
 
+export type PersonSearchResult = PublicUser & { followers: number };
+
+/** Find people by name or handle. The server wants two characters minimum. */
+export function usePersonSearch(query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ['person-search', q.toLowerCase()] as const,
+    enabled: q.length >= 2,
+    queryFn: (): Promise<{ people: PersonSearchResult[] }> =>
+      apiGet(`/users/search?q=${encodeURIComponent(q)}`),
+  });
+}
+
 export function useFollowList(key: string, direction: 'followers' | 'following', enabled: boolean) {
   return useQuery({
     queryKey: followListKey(key, direction),

@@ -68,6 +68,67 @@ async function findByKey(db: DB, key: string) {
   return (await first()) ?? (await second()) ?? null;
 }
 
+/**
+ * Find people — the discovery surface phase A shipped without.
+ *
+ * Matches display name or handle (handles are null instance-wide until the
+ * handle policy lands, so names carry it today), live accounts only, and
+ * never across a block in either direction. Registered above `/:key` so the
+ * word "search" can't be shadowed by — or ever become — a profile key.
+ * Public like profiles are, but bounded: two characters minimum and twenty
+ * rows maximum, so it answers "find my friend", not "list the userbase".
+ */
+people.get('/search', async (c) => {
+  const db = getDb(c.env.DB);
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  const q = (c.req.query('q') ?? '').trim();
+  if (q.length < 2) return c.json({ people: [] });
+
+  // A literal search: % and _ in the query are characters, not wildcards.
+  const escaped = q.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+  const anywhere = `%${escaped}%`;
+  const prefix = `${escaped}%`;
+  const matches = (pattern: string) =>
+    sql`(lower(${users.displayName}) like lower(${pattern}) escape '\\'
+      or lower(${users.handle}) like lower(${pattern}) escape '\\')`;
+
+  const rows = await db
+    .select({
+      ...PUBLIC_FIELDS,
+      // Same alive-join rule as the profile counts: tombstones don't count.
+      followers: sql<number>`(
+        select count(*) from person_follows
+        inner join users followers on followers.id = person_follows.follower_id
+          and followers.deleted_at is null
+        where person_follows.followee_id = ${users.id}
+      )`,
+    })
+    .from(users)
+    .where(
+      and(
+        isNull(users.deletedAt),
+        matches(anywhere),
+        ...(userId
+          ? [
+              sql`not exists (
+                select 1 from user_blocks
+                where (blocker_id = ${userId} and blocked_id = ${users.id})
+                   or (blocker_id = ${users.id} and blocked_id = ${userId})
+              )`,
+            ]
+          : []),
+      ),
+    )
+    // Starts-with beats contains; ties read alphabetically.
+    .orderBy(
+      sql`case when ${matches(prefix)} then 0 else 1 end`,
+      sql`lower(coalesce(${users.displayName}, ${users.handle}, ''))`,
+    )
+    .limit(20);
+
+  return c.json({ people: rows });
+});
+
 people.get('/:key', async (c) => {
   const db = getDb(c.env.DB);
   const { userId } = await callerFrom(c.env, c.req.header('authorization'));

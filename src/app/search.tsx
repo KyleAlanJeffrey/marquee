@@ -14,6 +14,7 @@ import { Fonts, Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ensureArtist } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
+import { personLabel, usePersonSearch } from '@/lib/people';
 import { useArtistSearch, useTownSearch } from '@/hooks/queries';
 import type { ArtistSearchResult, Town } from '@/lib/types';
 
@@ -33,6 +34,7 @@ export default function SearchScreen() {
   const [opening, setOpening] = useState<string | null>(null);
   const search = useArtistSearch(query);
   const towns = useTownSearch(query);
+  const people = usePersonSearch(query);
 
   useEffect(() => {
     const t = setTimeout(() => setQuery(input), 350);
@@ -63,12 +65,13 @@ export default function SearchScreen() {
   }
 
   const townRows = towns.data ?? [];
+  const peopleRows = people.data?.people ?? [];
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <PageMeta
-        title="Find artists and towns"
-        description="Search millions of artists, or jump straight to the upcoming shows in any town."
+        title="Find artists, towns and people"
+        description="Search millions of artists, jump straight to the upcoming shows in any town, or find people to follow."
       />
       <View
         style={[
@@ -87,7 +90,7 @@ export default function SearchScreen() {
           onChangeText={setInput}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder="Artists or towns…"
+          placeholder="Artists, towns or people…"
           placeholderTextColor={theme.textTertiary}
           autoFocus
           autoCorrect={false}
@@ -139,7 +142,45 @@ export default function SearchScreen() {
                 ))}
               </View>
             )}
-            {query.length >= 2 && townRows.length > 0 && (
+            {peopleRows.length > 0 && (
+              <View style={styles.section}>
+                <ThemedText type="label" style={{ color: theme.textTertiary }}>
+                  PEOPLE
+                </ThemedText>
+                {peopleRows.map((p) => (
+                  <PressableScale
+                    key={p.id}
+                    haptic={false}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${personLabel(p)}'s profile`}
+                    onPress={() => router.push(`/user/${encodeURIComponent(p.handle ?? p.id)}`)}
+                    style={styles.townRow}>
+                    {p.avatarUrl ? (
+                      <Image
+                        source={{ uri: p.avatarUrl }}
+                        style={[styles.personAvatar, { backgroundColor: theme.backgroundElevated }]}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={[styles.townIcon, { backgroundColor: theme.backgroundElevated }]}>
+                        <Ionicons name="person" size={18} color={theme.primary} />
+                      </View>
+                    )}
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <ThemedText type="smallBold" numberOfLines={1}>
+                        {personLabel(p)}
+                      </ThemedText>
+                      <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                        {p.handle && p.displayName ? `@${p.handle} · ` : ''}
+                        {p.followers} {p.followers === 1 ? 'follower' : 'followers'}
+                      </ThemedText>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+                  </PressableScale>
+                ))}
+              </View>
+            )}
+            {query.length >= 2 && (townRows.length > 0 || peopleRows.length > 0) && (
               <View style={styles.section}>
                 <ThemedText type="label" style={{ color: theme.textTertiary }}>
                   ARTISTS
@@ -156,7 +197,7 @@ export default function SearchScreen() {
             <ThemedText themeColor="textSecondary" style={styles.hint}>
               {query.length >= 2 && search.isFetched
                 ? `No artists found for “${query}”.`
-                : 'Search artists and towns — follow the acts you love to spotlight their shows near you.'}
+                : 'Search artists, towns and people — follow the acts you love to spotlight their shows near you, and the friends whose nights you want to see.'}
             </ThemedText>
           )
         }
@@ -232,6 +273,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  personAvatar: { width: 40, height: 40, borderRadius: Radius.pill },
   hint: { textAlign: 'center', padding: Spacing.five },
   row: {
     flexDirection: 'row',
