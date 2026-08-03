@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { apiDelete, apiGet, apiPost } from '@/lib/api';
+import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 /**
@@ -22,9 +22,13 @@ export type PublicUser = {
   createdAt: string;
 };
 
+export type FavoriteArtist = { id: string; name: string; imageUrl: string | null };
+
 export type Profile = {
   user: PublicUser;
   counts: { followers: number; following: number };
+  /** Up to four artists, in the owner's order — the profile's signature. */
+  favorites: FavoriteArtist[];
   /** Null when the request went out signed out. */
   viewer: { following: boolean; isSelf: boolean; blocked: boolean } | null;
 };
@@ -45,6 +49,15 @@ export function useProfile(key: string) {
     queryKey: profileKey(key),
     enabled: !!key,
     queryFn: (): Promise<Profile> => apiGet(`/users/${encodeURIComponent(key)}`),
+  });
+}
+
+/** Replace the favorites strip wholesale (at most four; the server re-checks). */
+export function useSetFavorites(key: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (artistIds: string[]) => apiPut('/me/favorites', { artistIds }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: profileKey(key) }),
   });
 }
 

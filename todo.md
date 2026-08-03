@@ -76,6 +76,21 @@ What's left is the residuals:
 
 ## P1 · Next
 
+- [ ] **Smarter ranking for area shows** (Kyle, 2026-08-03) — the nearby
+  feeds are full of small acts nobody knows, and the important shows drown.
+  Two halves:
+  - [ ] Bubble the notable shows to the top. Signals already in the
+    database, no new sources needed: artist has a Spotify id (enriched =
+    somebody looked), Ticketmaster-sourced (major venues/promoters), genre
+    presence, venue size proxy (how many shows the room hosts), RSVP counts,
+    review/rating volume, follower counts once there are users. Probably a
+    scored `ORDER BY` in `nearbyEvents` behind a `sort=featured` default
+    rather than a new endpoint. Decide the weights by measuring against a
+    city we know (what *should* rank in SF/NYC this month?).
+  - [ ] Keep the flat list reachable — a "everything, by date" toggle next
+    to the ranked default, because the long tail is also the point of the
+    catalogue.
+
 - [~] **Social design pass** (Kyle, 2026-07-31) — the thinking is
   **[`docs/design-social.md`](docs/design-social.md)**; the slices, in the
   order the doc argues for:
@@ -137,8 +152,12 @@ What's left is the residuals:
     today).
   - [ ] **Generated OG cards from R2** — per-entity share images; the
     highest-leverage share/SEO item left.
-  - [ ] Delight tier: four favorite artists on profiles, list cover
-    collages, year-in-review stats.
+  - [x] **Four favorites** (2026-08-03) — migration 0019, `PUT
+    /api/me/favorites` (max four, ids checked against the artists table,
+    unknown ids drop out), resolved tiles on every profile GET, and a strip
+    under the profile header with an owner-side picker over followed
+    artists. Verified end-to-end against local D1 with a minted session.
+  - [ ] Delight tier remainder: list cover collages, year-in-review stats.
   - User gig photos stay parked behind Kyle's moderation decision.
 - [x] **Folder-structure audit** (Kyle, 2026-07-31) — done the same day. The
   real offender was `src/lib/hooks.ts`: 19 catalogue-query hooks in a file

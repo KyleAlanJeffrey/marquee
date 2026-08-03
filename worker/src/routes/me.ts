@@ -1,12 +1,12 @@
 import { zValidator } from '@hono/zod-validator';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { callerFrom, deleteAccount, ensureUser, findUser, syncProfileFromClerk } from '../auth';
 import { getDb } from '../db';
-import { users } from '../schema';
+import { artists, users } from '../schema';
 import type { AppEnv } from '../env';
-import { prefsBody } from '../schemas';
+import { favoritesBody, prefsBody } from '../schemas';
 
 /**
  * Who am I, according to the server.
@@ -97,6 +97,35 @@ me.post('/ensure', async (c) => {
  * has to mean "leave it" rather than "clear it", which is why the set object is built
  * conditionally instead of spread wholesale.
  */
+/**
+ * The profile's four favorites — the acts the profile leads with.
+ *
+ * The whole list arrives each time (it is at most four items; a patch protocol
+ * would be more code than the data). Ids are deduplicated preserving order and
+ * checked against the artists table, so a stale or invented id can't wedge a
+ * broken tile onto a public profile — unknown ids just drop out.
+ */
+me.put('/favorites', zValidator('json', favoritesBody), async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+  const db = getDb(c.env.DB);
+  await ensureUser(db, userId);
+  const requested = [...new Set(c.req.valid('json').artistIds)];
+  const known = requested.length
+    ? new Set(
+        (
+          await db.select({ id: artists.id }).from(artists).where(inArray(artists.id, requested))
+        ).map((r) => r.id),
+      )
+    : new Set<string>();
+  const kept = requested.filter((id) => known.has(id));
+  await db
+    .update(users)
+    .set({ favoriteArtists: kept.length ? JSON.stringify(kept) : null })
+    .where(eq(users.id, userId));
+  return c.json({ ok: true, artistIds: kept });
+});
+
 me.put('/prefs', zValidator('json', prefsBody), async (c) => {
   const { userId } = await callerFrom(c.env, c.req.header('authorization'));
   if (!userId) return c.json({ error: 'sign in required' }, 401);

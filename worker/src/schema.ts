@@ -200,6 +200,9 @@ export const users = sqliteTable('users', {
   radiusMiles: integer('radius_miles'),
   /** SQLite has no boolean: 0 or 1, null for never asked. */
   remindersEnabled: integer('reminders_enabled'),
+  /** Up to four artist ids as a JSON array — the profile's favorites strip.
+   *  Public by intent, unlike the prefs above; see migration 0019. */
+  favoriteArtists: text('favorite_artists'),
 });
 // No index block: the one handles have is `users_handle_idx`, partial and on
 // `lower(handle)`, which Drizzle can't express — same as `artists_name_folded_idx`.

@@ -1,11 +1,11 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { callerFrom, ensureUser, syncProfileFromClerk } from '../auth';
 import { nowIso } from '../data';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
-import { events, personFollows, reviews, userBlocks, users } from '../schema';
+import { artists, events, personFollows, reviews, userBlocks, users } from '../schema';
 import { listsOf } from './curated';
 import { blockedEitherWay } from './reviews';
 
@@ -196,11 +196,40 @@ people.get('/:key', async (c) => {
       followers: await countWhere(eq(personFollows.followeeId, person.id), personFollows.followerId),
       following: await countWhere(eq(personFollows.followerId, person.id), personFollows.followeeId),
     },
+    favorites: await favoritesOf(db, person.id),
     viewer: userId
       ? { following: viewerFollows, isSelf: userId === person.id, blocked: viewerBlocked }
       : null,
   });
 });
+
+/**
+ * The profile's four favorites, resolved to tiles in their stored order. An
+ * artist the catalogue has since lost simply drops out — the strip renders
+ * what still exists, never a broken tile.
+ */
+async function favoritesOf(db: DB, userId: string) {
+  const row = await db
+    .select({ favoriteArtists: users.favoriteArtists })
+    .from(users)
+    .where(eq(users.id, userId))
+    .get();
+  const ids: string[] = (() => {
+    try {
+      const v = JSON.parse(row?.favoriteArtists ?? 'null');
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string').slice(0, 4) : [];
+    } catch {
+      return [];
+    }
+  })();
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select({ id: artists.id, name: artists.name, imageUrl: artists.imageUrl })
+    .from(artists)
+    .where(inArray(artists.id, ids));
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return ids.flatMap((id) => byId.get(id) ?? []);
+}
 
 /**
  * Their public reviews — the profile's content, and the reason profiles exist.

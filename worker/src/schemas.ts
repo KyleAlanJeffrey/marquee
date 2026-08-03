@@ -266,6 +266,11 @@ export const reportResolveBody = z.object({
   action: z.enum(['hide', 'keep']),
 });
 
+/** Up to four favorite artists, in display order. Empty clears the strip. */
+export const favoritesBody = z.object({
+  artistIds: z.array(z.string().min(1).max(64)).max(4),
+});
+
 export const prefsBody = z
   .object({
     radiusMiles: z.number().int().min(1).max(1000).optional(),

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { ArtistArt } from '@/components/artist-art';
 import { ErrorState } from '@/components/error-state';
 import { FollowButton } from '@/components/follow-button';
 import { GlassCard } from '@/components/glass-card';
@@ -13,8 +14,17 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api';
 import { StarRating } from '@/components/star-rating';
+import { useFollows } from '@/lib/follows-store';
 import { formatEventDate } from '@/lib/format';
-import { personLabel, useFollowList, useFollowPerson, useProfile, type PublicUser } from '@/lib/people';
+import {
+  personLabel,
+  useFollowList,
+  useFollowPerson,
+  useProfile,
+  useSetFavorites,
+  type FavoriteArtist,
+  type PublicUser,
+} from '@/lib/people';
 import { usePersonLists } from '@/lib/curated';
 import { useBlockPerson, useFeed, useProfileReviews } from '@/lib/reviews';
 import { useWriteGate } from '@/lib/write-gate';
@@ -40,6 +50,164 @@ function joinedLine(iso: string): string {
   // In UTC, matching the stamp: a July 1st account read from west of Greenwich
   // would otherwise say June.
   return `On Marquee since ${d.toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })}`;
+}
+
+/**
+ * The four favorites — Letterboxd's signature, worn under the header. Anyone
+ * sees the strip; the owner gets an EDIT toggle that opens a picker over the
+ * artists they follow (the only sensible shortlist — favorites you don't even
+ * follow would be a strange flex, and following is one tap away).
+ */
+function FavoritesStrip({
+  profileKey,
+  favorites,
+  isSelf,
+}: {
+  profileKey: string;
+  favorites: FavoriteArtist[];
+  isSelf: boolean;
+}) {
+  const theme = useTheme();
+  const { follows } = useFollows();
+  const save = useSetFavorites(profileKey);
+  const [editing, setEditing] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+
+  // Only follows the catalogue can name — a Spotify-only follow has no artist
+  // id yet, and favorites are stored by ours.
+  const candidates = follows.filter((f): f is typeof f & { artistId: string } => !!f.artistId);
+
+  if (!isSelf && favorites.length === 0) return null;
+
+  const openEditor = () => {
+    setPicked(favorites.map((f) => f.id));
+    setEditing(true);
+  };
+
+  const togglePick = (id: string) =>
+    setPicked((cur) =>
+      cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < 4 ? [...cur, id] : cur,
+    );
+
+  return (
+    <GlassCard style={styles.favCard}>
+      <View style={styles.favHead}>
+        <ThemedText type="label" style={{ color: theme.primary, flex: 1 }}>
+          {`FAVORITES${favorites.length ? ` · ${favorites.length}` : ''}`}
+        </ThemedText>
+        {isSelf && !editing && (
+          <PressableScale
+            haptic={false}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Edit your four favorite artists"
+            onPress={openEditor}>
+            <ThemedText type="labelSm" themeColor="textSecondary">
+              EDIT
+            </ThemedText>
+          </PressableScale>
+        )}
+      </View>
+
+      {editing ? (
+        <View style={styles.favEditor}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Pick up to four from the artists you follow.
+          </ThemedText>
+          {candidates.length === 0 ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              You aren&rsquo;t following anyone the catalogue knows yet — follow some artists
+              first.
+            </ThemedText>
+          ) : (
+            <View style={styles.favPickGrid}>
+              {candidates.map((f) => {
+                const on = picked.includes(f.artistId);
+                return (
+                  <PressableScale
+                    key={f.artistId}
+                    haptic
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                    accessibilityLabel={
+                      on ? `Remove ${f.name} from favorites` : `Add ${f.name} to favorites`
+                    }
+                    onPress={() => togglePick(f.artistId)}
+                    style={[
+                      styles.favPick,
+                      { borderColor: on ? theme.primaryEdge : theme.border },
+                      on && { backgroundColor: theme.primaryFill },
+                    ]}>
+                    <ThemedText
+                      type="labelSm"
+                      numberOfLines={1}
+                      style={{ color: on ? theme.primary : theme.textSecondary }}>
+                      {on ? `${picked.indexOf(f.artistId) + 1} · ` : ''}
+                      {f.name.toUpperCase()}
+                    </ThemedText>
+                  </PressableScale>
+                );
+              })}
+            </View>
+          )}
+          {save.isError && (
+            <ThemedText type="labelSm" style={{ color: theme.error }}>
+              COULDN&rsquo;T SAVE — TRY AGAIN
+            </ThemedText>
+          )}
+          <View style={styles.favEditorButtons}>
+            <PressableScale
+              haptic
+              accessibilityRole="button"
+              accessibilityLabel="Save your favorites"
+              onPress={() =>
+                save.mutate(picked, { onSuccess: () => setEditing(false) })
+              }
+              style={[styles.favBtn, { borderColor: theme.primaryEdge, backgroundColor: theme.primaryFill }]}>
+              <ThemedText type="labelSm" style={{ color: theme.primary }}>
+                {save.isPending ? 'SAVING…' : 'SAVE'}
+              </ThemedText>
+            </PressableScale>
+            <PressableScale
+              haptic={false}
+              accessibilityRole="button"
+              accessibilityLabel="Stop editing favorites"
+              onPress={() => setEditing(false)}
+              style={[styles.favBtn, { borderColor: theme.border }]}>
+              <ThemedText type="labelSm" themeColor="textSecondary">
+                CANCEL
+              </ThemedText>
+            </PressableScale>
+          </View>
+        </View>
+      ) : favorites.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Four artists, your call. This is the first thing people see.
+        </ThemedText>
+      ) : (
+        <View style={styles.favRow}>
+          {favorites.map((f) => (
+            <PressableScale
+              key={f.id}
+              haptic={false}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${f.name}`}
+              onPress={() => router.push(`/artist/${f.id}`)}
+              style={styles.favTile}>
+              <ArtistArt uri={f.imageUrl} style={styles.favArt} iconSize={22} />
+              <ThemedText type="labelSm" numberOfLines={1} style={{ color: theme.textSecondary }}>
+                {f.name}
+              </ThemedText>
+            </PressableScale>
+          ))}
+          {/* Fillers keep three favorites from stretching poster-wide. */}
+          {Array.from({ length: 4 - favorites.length }, (_, i) => (
+            <View key={`fill-${i}`} style={styles.favTile} />
+          ))}
+        </View>
+      )}
+    </GlassCard>
+  );
 }
 
 function PersonRow({ person }: { person: PublicUser }) {
@@ -177,6 +345,9 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
           </PressableScale>
         )}
       </GlassCard>
+
+      {/* Four favorites, straight under the name — the profile's signature. */}
+      <FavoritesStrip profileKey={profileKey} favorites={profile.data.favorites ?? []} isSelf={isSelf} />
 
       {/* The feed — what the people you follow have been to lately. Yours only,
           first thing on your own profile: it's the reason to open the tab
@@ -390,6 +561,28 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
 const styles = StyleSheet.create({
   stack: { gap: Spacing.three },
   headerCard: { alignItems: 'center', gap: Spacing.two, padding: Spacing.four },
+  favCard: { gap: Spacing.two, padding: Spacing.three },
+  favHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  favRow: { flexDirection: 'row', gap: Spacing.two },
+  // Capped: flex alone lets four tiles swallow a desktop row poster-sized.
+  favTile: { flex: 1, maxWidth: 132, gap: 4 },
+  favArt: { aspectRatio: 1, borderRadius: Radius.sm, overflow: 'hidden' },
+  favEditor: { gap: Spacing.two },
+  favPickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one + 2 },
+  favPick: {
+    paddingHorizontal: Spacing.two + 2,
+    paddingVertical: Spacing.one + 2,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    maxWidth: '100%',
+  },
+  favEditorButtons: { flexDirection: 'row', gap: Spacing.two },
+  favBtn: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.one + 2,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
   avatar: { width: 88, height: 88, borderRadius: 44 },
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   tabsRow: { flexDirection: 'row', gap: Spacing.two },
