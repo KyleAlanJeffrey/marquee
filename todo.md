@@ -118,6 +118,16 @@ What's left is the residuals:
     mean" decision below).
   - [x] **People search** (Kyle, 2026-08-03; `a964b09`) — see the phase A
     residual above.
+  - [x] **Blank artist images** (Kyle, 2026-08-03; `8598964`) — measured:
+    4,447/6,050 artists imageless; 2,152 of 2,208 Bandsintown-linked ones
+    were blank because the crawl held a photo in every payload and never
+    wrote it. Now backfilled fill-if-null at `rememberBitIdentity` (stock
+    silhouettes at `photos.bandsintown.com/artist<Size>.jpg` filtered — a
+    "no photo" wearing a URL), closing organically as the 15-min crawls
+    re-sweep; watch the imageless count fall. Cards draw a designed
+    musical-notes tile (`ArtistArt`) instead of an empty box for the rest.
+    Residual: the ~570 id-less artists with no BIT identity stay imageless
+    until enrichment or a SeatGeek re-sweep names them.
   - [x] **RSVP counts on events** (Kyle, 2026-08-03; `b6a0704`) — every
     event payload carries live going/interested counts; cards and the event
     hero wear "2 GOING · 5 INTERESTED" in cyan, hidden at zero, upcoming
