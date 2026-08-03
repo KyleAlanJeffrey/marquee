@@ -80,7 +80,12 @@ function FavoritesStrip({
   if (!isSelf && favorites.length === 0) return null;
 
   const openEditor = () => {
-    setPicked(favorites.map((f) => f.id));
+    // Seed only with ids the picker can actually show — a favorite you've
+    // since unfollowed would otherwise hold a slot as an invisible,
+    // un-unpickable chip. (It stays on the strip until you save.)
+    const known = new Set(candidates.map((f) => f.artistId));
+    setPicked(favorites.map((f) => f.id).filter((id) => known.has(id)));
+    save.reset();
     setEditing(true);
   };
 
@@ -161,7 +166,7 @@ function FavoritesStrip({
               accessibilityRole="button"
               accessibilityLabel="Save your favorites"
               onPress={() =>
-                save.mutate(picked, { onSuccess: () => setEditing(false) })
+                !save.isPending && save.mutate(picked, { onSuccess: () => setEditing(false) })
               }
               style={[styles.favBtn, { borderColor: theme.primaryEdge, backgroundColor: theme.primaryFill }]}>
               <ThemedText type="labelSm" style={{ color: theme.primary }}>
@@ -192,7 +197,7 @@ function FavoritesStrip({
               haptic={false}
               accessibilityRole="button"
               accessibilityLabel={`Open ${f.name}`}
-              onPress={() => router.push(`/artist/${f.id}`)}
+              onPress={() => router.push(`/artist/${encodeURIComponent(f.id)}`)}
               style={styles.favTile}>
               <ArtistArt uri={f.imageUrl} style={styles.favArt} iconSize={22} />
               <ThemedText type="labelSm" numberOfLines={1} style={{ color: theme.textSecondary }}>

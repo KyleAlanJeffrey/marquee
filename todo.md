@@ -87,7 +87,7 @@ What's left is the residuals:
     scored `ORDER BY` in `nearbyEvents` behind a `sort=featured` default
     rather than a new endpoint. Decide the weights by measuring against a
     city we know (what *should* rank in SF/NYC this month?).
-  - [ ] Keep the flat list reachable — a "everything, by date" toggle next
+  - [ ] Keep the flat list reachable — an "everything, by date" toggle next
     to the ranked default, because the long tail is also the point of the
     catalogue.
 
