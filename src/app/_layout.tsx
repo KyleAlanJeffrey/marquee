@@ -106,12 +106,10 @@ export default function RootLayout() {
                       headerTitleStyle: { fontFamily: Fonts.headlineMd, color: theme.text },
                     }}
                   />
-                  <Stack.Screen name="artist/[id]" />
-                  <Stack.Screen name="event/[id]" />
-                  <Stack.Screen name="venue/[id]" />
-                  <Stack.Screen name="user/[key]" />
-                  <Stack.Screen name="list/[id]" />
-                  <Stack.Screen name="browse" />
+                  {/* The content pages (event, artist, venue, user, list,
+                      browse, map) live inside (tabs) so the bottom bar stays
+                      put — see the tab layout. Only the two modals remain
+                      out here. */}
                 </Stack>
               )}
               {!fontsLoaded && <View style={{ flex: 1, backgroundColor: theme.background }} />}

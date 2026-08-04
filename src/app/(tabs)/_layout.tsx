@@ -9,6 +9,11 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      // Walk the visit history on back. The default treats every navigation
+      // between tab-navigator screens as a jump with no way back, which
+      // turned every detail page's chevron into "go to Explore" the moment
+      // the detail routes moved in here.
+      backBehavior="history"
       screenOptions={{
         headerShown: false,
         // Opaque so switching tabs repaints cleanly on web (no bleed-through).
@@ -72,6 +77,18 @@ export default function TabsLayout() {
           ),
         }}
       />
+      {/* The detail pages live inside the tab navigator so the bottom bar
+          never drops out — an app that loses its chrome on every tap reads as
+          a website. `href: null` keeps them out of the bar itself, and the
+          group segment keeps them off the URL, so /event/[id] et al stay the
+          exact paths the sitemap and every shared link already use. */}
+      <Tabs.Screen name="artist/[id]" options={{ href: null }} />
+      <Tabs.Screen name="event/[id]" options={{ href: null }} />
+      <Tabs.Screen name="venue/[id]" options={{ href: null }} />
+      <Tabs.Screen name="user/[key]" options={{ href: null }} />
+      <Tabs.Screen name="list/[id]" options={{ href: null }} />
+      <Tabs.Screen name="browse" options={{ href: null }} />
+      <Tabs.Screen name="map" options={{ href: null }} />
     </Tabs>
   );
 }

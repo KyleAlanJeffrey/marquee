@@ -76,6 +76,22 @@ What's left is the residuals:
 
 ## P1 · Next
 
+- [ ] **Split the Workers** (Kyle, 2026-08-04) — the primary worker keeps the
+  website and its API; everything else moves to a second worker. What "else"
+  is today: the 15-minute Bandsintown crawl + frontier expansion (the cron),
+  Ticketmaster/SeatGeek discovery sweeps, artist enrichment, IndexNow
+  submissions, and the admin repair endpoints. Why it's worth it: the crawl
+  shares the serving worker's CPU/subrequest budgets (already a watch item
+  under Event coverage), a bad deploy of ingestion code shouldn't take the
+  site down (and vice versa), and the two change at different speeds. Shape:
+  one repo, two `wrangler.jsonc`s (or one config with `environments`), both
+  bound to the same D1/R2; the cron trigger and `sources.ts`/`crawl.ts`
+  move to `marquee-jobs`; admin routes go with the jobs (rotate ADMIN_TOKEN
+  in the same move — it's on the operational list anyway). Needs a second
+  Workers Builds pipeline or a deploy script that pushes both. Decide
+  whether /img mirroring counts as "website" (it serves requests — it
+  stays) vs the mirror *writes* (they can stay too; they're request-driven).
+
 - [~] **Smarter ranking for area shows** (Kyle, 2026-08-03) — first cut
   landed the same day: a `notability` score in `nearbyEvents` behind
   `sort=featured` (TM id +3, Spotify id +2, image +1, genres +1, RSVPs up
