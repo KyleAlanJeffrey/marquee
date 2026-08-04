@@ -245,6 +245,15 @@ What's left is the residuals:
 
 ## P2 · Later
 
+**Event pages:**
+
+- [ ] Decide what a *past* event page leads with. CodeRabbit flagged that the
+  LIVE EVENT badge, ticket links and the sticky Buy Tickets bar still render
+  after the show — deliberately unchanged in the tab-bar pass because it's a
+  product call, not a bug: the log card already leads past pages, but a dead
+  CTA under it reads sloppy. Probably: swap the buy bar for "log this show"
+  and keep the resale link off past pages.
+
 **Venue pages** (what's left after `ea978b9`):
 
 - [ ] Showbox SoDo keeps "The Showbox" — differently-named sibling rooms 2.3 km

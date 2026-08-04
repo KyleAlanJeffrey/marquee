@@ -697,7 +697,9 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.three,
-    backgroundColor: '#131313',
+    // The theme's background, not a lookalike literal that drifts when the
+    // palette moves.
+    backgroundColor: Colors.dark.background,
   },
   buyFade: { position: 'absolute', top: -Spacing.five, left: 0, right: 0, height: Spacing.five },
   buyContent: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two + 2 },

@@ -42,7 +42,17 @@ export default function ListScreen() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
 
-  if (list.isLoading || !id) {
+  // A missing id can't load, ever — a spinner would just spin. In practice
+  // the router can't reach this screen without one, so this is a guard for
+  // hand-typed URLs, and it answers like the sibling routes do.
+  if (!id) {
+    return (
+      <View style={styles.center}>
+        <ErrorState message="No list named. Open a list from a profile, or from your own." />
+      </View>
+    );
+  }
+  if (list.isLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={theme.primary} />
@@ -185,6 +195,9 @@ export default function ListScreen() {
                             item.note ? `Edit your note on ${item.name}` : `Add a note to ${item.name}`
                           }
                           onPress={() => {
+                            // A fresh editor starts clean — an error from a
+                            // move or another row's save is not this note's.
+                            updateItem.reset();
                             setEditingKey(editing ? null : key);
                             setDraft(item.note ?? '');
                           }}

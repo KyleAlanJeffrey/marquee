@@ -63,7 +63,13 @@ export default function MapScreen() {
   const markersRef = useRef<any[]>([]);
   const fittedRef = useRef(false);
   const [ready, setReady] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
+  // The failure is stored *with the location it belongs to* and derived from
+  // there, rather than as a sticky boolean: a transient GL failure used to
+  // outlive a location change with no way back — the fallback branch never
+  // mounts the container, so no effect could ever run to reset it.
+  const [failedFor, setFailedFor] = useState<string | null>(null);
+  const coordsKey = coords ? `${coords.lat},${coords.lng}` : null;
+  const loadFailed = failedFor !== null && failedFor === coordsKey;
   // The selection is stored by key and resolved from the current groups, so a
   // venue that drops out of the feed closes the sheet on its own.
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -128,13 +134,13 @@ export default function MapScreen() {
         // — GL also emits 'error' for a single missing tile on a live map.
         map.on('error', (e: { error?: Error }) => {
           console.warn('mapbox error:', e?.error ?? e);
-          if (!cancelled && !styled) setLoadFailed(true);
+          if (!cancelled && !styled) setFailedFor(coordsKey);
         });
         map.on('click', () => setSelectedKey(null));
       })
       .catch(() => {
         // GL couldn't load (offline, blocked CDN) — fall back to the list.
-        if (!cancelled) setLoadFailed(true);
+        if (!cancelled) setFailedFor(coordsKey);
       });
     return () => {
       cancelled = true;
@@ -226,7 +232,11 @@ export default function MapScreen() {
             <ThemedText type="title" numberOfLines={1} style={{ flex: 1, fontSize: 18 }}>
               {selected.name}
             </ThemedText>
-            <PressableScale haptic={false} onPress={() => setSelectedKey(null)}>
+            <PressableScale
+              haptic={false}
+              accessibilityRole="button"
+              accessibilityLabel="Close the venue details"
+              onPress={() => setSelectedKey(null)}>
               <Ionicons name="close" size={20} color={theme.textTertiary} />
             </PressableScale>
           </View>

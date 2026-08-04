@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
@@ -55,10 +55,21 @@ export default function BrowseScreen() {
   const feature = filtered[0];
   const rest = filtered.slice(1);
 
-  // Keep pulling pages until the (possibly genre-filtered) list fills a screen.
+  // Keep pulling pages until the (possibly genre-filtered) list fills a
+  // screen — but bounded: a rare genre in a big city would otherwise chain
+  // right through the whole catalogue one page at a time. The counter resets
+  // when the filter changes, because a new filter is a new question.
+  const autoFetches = useRef(0);
   useEffect(() => {
-    if (q.hasNextPage && !q.isFetchingNextPage && rest.length < 8) q.fetchNextPage();
-  }, [q, rest.length]);
+    autoFetches.current = 0;
+  }, [genre, sort]);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
+  useEffect(() => {
+    if (hasNextPage && !isFetchingNextPage && rest.length < 8 && autoFetches.current < 12) {
+      autoFetches.current += 1;
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, rest.length]);
 
   function loadMore() {
     if (q.hasNextPage && !q.isFetchingNextPage) q.fetchNextPage();
@@ -164,6 +175,9 @@ export default function BrowseScreen() {
                 {(['grid', 'list'] as const).map((m) => (
                   <Pressable
                     key={m}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: mode === m }}
+                    accessibilityLabel={m === 'grid' ? 'Show results in a grid' : 'Show results in a list'}
                     onPress={() => setMode(m)}
                     style={[styles.toggleBtn, mode === m && { backgroundColor: theme.backgroundHigh }]}>
                     <Ionicons
@@ -176,7 +190,10 @@ export default function BrowseScreen() {
               </View>
             </View>
 
-            {q.isLoading ? (
+            {/* Auto-fetching counts as loading: a genre whose matches sit on
+                later pages would otherwise flash "No upcoming events" while
+                the pages are still arriving. */}
+            {q.isLoading || (!feature && q.isFetchingNextPage) ? (
               <ActivityIndicator color={theme.primary} style={{ marginTop: Spacing.five }} />
             ) : feature ? (
               <View style={styles.feature}>
