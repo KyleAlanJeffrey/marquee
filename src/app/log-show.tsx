@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -69,7 +70,12 @@ export default function LogShowScreen() {
         title="Log a show"
         description="Add a concert you've been to — find the night, rate it, say what it was like."
       />
-      <View style={styles.header}>
+      {/* SafeAreaView (the native one, measured against its own frame — the
+          useSafeAreaInsets hook reports the window's inset even inside a
+          sheet) pads the top only when the modal is presented full-screen,
+          i.e. a cold deep link, where the buttons would sit under the status
+          bar. Inside the usual sheet it adds nothing. */}
+      <SafeAreaView edges={['top']} style={styles.header}>
         {step.kind === 'night' || (step.kind === 'which' && !params.artistId) ? (
           <PressableScale
             haptic={false}
@@ -99,7 +105,7 @@ export default function LogShowScreen() {
           style={styles.headerBtn}>
           <Ionicons name="close" size={22} color={theme.textTertiary} />
         </PressableScale>
-      </View>
+      </SafeAreaView>
 
       {step.kind === 'who' && (
         <FindArtist

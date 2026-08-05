@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useState } from 'react';
 import {
   Platform,
+  Pressable,
   TextInput,
   View,
   type StyleProp,
@@ -74,12 +75,13 @@ export function SearchBar({
         style={[inputStyle, { color: theme.text }]}
       />
       {value.length > 0 && (
-        <Ionicons
-          name="close-circle"
-          size={18}
-          color={theme.textTertiary}
-          onPress={() => onChangeText('')}
-        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Clear search"
+          hitSlop={12}
+          onPress={() => onChangeText('')}>
+          <Ionicons name="close-circle" size={18} color={theme.textTertiary} />
+        </Pressable>
       )}
     </View>
   );
