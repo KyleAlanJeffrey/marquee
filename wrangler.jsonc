@@ -1,10 +1,13 @@
-// Cloudflare config — one Worker serves the web app (static assets) and the API.
+// Cloudflare config for the website Worker: the web app (static assets), the
+// API, and the /img mirror. The cron crawl, IndexNow and the admin endpoints
+// live on the jobs Worker — see wrangler.jobs.jsonc.
 // database_id points at the existing "marquee" D1 (wrangler v3 requires it).
 // After the first deploy:
 //   1. load worker/schema.sql (D1 -> marquee -> Console, or `npm run db:apply`)
 //   2. set secrets on the Worker (Worker -> Settings -> Variables and Secrets):
 //      TICKETMASTER_API_KEY, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET,
-//      BANDSINTOWN_APP_ID, SEATGEEK_CLIENT_ID, ADMIN_TOKEN. EXPO_PUBLIC_* are
+//      BANDSINTOWN_APP_ID, SEATGEEK_CLIENT_ID, CLERK_SECRET_KEY, INDEXNOW_KEY.
+//      ADMIN_TOKEN belongs to the jobs Worker only. EXPO_PUBLIC_* are
 //      build *variables*, not secrets — they are inlined into the web bundle.
 // Deploys automatically via Cloudflare Workers Builds (Git integration):
 //   build command: npm run build   (expo export -> ./dist)
@@ -53,12 +56,8 @@
       "migrations_dir": "worker/migrations",
     },
   ],
-  // The artist crawl. Bandsintown's open API is artist-keyed with no geographic
-  // search, so coverage comes from asking about every artist we know on a
-  // schedule rather than from a client happening to request one.
-  "triggers": {
-    "crons": ["*/15 * * * *"],
-  },
+  // No cron here: the 15-minute artist crawl runs on the jobs Worker
+  // (wrangler.jobs.jsonc), so ingestion can't spend this Worker's budgets.
   "observability": {
     "enabled": true,
   },

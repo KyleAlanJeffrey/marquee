@@ -36,7 +36,7 @@ import { getDb, type DB } from './db';
 import { cleanVenueName, dashBillingVenueName, guessUtcOffsetHours, nameCarriesAct } from './dedupe';
 import { utcMsFromLocal, zoneFor } from './timezone';
 import { fetchVenueEnrichment, type VenueEnrichment } from './venue-info';
-import type { Env } from './env';
+import type { CoreEnv } from './env';
 import { artists, discoveryLog, events, venues } from './schema';
 
 // --- outbound HTTP ----------------------------------------------------------
@@ -123,7 +123,7 @@ function tmNoonUtc(e: any): string | null {
   return ms === null ? null : isoAt(ms);
 }
 
-async function tmFetch(env: Env, path: string, params: Record<string, string>): Promise<any> {
+async function tmFetch(env: CoreEnv, path: string, params: Record<string, string>): Promise<any> {
   const qs = new URLSearchParams({ ...params, apikey: env.TICKETMASTER_API_KEY! });
 
   // Ticketmaster 429s both for short bursts and for a spent daily quota, so the
@@ -140,7 +140,7 @@ async function tmFetch(env: Env, path: string, params: Record<string, string>): 
   }
 }
 
-async function tmEventsNear(env: Env, lat: number, lng: number, radiusMiles: number): Promise<any[]> {
+async function tmEventsNear(env: CoreEnv, lat: number, lng: number, radiusMiles: number): Promise<any[]> {
   const json = await tmFetch(env, 'events.json', {
     latlong: `${lat},${lng}`,
     radius: String(Math.min(Math.max(Math.round(radiusMiles), 1), 150)),
@@ -152,20 +152,20 @@ async function tmEventsNear(env: Env, lat: number, lng: number, radiusMiles: num
   return json._embedded?.events ?? [];
 }
 
-async function tmResolveAttractionId(env: Env, name: string): Promise<string | null> {
+async function tmResolveAttractionId(env: CoreEnv, name: string): Promise<string | null> {
   const json = await tmFetch(env, 'attractions.json', { keyword: name, classificationName: 'music', size: '5' });
   const hit = (json._embedded?.attractions ?? []).find((a: any) => a.name?.toLowerCase() === name.toLowerCase());
   return hit?.id ?? null;
 }
 
-async function tmEventsForAttraction(env: Env, attractionId: string): Promise<any[]> {
+async function tmEventsForAttraction(env: CoreEnv, attractionId: string): Promise<any[]> {
   const json = await tmFetch(env, 'events.json', { attractionId, size: '100', sort: 'date,asc' });
   return json._embedded?.events ?? [];
 }
 
 /** Pull this venue's full upcoming lineup from Ticketmaster into D1. Only works
  *  for Ticketmaster venues (seed venues have no TM id). Returns new-event count. */
-export async function refreshVenue(env: Env, venueId: string): Promise<{ ingested: number }> {
+export async function refreshVenue(env: CoreEnv, venueId: string): Promise<{ ingested: number }> {
   const db = getDb(env.DB);
   const v = await db
     .select({ source: venues.source, sourceVenueId: venues.sourceVenueId })
@@ -259,7 +259,7 @@ export type BitArtist = {
  * open API — coverage comes from asking about every artist we know, so this is
  * the unit the crawl is built from.
  */
-async function bitFetchEvents(env: Env, artist: BitArtist): Promise<any[]> {
+async function bitFetchEvents(env: CoreEnv, artist: BitArtist): Promise<any[]> {
   return (await bitFetchByKeys(env, [bitKey(artist)])).events;
 }
 
@@ -277,7 +277,7 @@ class BitConfigError extends Error {}
  * worked. Keys are already encoded here, not by the caller.
  */
 async function bitFetchByKeys(
-  env: Env,
+  env: CoreEnv,
   keys: string[],
   maxAttempts = 3,
   // `past` is the same endpoint with the window reversed, and it is how the
@@ -432,7 +432,7 @@ async function rememberBitIdentity(db: DB, artistId: string, raw: any): Promise<
 }
 
 /** Bandsintown shows for one artist, persisted. Returns new-event ids. */
-async function ingestBitArtist(env: Env, db: DB, artist: BitArtist): Promise<string[]> {
+async function ingestBitArtist(env: CoreEnv, db: DB, artist: BitArtist): Promise<string[]> {
   const raw = await bitFetchEvents(env, artist);
   if (raw.length === 0) return [];
   await rememberBitIdentity(db, artist.id, raw[0]);
@@ -487,7 +487,7 @@ export type ArtistHistory = {
  * escape hatch for when a later crawl has learned a better name to ask under.
  */
 export async function fetchArtistHistory(
-  env: Env,
+  env: CoreEnv,
   artistId: string,
   opts: { force?: boolean } = {},
 ): Promise<ArtistHistory | null> {
@@ -600,7 +600,7 @@ export async function fetchArtistHistory(
  * crawl (phase 3) owns this.
  */
 export async function backfillBandsintown(
-  env: Env,
+  env: CoreEnv,
   limit: number,
   offset: number,
 ): Promise<{ artists: number; ingested: number; per_artist: { name: string; ingested: number }[] }> {
@@ -670,7 +670,7 @@ export type CrawlResult = {
  * and CPU budget with everything else, and a stampede of parallel fetches to one
  * upstream is how an open API tier gets closed.
  */
-export async function crawlBandsintown(env: Env, limit = CRAWL_BATCH): Promise<CrawlResult> {
+export async function crawlBandsintown(env: CoreEnv, limit = CRAWL_BATCH): Promise<CrawlResult> {
   const result: CrawlResult = {
     source: 'bandsintown',
     checked: 0,
@@ -818,7 +818,7 @@ async function addFrontierArtists(db: DB, names: string[]): Promise<number> {
 }
 
 /** Put every artist not already queued onto the crawl queue for a source. */
-export async function backfillCrawlQueue(env: Env, source = 'bandsintown'): Promise<{ queued: number }> {
+export async function backfillCrawlQueue(env: CoreEnv, source = 'bandsintown'): Promise<{ queued: number }> {
   const db = getDb(env.DB);
   const rows = await db
     .select({ id: artists.id, bandsintownId: artists.bandsintownId, bandsintownName: artists.bandsintownName })
@@ -1000,7 +1000,7 @@ export function sgToEventInputs(
   });
 }
 
-async function sgFetch(env: Env, path: string, params: Record<string, string>): Promise<any> {
+async function sgFetch(env: CoreEnv, path: string, params: Record<string, string>): Promise<any> {
   const qs = new URLSearchParams({ ...params, client_id: env.SEATGEEK_CLIENT_ID! });
   for (let attempt = 0; ; attempt++) {
     const res = await fetchWithTimeout(`${SG_BASE}/${path}?${qs}`);
@@ -1015,7 +1015,7 @@ async function sgFetch(env: Env, path: string, params: Record<string, string>): 
 }
 
 /** Upcoming concerts near a point, soonest first, over at most `SG_MAX_PAGES`. */
-async function sgEventsNear(env: Env, lat: number, lng: number, radiusMiles: number): Promise<any[]> {
+async function sgEventsNear(env: CoreEnv, lat: number, lng: number, radiusMiles: number): Promise<any[]> {
   const range = `${Math.min(Math.max(Math.round(radiusMiles), 1), 150)}mi`;
   const out: any[] = [];
   for (let page = 1; page <= SG_MAX_PAGES; page++) {
@@ -1044,7 +1044,7 @@ async function sgEventsNear(env: Env, lat: number, lng: number, radiusMiles: num
  * pass finds the first pass's rows in D1 and folds into them.
  */
 export async function ingestSeatGeek(
-  env: Env,
+  env: CoreEnv,
   lat: number,
   lng: number,
   radius: number,
@@ -1081,7 +1081,7 @@ export async function ingestSeatGeek(
  * six-hour throttle covers the pair, since they cost one round trip each to the
  * same question.
  */
-export async function discover(env: Env, lat: number, lng: number, radius: number) {
+export async function discover(env: CoreEnv, lat: number, lng: number, radius: number) {
   const db = getDb(env.DB);
   const cell = `${lat.toFixed(1)},${lng.toFixed(1)},${Math.round(radius)}`;
   const log = await db
@@ -1160,7 +1160,7 @@ export async function discover(env: Env, lat: number, lng: number, radius: numbe
   };
 }
 
-export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {
+export async function refreshArtists(env: CoreEnv, incoming: IncomingArtist[]) {
   const db = getDb(env.DB);
   const run = await startRun(db, 'ticketmaster+bandsintown', 'refresh-artists');
   const newIds: string[] = [];
@@ -1234,7 +1234,7 @@ export async function refreshArtists(env: Env, incoming: IncomingArtist[]) {
 
 let spotifyToken: { value: string; expiresAt: number } | null = null;
 
-async function spotifyAccessToken(env: Env): Promise<string> {
+async function spotifyAccessToken(env: CoreEnv): Promise<string> {
   if (spotifyToken && Date.now() < spotifyToken.expiresAt - 60_000) return spotifyToken.value;
   const id = env.SPOTIFY_CLIENT_ID;
   const secret = env.SPOTIFY_CLIENT_SECRET;
@@ -1250,7 +1250,7 @@ async function spotifyAccessToken(env: Env): Promise<string> {
   return spotifyToken.value;
 }
 
-async function spotifyGet(env: Env, path: string): Promise<any> {
+async function spotifyGet(env: CoreEnv, path: string): Promise<any> {
   const token = await spotifyAccessToken(env);
   const res = await fetchWithTimeout(`https://api.spotify.com/v1${path}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -1259,7 +1259,7 @@ async function spotifyGet(env: Env, path: string): Promise<any> {
   return res.json<any>();
 }
 
-export async function searchArtists(env: Env, query: string) {
+export async function searchArtists(env: CoreEnv, query: string) {
   // Spotify caps search `limit` at 10 for apps in development mode.
   const json = await spotifyGet(env, `/search?type=artist&limit=10&q=${encodeURIComponent(query)}`);
   return (json.artists?.items ?? []).map((a: any) => ({
@@ -1275,7 +1275,7 @@ export async function searchArtists(env: Env, query: string) {
  *  by name) and backfills id/image into D1. Dev-mode apps only expose
  *  id/name/images/external_urls (no followers/genres/top-tracks). */
 async function spotifyProfile(
-  env: Env,
+  env: CoreEnv,
   db: DB,
   row: { id: string; name: string; spotify_id: string | null; image_url: string | null },
 ): Promise<{ image: string | null; url: string | null } | null> {
@@ -1391,7 +1391,7 @@ export function shouldRecheckEnrichment(
   return now - at > (description ? ENRICHMENT_FOUND_RECHECK_MS : ENRICHMENT_EMPTY_RECHECK_MS);
 }
 
-export async function venueInfo(env: Env, venueId: string) {
+export async function venueInfo(env: CoreEnv, venueId: string) {
   const db = getDb(env.DB);
   // Resolve the cluster head first, by primary key, then read it by primary key.
   // Two indexed lookups rather than one `coalesce(canonical_venue_id, id) = ?`,
@@ -1481,7 +1481,7 @@ export async function venueInfo(env: Env, venueId: string) {
 /** Supporting acts for a show, from the Ticketmaster event's attractions
  *  (everything but the headliner). Empty for non-TM events or shows with no
  *  additional acts listed. */
-export async function eventLineup(env: Env, eventId: string) {
+export async function eventLineup(env: CoreEnv, eventId: string) {
   const db = getDb(env.DB);
   const ev = await db
     .select({ source: events.source, sourceEventId: events.sourceEventId, headliner: artists.name })
@@ -1557,7 +1557,7 @@ function blueskyEmbedImage(embed: any): string | null {
 }
 
 /** Discussion about a specific show: real Bluesky posts (best-effort). */
-export async function eventBuzz(env: Env, eventId: string) {
+export async function eventBuzz(env: CoreEnv, eventId: string) {
   const db = getDb(env.DB);
   const ev = await db
     .select({ artist: artists.name, venue: venues.name })
@@ -1576,7 +1576,7 @@ export async function eventBuzz(env: Env, eventId: string) {
 /** Aggregate public info for an artist: Spotify image + profile link, Deezer
  *  top tracks + fan count, and a Wikipedia bio. Each source is best-effort so a
  *  failure in one still returns the others. */
-export async function artistInfo(env: Env, artistId: string) {
+export async function artistInfo(env: CoreEnv, artistId: string) {
   const db = getDb(env.DB);
   const row = await db
     .select({ id: artists.id, name: artists.name, spotify_id: artists.spotifyId, image_url: artists.imageUrl })

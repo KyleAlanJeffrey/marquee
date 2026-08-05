@@ -1,8 +1,12 @@
 import type { D1Database, Fetcher, R2Bucket } from '@cloudflare/workers-types';
 
-export type Env = {
+/**
+ * What both Workers share: the database, the upstream source keys, and the
+ * identity of the site they're working for. Ingestion, enrichment and IndexNow
+ * are written against this type so they can run from either Worker.
+ */
+export type CoreEnv = {
   DB: D1Database;
-  ASSETS: Fetcher;
   /**
    * The image mirror (R2 bucket `marquee`) behind `/img/…`. Optional: without
    * it every image route falls back to redirecting at the upstream URL, so a
@@ -14,8 +18,6 @@ export type Env = {
   SPOTIFY_CLIENT_SECRET?: string;
   BANDSINTOWN_APP_ID?: string;
   SEATGEEK_CLIENT_ID?: string;
-  /** Bearer token for /api/admin/* (unset = those routes are off). */
-  ADMIN_TOKEN?: string;
   /**
    * The one hostname the site should be indexed under, e.g. `marquee.rocks`.
    *
@@ -24,17 +26,25 @@ export type Env = {
    * two hostnames each claimed to be canonical and split the ranking signals of
    * every page between them. Set this and there is one answer. Unset (local dev)
    * falls back to the request's own origin.
+   *
+   * The jobs Worker needs it too: IndexNow submissions carry absolute URLs.
    */
   PRIMARY_HOST?: string;
   /**
    * IndexNow key — any 8–128 characters of `[A-Za-z0-9-]` that you invent.
    *
-   * Set it and the hourly crawl announces the shows it just wrote to Bing, Yandex
-   * and the rest, and `/<key>.txt` starts answering with the key so they can check
-   * we own it. Unset (the default, and local dev) and nothing is submitted. Needs
-   * `PRIMARY_HOST` too: IndexNow rejects a URL list whose host it can't verify.
+   * Set on both Workers, for the two halves of the protocol: the jobs Worker
+   * *submits* freshly written URLs after each crawl, and the website answers
+   * the ownership check at `/<key>.txt`. Unset (the default, and local dev)
+   * and nothing is submitted. Needs `PRIMARY_HOST` too: IndexNow rejects a URL
+   * list whose host it can't verify.
    */
   INDEXNOW_KEY?: string;
+};
+
+/** The website Worker: static assets, the public API, and Clerk sessions. */
+export type Env = CoreEnv & {
+  ASSETS: Fetcher;
   /**
    * Clerk's secret key — the one that makes accounts exist at all.
    *
@@ -48,7 +58,7 @@ export type Env = {
    *
    * Optional, and worth setting in production: with it, verifying a session is
    * pure computation. Without it the SDK fetches the JWKS from Clerk's API on a
-   * cache miss, and a Worker's subrequest budget is shared with ingestion.
+   * cache miss, and a Worker's subrequest budget is shared with everything else.
    */
   CLERK_JWT_KEY?: string;
   /**
@@ -62,5 +72,14 @@ export type Env = {
   CLERK_AUTHORIZED_PARTIES?: string;
 };
 
-/** Hono generics for typed `c.env` across the app. */
+/** The jobs Worker: the cron crawl, IndexNow, and the admin endpoints. */
+export type JobsEnv = CoreEnv & {
+  /** Bearer token for /api/admin/* (unset = those routes are off). */
+  ADMIN_TOKEN?: string;
+};
+
+/** Hono generics for typed `c.env` across the website app. */
 export type AppEnv = { Bindings: Env };
+
+/** Hono generics for typed `c.env` across the jobs app. */
+export type JobsAppEnv = { Bindings: JobsEnv };

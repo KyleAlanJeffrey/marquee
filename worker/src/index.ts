@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 
-import { admin } from './routes/admin';
 import type { AppEnv, Env } from './env';
 import { artists } from './routes/artists';
 import { events } from './routes/events';
@@ -15,11 +14,9 @@ import { venues } from './routes/venues';
 import { curated } from './routes/curated';
 import { cityPage } from './cities';
 import { artistImage } from './images';
-import { submitFresh } from './indexnow';
 import { landingPage } from './landing';
 import { privacyPage } from './policy';
 import { injectSeo, pageSeo, robotsTxt, robotsTxtOffBrand, sitemapChild, sitemapIndex } from './seo';
-import { crawlBandsintown } from './sources';
 
 // The Worker runs first for every request (run_worker_first). It handles the
 // API under /api/* and hands everything else to the static assets (the Expo web
@@ -39,7 +36,7 @@ api.route('/me/lists', lists); // the four on-device lists, kept for this accoun
 api.route('/users', people); // public profiles + the person graph (docs/social.md phase A)
 api.route('/', reviewRoutes); // public reviews + reports (phase B): /events/:id/review(s), /reviews/:id/report
 api.route('/curated-lists', curated); // curated lists (phase E)
-api.route('/admin', admin); // /health, /backfill-bandsintown
+// /api/admin/* lives on the jobs Worker now (worker/src/jobs.ts), with the cron.
 
 // Root app: API first, then static assets for everything else.
 const app = new Hono<AppEnv>();
@@ -186,37 +183,6 @@ app.all('*', async (c) => {
   return seo ? injectSeo(res, canonicalUrl, seo) : res;
 });
 
-/**
- * The artist crawl (see `crawlBandsintown`). Cron is the only way coverage stops
- * tracking traffic: before this, an artist nobody opened was never re-checked.
- * The batch is small because a scheduled Worker shares the same subrequest and
- * CPU budget as a request, and the queue is drained a little at a time.
- */
-const scheduled: ExportedHandlerScheduledHandler<Env> = async (_event, env) => {
-  // Read before the crawl, so "created since" names exactly what this run wrote.
-  const since = new Date().toISOString().slice(0, 19) + 'Z';
-  let failure: unknown = null;
-  try {
-    console.log('crawl:', JSON.stringify(await crawlBandsintown(env)));
-  } catch (err) {
-    console.error('crawl failed:', err);
-    failure = err;
-  }
-
-  // Announce whatever it managed to write, even if it then fell over — the shows
-  // are in the database either way, and this is the only fast path to being
-  // indexed. A failed ping must never fail the crawl.
-  try {
-    const result = await submitFresh(env, since);
-    if (result) console.log('indexnow:', JSON.stringify(result));
-  } catch (err) {
-    console.warn('indexnow failed:', err);
-  }
-
-  // Re-thrown rather than swallowed: a scheduled handler that returns normally is
-  // recorded as a successful invocation, and a crawl that never works would look
-  // like a crawl that runs.
-  if (failure) throw failure;
-};
-
-export default { fetch: app.fetch, scheduled };
+// The cron crawl and IndexNow submissions live on the jobs Worker
+// (worker/src/jobs.ts) — this one only serves requests.
+export default { fetch: app.fetch };

@@ -4,14 +4,14 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import { crawlQueueStats, ingestStats, repairDuplicates } from '../data';
 import { getDb } from '../db';
-import type { AppEnv, Env } from '../env';
+import type { JobsAppEnv, JobsEnv } from '../env';
 import { artists, events, reports, reviews } from '../schema';
 import { reportResolveBody } from '../schemas';
 import { backfillBandsintown, backfillCrawlQueue, crawlBandsintown, ingestSeatGeek } from '../sources';
 
-export const admin = new Hono<AppEnv>();
+export const admin = new Hono<JobsAppEnv>();
 
-const authorized = (c: { env: Env; req: { header: (k: string) => string | undefined } }) =>
+const authorized = (c: { env: JobsEnv; req: { header: (k: string) => string | undefined } }) =>
   Boolean(c.env.ADMIN_TOKEN) && c.req.header('authorization') === `Bearer ${c.env.ADMIN_TOKEN}`;
 
 /**
@@ -20,7 +20,7 @@ const authorized = (c: { env: Env; req: { header: (k: string) => string | undefi
  * managed to contribute zero events without anyone noticing — so the
  * configuration is now something you can look at.
  */
-const sourceConfig = (env: Env) => ({
+const sourceConfig = (env: JobsEnv) => ({
   ticketmaster: Boolean(env.TICKETMASTER_API_KEY),
   bandsintown: Boolean(env.BANDSINTOWN_APP_ID),
   seatgeek: Boolean(env.SEATGEEK_CLIENT_ID),

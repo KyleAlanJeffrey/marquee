@@ -90,21 +90,37 @@ What's left is the residuals:
     notification decision) is a different feature; don't confuse the two.
   - [ ] Share cards get much better when the OG-cards item ships (see the
     design pass) — same URLs, richer unfurl.
-- [ ] **Split the Workers** (Kyle, 2026-08-04) — the primary worker keeps the
-  website and its API; everything else moves to a second worker. What "else"
-  is today: the 15-minute Bandsintown crawl + frontier expansion (the cron),
-  Ticketmaster/SeatGeek discovery sweeps, artist enrichment, IndexNow
-  submissions, and the admin repair endpoints. Why it's worth it: the crawl
-  shares the serving worker's CPU/subrequest budgets (already a watch item
-  under Event coverage), a bad deploy of ingestion code shouldn't take the
-  site down (and vice versa), and the two change at different speeds. Shape:
-  one repo, two `wrangler.jsonc`s (or one config with `environments`), both
-  bound to the same D1/R2; the cron trigger and `sources.ts`/`crawl.ts`
-  move to `marquee-jobs`; admin routes go with the jobs (rotate ADMIN_TOKEN
-  in the same move — it's on the operational list anyway). Needs a second
-  Workers Builds pipeline or a deploy script that pushes both. Decide
-  whether /img mirroring counts as "website" (it serves requests — it
-  stays) vs the mirror *writes* (they can stay too; they're request-driven).
+- [~] **Split the Workers** (Kyle, 2026-08-04) — code landed on the
+  `split-workers` branch (PR open, 2026-08-05): same repo, two configs. The
+  website Worker (`wrangler.jsonc`) keeps the site, the API and the /img
+  mirror; `marquee-jobs` (`wrangler.jobs.jsonc`, entry `worker/src/jobs.ts`)
+  owns the 15-minute cron (crawl + IndexNow) and `/api/admin/*` at the same
+  paths, against the same D1. No files moved — the split is at the entrypoint,
+  with `CoreEnv` (shared) vs `Env` (website: ASSETS + Clerk) vs `JobsEnv`
+  (ADMIN_TOKEN) in `worker/src/env.ts`. Client-driven ingestion
+  (`/discover-events`, `/refresh-artist-events`) deliberately stays on the
+  website API — it's request-driven, same as the mirror writes. Migrations
+  stay owned by the website config only. Deploy-time steps that are not in
+  the PR:
+  - [ ] Before merging the PR: `npm run deploy:jobs` (done 2026-08-05), set
+    secrets on marquee-jobs (BANDSINTOWN_APP_ID, TICKETMASTER_API_KEY,
+    SEATGEEK_CLIENT_ID, SPOTIFY_CLIENT_ID/SECRET, INDEXNOW_KEY, and a
+    **freshly minted** ADMIN_TOKEN — this is the rotation), then confirm
+    `/api/admin/health` on marquee-jobs reports every source configured.
+    Merging first would leave the crawl as a logged no-op ("… not set" in
+    ingest_runs) until the secrets landed. Until the merge deploys, both
+    crons fire — safe (ingestion upserts, indexnow_log updates in place),
+    just double the upstream calls for a few minutes.
+  - [ ] After merge: delete ADMIN_TOKEN from the website Worker (it no
+    longer reads it), and repoint any operator scripts at the marquee-jobs
+    origin (paths are unchanged).
+  - [ ] Auto-deploy: `.github/workflows/deploy-jobs.yml` redeploys
+    marquee-jobs on pushes that touch `worker/**` or the jobs config. It
+    needs `CLOUDFLARE_API_TOKEN` as a repo Actions secret (Cloudflare
+    dashboard → My Profile → API Tokens → "Edit Cloudflare Workers"
+    template) before it can succeed.
+  - [ ] After the first cron fires on marquee-jobs, check `/api/admin/health`
+    there and confirm the website Worker's cron metrics go quiet.
 
 - [~] **Smarter ranking for area shows** (Kyle, 2026-08-03) — first cut
   landed the same day: a `notability` score in `nearbyEvents` behind
