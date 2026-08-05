@@ -1457,7 +1457,9 @@ export async function ingestDice(
     // out inside `persist` — gets a skip row. Judging by "did a row appear"
     // rather than "did the mapping produce an input" covers both paths with the
     // same probe, so nothing can fall between them and re-hydrate forever.
-    const hydratedIds = diceEvents.map((e) => String(e.id));
+    const hydratedIds = diceEvents
+      .map((e) => (typeof e?.id === 'string' && e.id ? e.id : null))
+      .filter((id): id is string => id !== null);
     const landed = await knownDiceEventIds(db, hydratedIds);
     const skipped = hydratedIds.filter((id) => !landed.has(id));
     if (skipped.length) {
@@ -1551,7 +1553,12 @@ export async function discover(env: CoreEnv, lat: number, lng: number, radius: n
 
   // DICE needs no key — its consumer search endpoint is open — so it is always
   // attempted and counts toward the all-sources-down outage check like the rest.
-  let dice = { scanned: 0, ingested: 0, artists_created: 0 } as Awaited<ReturnType<typeof ingestDice>>;
+  let dice: Awaited<ReturnType<typeof ingestDice>> = {
+    scanned: 0,
+    hydrated: 0,
+    ingested: 0,
+    artists_created: 0,
+  };
   {
     attempted++;
     try {

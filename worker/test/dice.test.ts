@@ -63,6 +63,15 @@ describe('dicePerformers', () => {
     expect(new Set(names.map((n) => n.toLowerCase())).size).toBe(names.length);
   });
 
+  it('preserves order and removes case-variant duplicates', () => {
+    const e = {
+      summary_lineup: {
+        top_artists: [{ name: 'Opener' }, { name: 'The Star' }, { name: 'opener' }],
+      },
+    };
+    expect(dicePerformers(e).map((p) => p.name)).toEqual(['Opener', 'The Star']);
+  });
+
   it('puts a marked headliner first', () => {
     const e = {
       summary_lineup: {
