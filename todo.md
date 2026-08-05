@@ -332,6 +332,21 @@ What's left is the residuals:
     - [ ] `.env.production`: swap in the `pk_live_` key.
     - [ ] Worker secrets: `CLERK_SECRET_KEY` → production `sk_live_…`;
       `CLERK_JWT_KEY` → the production instance's JWT public key.
+    - [x] **The post-sign-up portal bounce, diagnosed and fixed
+      (2026-08-05)**: sign-up lived at `/sign-in?mode=sign-up`; Clerk's
+      hash router navigates to `#/verify-email-address` mid-flow, the
+      query param didn't survive, the screen swapped the card back to
+      SignIn, and the stranded sign-up bounced to the Account Portal
+      (`accounts.marquee.rocks/sign-in?redirect_url=…`). Now `/sign-up`
+      is a real route (web card + native hosted-portal alias), the mode
+      is the path, and the switcher navigates instead of flipping state.
+      Verified: `/sign-up#/verify-email-address` keeps the SignUp card.
+    - [ ] Kyle: Clerk dashboard → Configure → **Paths** — set the
+      application's sign-in URL to `https://marquee.rocks/sign-in` and
+      sign-up URL to `https://marquee.rocks/sign-up`, so any
+      ClerkJS-initiated redirect lands on our pages instead of the
+      Account Portal (the portal stays for native and account
+      management).
     - [ ] Social sign-in needs own OAuth credentials on production —
       Google client with redirect `https://clerk.marquee.rocks/v1/oauth_callback`
       pasted into the SSO connection (Apple likewise). Email works

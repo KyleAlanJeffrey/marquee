@@ -116,6 +116,17 @@ export default function RootLayout() {
                       headerTitleStyle: { fontFamily: Fonts.headlineMd, color: theme.text },
                     }}
                   />
+                  <Stack.Screen
+                    name="sign-up"
+                    options={{
+                      presentation: 'modal',
+                      headerShown: true,
+                      title: 'Create your account',
+                      headerStyle: { backgroundColor: theme.background },
+                      headerTintColor: theme.primary,
+                      headerTitleStyle: { fontFamily: Fonts.headlineMd, color: theme.text },
+                    }}
+                  />
                   {/* The content pages (event, artist, venue, user, list,
                       browse, map) live inside (tabs) so the bottom bar stays
                       put — see the tab layout. Only the two modals remain
