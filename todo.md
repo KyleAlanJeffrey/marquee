@@ -114,10 +114,11 @@ What's left is the residuals:
   - [ ] After merge: delete ADMIN_TOKEN from the website Worker (it no
     longer reads it), and repoint any operator scripts at the marquee-jobs
     origin (paths are unchanged).
-  - [ ] Second Workers Builds project on the repo pointing at
-    `wrangler.jobs.jsonc` (deploy command `npx wrangler deploy -c
-    wrangler.jobs.jsonc`, no expo build needed) — or keep deploying it by
-    hand; it changes rarely.
+  - [ ] Auto-deploy: `.github/workflows/deploy-jobs.yml` redeploys
+    marquee-jobs on pushes that touch `worker/**` or the jobs config. It
+    needs `CLOUDFLARE_API_TOKEN` as a repo Actions secret (Cloudflare
+    dashboard → My Profile → API Tokens → "Edit Cloudflare Workers"
+    template) before it can succeed.
   - [ ] After the first cron fires on marquee-jobs, check `/api/admin/health`
     there and confirm the website Worker's cron metrics go quiet.
 
