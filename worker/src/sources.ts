@@ -818,7 +818,17 @@ async function fillDeezerFans(db: DB, artistIds: string[], cap: number): Promise
     .limit(cap);
   let filled = 0;
   for (const a of unasked) {
-    const fans = await deezerFans(a.name).catch(() => null);
+    // Only a successful answer gets stored — 0 means "Deezer was asked and
+    // doesn't know them", never "the request failed". A failed request leaves
+    // null so the artist stays eligible, and ends the batch: it's usually a
+    // rate limit, and the rest of the loop would just burn the same wall.
+    let fans: number | null;
+    try {
+      fans = await deezerFans(a.name);
+    } catch (err) {
+      console.warn(`deezer fans lookup failed for ${a.name}:`, err);
+      break;
+    }
     await db
       .update(artists)
       .set({ deezerFans: fans ?? 0 })
@@ -868,21 +878,33 @@ export async function backfillDeezerFans(env: CoreEnv, limit: number) {
     .where(isNull(artists.deezerFans))
     .orderBy(sql`${artists.ticketmasterId} is null`, artists.name)
     .limit(limit);
+  let asked = 0;
   let known = 0;
+  let failed: string | null = null;
   for (const a of unasked) {
-    const fans = await deezerFans(a.name).catch(() => null);
+    // Same rule as fillDeezerFans: a failed request stores nothing (the artist
+    // stays null and eligible) and ends the batch — it's usually a rate limit.
+    let fans: number | null;
+    try {
+      fans = await deezerFans(a.name);
+    } catch (err) {
+      console.warn(`deezer fans lookup failed for ${a.name}:`, err);
+      failed = a.name;
+      break;
+    }
     if (fans != null) known++;
     await db
       .update(artists)
       .set({ deezerFans: fans ?? 0 })
       .where(eq(artists.id, a.id));
+    asked++;
   }
   const left = await db
     .select({ n: sql<number>`count(*)` })
     .from(artists)
     .where(isNull(artists.deezerFans))
     .get();
-  return { asked: unasked.length, known, unknown: unasked.length - known, remaining: left?.n ?? null };
+  return { asked, known, unknown: asked - known, failed_at: failed, remaining: left?.n ?? null };
 }
 
 /** Put every artist not already queued onto the crawl queue for a source. */
@@ -1390,6 +1412,12 @@ async function deezerSearch(name: string): Promise<any | null> {
   const search = await fetchWithTimeout(
     `https://api.deezer.com/search/artist?limit=25&q=${encodeURIComponent(name)}`,
   ).then((r) => r.json<any>());
+  // Deezer reports quota hits as HTTP 200 with an error payload and no data
+  // array. That must throw, not read as "artist unknown" — the ask-once fill
+  // stores unknown as 0 forever, and a rate limit isn't an answer.
+  if (!Array.isArray(search?.data)) {
+    throw new Error(`deezer search failed: ${JSON.stringify(search?.error ?? search).slice(0, 200)}`);
+  }
   return pickDeezerArtist(name, search.data);
 }
 

@@ -149,7 +149,7 @@ admin.post('/discover-seatgeek', async (c) => {
 admin.post('/backfill-deezer-fans', async (c) => {
   if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
   const n = Number(new URL(c.req.url).searchParams.get('limit'));
-  const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 40) : 25;
+  const limit = Number.isFinite(n) && n > 0 ? Math.max(1, Math.min(Math.floor(n), 40)) : 25;
   try {
     return c.json(await backfillDeezerFans(c.env, limit));
   } catch (err) {

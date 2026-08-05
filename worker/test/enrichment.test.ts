@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { pickDeezerArtist, shouldRecheckEnrichment } from '../src/sources';
+import { deezerFans, pickDeezerArtist, shouldRecheckEnrichment } from '../src/sources';
 
 /**
  * When a venue's Wikipedia enrichment gets re-asked. Written once and never
@@ -79,5 +79,42 @@ describe('pickDeezerArtist', () => {
       { id: 2, name: 'Toto', nb_fan: 974364 },
     ]);
     expect(picked.id).toBe(2);
+  });
+});
+
+/**
+ * Deezer reports quota hits as HTTP 200 with an error payload. That must
+ * reject — the ask-once fill stores "unknown" as 0 forever, and a rate limit
+ * is not an answer. A real empty result (data: []) IS an answer: null.
+ */
+describe('deezerFans', () => {
+  const respond = (body: unknown) =>
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify(body), { status: 200 }));
+
+  it('rejects on a rate-limit payload instead of reading it as unknown', async () => {
+    respond({ error: { type: 'Exception', message: 'Quota limit exceeded', code: 4 } });
+    try {
+      await expect(deezerFans('Kesha')).rejects.toThrow(/deezer search failed/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('resolves the picked artist fan count on a real answer', async () => {
+    respond({ data: [{ id: 12928, name: 'Kesha', nb_fan: 4176339 }] });
+    try {
+      await expect(deezerFans('Kesha')).resolves.toBe(4176339);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('resolves null when Deezer genuinely has nobody', async () => {
+    respond({ data: [] });
+    try {
+      await expect(deezerFans('Nobody At All')).resolves.toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
