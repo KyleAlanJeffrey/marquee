@@ -315,13 +315,28 @@ What's left is the residuals:
     inspected — a missing `azp` throws as hard as a wrong one).
   - [ ] Kyle: sign in on the live site, follow an artist, reload, confirm it
     stuck; check `/settings` remembers a radius. (I can't create a real session.)
-  - [ ] When a production Clerk instance exists: `pk_live_` key into
-    `.env.production`, delete the startup warning that nags about `pk_test_`.
-    This is also what removes the residual Clerk pop-up window during
-    email/username sign-up on marquee.rocks: a `pk_test_` instance on a real
-    domain has no first-party cookie, so ClerkJS syncs the dev session through
-    `accounts.dev` in a separate window. Instance plumbing, not our code —
-    verification and redirects are already onsite.
+  - [~] **Production instance cutover** (Kyle started 2026-08-05; the
+    instance exists, key `pk_live_Y2xlcmsubWFycXVlZS5yb2NrcyQ`). Found so
+    far: the `redirect_uri: Not matching configuration` sign-up error was
+    localhost:8081 talking to the production instance — production Clerk
+    only accepts its own domain, so dev stays on `pk_test` (root `.env`
+    reverted; live key belongs in `.env.production` + Workers Builds
+    only). The Account Portal redirect-fallback fields are placeholders;
+    empty = app root, fine. Remaining, in order:
+    - [ ] DNS: `clerk.marquee.rocks` / `accounts.marquee.rocks` resolve to
+      nothing (measured 2026-08-05) — add the records from Clerk →
+      Configure → Domains in Cloudflare, **DNS only / grey cloud** (proxied
+      records break Clerk's TLS provisioning), wait for verified.
+    - [ ] `.env.production`: swap in the `pk_live_` key.
+    - [ ] Worker secrets: `CLERK_SECRET_KEY` → production `sk_live_…`;
+      `CLERK_JWT_KEY` → the production instance's JWT public key.
+    - [ ] Social sign-in needs own OAuth credentials on production —
+      Google client with redirect `https://clerk.marquee.rocks/v1/oauth_callback`
+      pasted into the SSO connection (Apple likewise). Email works
+      without; the buttons fail until this is done.
+    - [ ] Then delete the `pk_test_` startup warning in `src/lib/auth.tsx`
+      — the swap also removes the accounts.dev pop-up during sign-up on
+      the live site (dev instance had no first-party cookie there).
   - [ ] Onboarding copy note: sign-in has no first-run reward any more (there is
     no local data to migrate) — a new account starts empty by design.
 
