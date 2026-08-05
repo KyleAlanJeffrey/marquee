@@ -1,6 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useRef, useState } from 'react';
-import type { StyleProp, ViewStyle } from 'react-native';
+import {
+  AccessibilityInfo,
+  Platform,
+  StyleSheet,
+  Text,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import { PressableScale } from '@/components/pressable-scale';
 import { useTheme } from '@/hooks/use-theme';
@@ -40,6 +47,16 @@ export function ShareButton({
     [],
   );
 
+  // A relabelled button says nothing unless the screen reader happens to be
+  // sitting on it — the transient states have to be announced. On web this
+  // call is a no-op (react-native-web stubs it); the live region below
+  // carries it there instead.
+  useEffect(() => {
+    if (flash) {
+      AccessibilityInfo.announceForAccessibility(flashMessage(flash));
+    }
+  }, [flash]);
+
   const onPress = async () => {
     const outcome = await share(payload);
     if (outcome === 'copied' || outcome === 'unavailable') {
@@ -50,23 +67,38 @@ export function ShareButton({
   };
 
   return (
-    <PressableScale
-      haptic
-      accessibilityRole="button"
-      accessibilityLabel={
-        flash === 'copied'
-          ? 'Link copied'
-          : flash === 'failed'
-            ? 'Sharing is not available here'
-            : `Share ${subject}`
-      }
-      onPress={onPress}
-      style={style}>
-      <Ionicons
-        name={flash === 'copied' ? 'checkmark' : flash === 'failed' ? 'alert-circle-outline' : 'share-outline'}
-        size={size}
-        color={flash === 'copied' ? theme.primary : flash === 'failed' ? theme.error : (color ?? theme.cyan)}
-      />
-    </PressableScale>
+    <>
+      <PressableScale
+        haptic
+        accessibilityRole="button"
+        accessibilityLabel={flash ? flashMessage(flash) : `Share ${subject}`}
+        onPress={onPress}
+        style={style}>
+        <Ionicons
+          name={flash === 'copied' ? 'checkmark' : flash === 'failed' ? 'alert-circle-outline' : 'share-outline'}
+          size={size}
+          color={flash === 'copied' ? theme.primary : flash === 'failed' ? theme.error : (color ?? theme.cyan)}
+        />
+      </PressableScale>
+      {Platform.OS === 'web' && (
+        <Text accessibilityLiveRegion="polite" style={styles.srOnly}>
+          {flash ? flashMessage(flash) : ''}
+        </Text>
+      )}
+    </>
   );
 }
+
+function flashMessage(flash: 'copied' | 'failed') {
+  return flash === 'copied' ? 'Link copied' : 'Sharing is not available here';
+}
+
+const styles = StyleSheet.create({
+  srOnly: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    overflow: 'hidden',
+    opacity: 0,
+  },
+});
