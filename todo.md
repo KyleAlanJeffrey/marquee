@@ -115,10 +115,16 @@ What's left is the residuals:
     longer reads it), and repoint any operator scripts at the marquee-jobs
     origin (paths are unchanged).
   - [ ] Auto-deploy: `.github/workflows/deploy-jobs.yml` redeploys
-    marquee-jobs on pushes that touch `worker/**` or the jobs config. It
-    needs `CLOUDFLARE_API_TOKEN` as a repo Actions secret (Cloudflare
-    dashboard → My Profile → API Tokens → "Edit Cloudflare Workers"
-    template) before it can succeed.
+    marquee-jobs on pushes that touch `worker/**` or the jobs config. A
+    `CLOUDFLARE_API_TOKEN` secret is set but Cloudflare rejects it —
+    `Authentication failed (status: 400) [code: 9106]` on `/memberships`
+    (2026-08-05 run). 9106 means the value isn't a valid API *token*:
+    usually the Global API Key pasted instead of a token, a token created
+    without the right template, or stray whitespace. Fix: create one from
+    the "Edit Cloudflare Workers" template (dashboard → My Profile → API
+    Tokens), paste it verbatim into the repo secret, re-run the failed
+    workflow. Until then marquee-jobs deploys by hand (`npm run
+    deploy:jobs`).
   - [ ] After the first cron fires on marquee-jobs, check `/api/admin/health`
     there and confirm the website Worker's cron metrics go quiet.
 
