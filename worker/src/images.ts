@@ -19,7 +19,7 @@
 import { eq } from 'drizzle-orm';
 
 import { getDb } from './db';
-import type { Env } from './env';
+import type { CoreEnv } from './env';
 import { artists } from './schema';
 
 /**
@@ -124,7 +124,7 @@ const cacheHeaders = (contentType: string) => ({
  * Returns null only when the artist doesn't exist or has no image — the
  * route turns that into a 404.
  */
-export async function artistImage(env: Env, artistId: string): Promise<Response | null> {
+export async function artistImage(env: CoreEnv, artistId: string): Promise<Response | null> {
   const row = await getDb(env.DB)
     .select({ imageUrl: artists.imageUrl })
     .from(artists)

@@ -1,0 +1,43 @@
+// Cloudflare config for the jobs Worker: everything that isn't serving the
+// site. The Cron Trigger (the 15-minute Bandsintown crawl + IndexNow
+// submissions) and the /api/admin/* endpoints run here, against the same D1
+// as the website Worker (wrangler.jsonc) — so a bad ingestion deploy can't
+// take the site down, and the crawl stops spending the site's CPU and
+// subrequest budgets.
+//
+// Deploy: `npm run deploy:jobs` (wrangler deploy -c wrangler.jobs.jsonc), or a
+// second Workers Builds project on this repo pointing at this config file.
+// Secrets to set on marquee-jobs (Worker -> Settings -> Variables and Secrets):
+//   BANDSINTOWN_APP_ID, TICKETMASTER_API_KEY, SEATGEEK_CLIENT_ID,
+//   SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, INDEXNOW_KEY, ADMIN_TOKEN.
+// Mint a NEW ADMIN_TOKEN here rather than copying the website's old one —
+// rotating it was already on the list, and the website Worker stops reading
+// it entirely.
+{
+  "name": "marquee-jobs",
+  "main": "worker/src/jobs.ts",
+  "compatibility_date": "2024-11-27",
+  // Absolute URLs in IndexNow submissions are written against this host.
+  "vars": {
+    "PRIMARY_HOST": "marquee.rocks",
+  },
+  // The same database the website serves from. No migrations_dir on purpose:
+  // migrations are applied through the website config (`npm run db:migrate`),
+  // and one owner means they can't be applied twice or race.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "marquee",
+      "database_id": "3905e807-3b98-465c-874d-ba558bf319da",
+    },
+  ],
+  // The artist crawl. Bandsintown's open API is artist-keyed with no geographic
+  // search, so coverage comes from asking about every artist we know on a
+  // schedule rather than from a client happening to request one.
+  "triggers": {
+    "crons": ["*/15 * * * *"],
+  },
+  "observability": {
+    "enabled": true,
+  },
+}

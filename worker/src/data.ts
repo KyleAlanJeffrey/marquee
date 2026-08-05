@@ -20,7 +20,7 @@ import {
   VENUE_SAME_NAME_METERS,
   type VenuePoint,
 } from './dedupe';
-import type { Env } from './env';
+import type { CoreEnv } from './env';
 import { artists, artistSources, events, ingestRuns, venues } from './schema';
 
 // --- helpers ----------------------------------------------------------------
@@ -2236,7 +2236,7 @@ export async function ensureArtist(db: DB, a: IncomingArtist): Promise<ArtistIde
 /** Upsert a single artist (typically from a Spotify search result) and return
  *  the full stored record. Fast — no external event fetch; the artist screen
  *  pulls the schedule on open. */
-export async function ensureArtistRecord(env: Env, a: IncomingArtist) {
+export async function ensureArtistRecord(env: CoreEnv, a: IncomingArtist) {
   const db = getDb(env.DB);
   const row = await ensureArtist(db, a);
   if (!row) return null;

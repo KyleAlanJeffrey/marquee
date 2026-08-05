@@ -4,7 +4,7 @@ import { citySlug } from './cities';
 import { stillUpcoming } from './data';
 import type { DB } from './db';
 import { getDb } from './db';
-import type { Env } from './env';
+import type { CoreEnv } from './env';
 import { events, indexnowLog, ingestRuns, venues } from './schema';
 
 /**
@@ -176,7 +176,7 @@ async function recordAnnounced(db: DB, paths: string[], at: string): Promise<voi
  * skipped: a past event is noindex anyway, and asking a crawler to fetch a page we
  * tell it not to keep is a way to be trusted less next time.
  */
-export async function submitFresh(env: Env, since: string): Promise<IndexNowResult | null> {
+export async function submitFresh(env: CoreEnv, since: string): Promise<IndexNowResult | null> {
   const key = env.INDEXNOW_KEY;
   const host = env.PRIMARY_HOST;
   // Without a canonical host there is no absolute URL to submit, and IndexNow
