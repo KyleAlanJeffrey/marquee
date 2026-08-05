@@ -121,9 +121,15 @@ export default function ExploreScreen() {
     [allEvents, genre],
   );
 
+  // The feed arrives featured-ranked (see useNearbyEvents): the hero and the
+  // two secondary cards are the most notable acts in range. COMING UP goes
+  // back to date order — "coming up" that isn't soonest-first reads broken.
   const featured = shown[0];
   const secondary = shown.slice(1, 3);
-  const comingUp = shown.slice(3);
+  const comingUp = useMemo(
+    () => shown.slice(3).sort((a, b) => a.starts_at.localeCompare(b.starts_at)),
+    [shown],
+  );
 
   const pins = useMemo<MapPin[]>(() => {
     const seen = new Map<string, MapPin>();

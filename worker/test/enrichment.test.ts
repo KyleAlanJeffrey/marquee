@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldRecheckEnrichment } from '../src/sources';
+import { pickDeezerArtist, shouldRecheckEnrichment } from '../src/sources';
 
 /**
  * When a venue's Wikipedia enrichment gets re-asked. Written once and never
@@ -31,5 +31,53 @@ describe('shouldRecheckEnrichment', () => {
 
   it('treats an unparseable stamp as never checked', () => {
     expect(shouldRecheckEnrichment('not-a-date', null, NOW)).toBe(true);
+  });
+});
+
+/**
+ * Deezer's search index is littered with empty duplicate artist pages that
+ * outrank the real one. Every case below is a real response shape measured
+ * live 2026-08-05.
+ */
+describe('pickDeezerArtist', () => {
+  it('picks the real page over an impostor that Deezer ranks first', () => {
+    // Searching "Kesha": a blank 12-fan duplicate leads; the real page has 4.2M.
+    const picked = pickDeezerArtist('Kesha', [
+      { id: 224899105, name: 'Kesha', nb_fan: 12 },
+      { id: 266523722, name: 'Ke$ha', nb_fan: 504 },
+      { id: 12928, name: 'Kesha', nb_fan: 4176339 },
+    ]);
+    expect(picked.id).toBe(12928);
+  });
+
+  it('matches names case-insensitively', () => {
+    // "IVE" is stored as "Ive" on the impostor and "IVE" on the real page.
+    const picked = pickDeezerArtist('IVE', [
+      { id: 1, name: 'Ive', nb_fan: 7 },
+      { id: 2, name: "I've", nb_fan: 42 },
+      { id: 3, name: 'IVE', nb_fan: 264979 },
+    ]);
+    expect(picked.id).toBe(3);
+  });
+
+  it('falls back to the first hit when nothing matches exactly', () => {
+    const picked = pickDeezerArtist('Sour Widows', [
+      { id: 9, name: 'Sour Widows Tribute', nb_fan: 3 },
+    ]);
+    expect(picked.id).toBe(9);
+  });
+
+  it('returns null for an empty or malformed answer', () => {
+    expect(pickDeezerArtist('Anyone', [])).toBeNull();
+    expect(pickDeezerArtist('Anyone', undefined)).toBeNull();
+    expect(pickDeezerArtist('Anyone', [{ name: 'No Id' }])).toBeNull();
+  });
+
+  it('prefers a match with a fan count over one without', () => {
+    const picked = pickDeezerArtist('Toto', [
+      { id: 1, name: 'Toto' },
+      { id: 2, name: 'Toto', nb_fan: 974364 },
+    ]);
+    expect(picked.id).toBe(2);
   });
 });

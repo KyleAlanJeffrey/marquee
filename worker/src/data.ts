@@ -176,15 +176,27 @@ const rsvpCounts = {
  * Signals, strongest first, all already in the database: a Ticketmaster id
  * (somebody sells real tickets through the majors), a Spotify id (enrichment
  * ran, which today means somebody cared enough to open the page), an image
- * and genres (realness proxies that cost nothing), and the RSVP counts —
- * zero almost everywhere today, but it's the term that lets actual people
- * outvote metadata as the social layer fills in.
+ * and genres (realness proxies that cost nothing), Deezer fans in decade
+ * bands (the artist-scale term — the measured spread runs Kesha 4.2M / IVE
+ * 265k / Aldous Harding 22.5k / club acts in the hundreds, so 200k/20k/2k
+ * splits arena, theatre and known-club tiers; migration 0020, filled by the
+ * crawl), and the RSVP counts — zero almost everywhere today, but it's the
+ * term that lets actual people outvote metadata as the social layer fills in.
+ *
+ * Venue-scale proxies were measured against production SF and rejected:
+ * upcoming-show count ranks The Independent (53) above Oakland Arena (40),
+ * and average price ranks The Chapel ($120) above the arena ($86) on sparse,
+ * resale-noisy coverage. The headliner's own draw is the signal that works.
  */
 const notability = sql<number>`
   (case when ${artists.ticketmasterId} is not null then 3 else 0 end)
   + (case when ${artists.spotifyId} is not null then 2 else 0 end)
   + (case when ${artists.imageUrl} is not null then 1 else 0 end)
   + (case when ${artists.genres} is not null and ${artists.genres} != '[]' then 1 else 0 end)
+  + (case when ${artists.deezerFans} >= 200000 then 3
+          when ${artists.deezerFans} >= 20000 then 2
+          when ${artists.deezerFans} >= 2000 then 1
+          else 0 end)
   + min((select count(*) * 2 from event_rsvps where event_id = ${events.id} and status = 'going')
       + (select count(*) from event_rsvps where event_id = ${events.id} and status = 'interested'), 6)`;
 

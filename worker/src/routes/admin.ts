@@ -7,7 +7,13 @@ import { getDb } from '../db';
 import type { JobsAppEnv, JobsEnv } from '../env';
 import { artists, events, reports, reviews } from '../schema';
 import { reportResolveBody } from '../schemas';
-import { backfillBandsintown, backfillCrawlQueue, crawlBandsintown, ingestSeatGeek } from '../sources';
+import {
+  backfillBandsintown,
+  backfillCrawlQueue,
+  backfillDeezerFans,
+  crawlBandsintown,
+  ingestSeatGeek,
+} from '../sources';
 
 export const admin = new Hono<JobsAppEnv>();
 
@@ -131,6 +137,24 @@ admin.post('/discover-seatgeek', async (c) => {
   } catch (err) {
     console.error('discover-seatgeek failed:', err);
     return c.json({ error: 'discovery failed' }, 500);
+  }
+});
+
+/**
+ * Fill Deezer fan counts ahead of the crawl's ten-a-run trickle — TM-id'd
+ * artists first, since they're where the missing scale signal distorts the
+ * featured ranking most. Bounded per call; page by re-calling until
+ * `remaining` hits zero.
+ */
+admin.post('/backfill-deezer-fans', async (c) => {
+  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+  const n = Number(new URL(c.req.url).searchParams.get('limit'));
+  const limit = Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 40) : 25;
+  try {
+    return c.json(await backfillDeezerFans(c.env, limit));
+  } catch (err) {
+    console.error('backfill-deezer-fans failed:', err);
+    return c.json({ error: 'backfill failed' }, 500);
   }
 });
 

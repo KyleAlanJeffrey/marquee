@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import {
   artistsWithUpcoming,
@@ -658,6 +658,8 @@ export type CrawlResult = {
   not_found: number;
   failed: number;
   frontier_added: number;
+  /** Deezer fan counts stored this run (see fillDeezerFans). */
+  fans_filled?: number;
   skipped?: string;
 };
 
@@ -781,6 +783,15 @@ export async function crawlBandsintown(env: CoreEnv, limit = CRAWL_BATCH): Promi
 
   await recordCrawlOutcomes(db, outcomes);
   result.frontier_added = await addFrontierArtists(db, frontier.slice(0, FRONTIER_PER_RUN));
+  // Piggyback on the batch we just paid for: any of this run's artists Deezer
+  // has never been asked about gets one fan-count lookup. Ask-once (0 marks
+  // "asked, unknown"), capped to keep the run inside its subrequest budget,
+  // and best-effort — a Deezer hiccup must not fail the crawl.
+  try {
+    result.fans_filled = await fillDeezerFans(db, due.map((d) => d.artistId), FANS_PER_CRAWL);
+  } catch (err) {
+    console.warn('deezer fans fill failed:', err);
+  }
   await finishRun(db, run, {
     scanned: result.checked,
     inserted: result.ingested,
@@ -788,6 +799,33 @@ export async function crawlBandsintown(env: CoreEnv, limit = CRAWL_BATCH): Promi
     note: result.skipped ?? null,
   });
   return result;
+}
+
+/** How many Deezer fan lookups a single crawl run may spend. */
+const FANS_PER_CRAWL = 10;
+
+/**
+ * Fetch and store Deezer fan counts for whichever of these artists have never
+ * been asked (deezer_fans is null). Unknown-to-Deezer stores 0 rather than
+ * staying null, so the same artist isn't re-asked every single run.
+ */
+async function fillDeezerFans(db: DB, artistIds: string[], cap: number): Promise<number> {
+  if (!artistIds.length || cap <= 0) return 0;
+  const unasked = await db
+    .select({ id: artists.id, name: artists.name })
+    .from(artists)
+    .where(and(inArray(artists.id, artistIds), isNull(artists.deezerFans)))
+    .limit(cap);
+  let filled = 0;
+  for (const a of unasked) {
+    const fans = await deezerFans(a.name).catch(() => null);
+    await db
+      .update(artists)
+      .set({ deezerFans: fans ?? 0 })
+      .where(eq(artists.id, a.id));
+    filled++;
+  }
+  return filled;
 }
 
 /**
@@ -815,6 +853,36 @@ async function addFrontierArtists(db: DB, names: string[]): Promise<number> {
   }
   await enqueueArtistSources(db, queue);
   return added;
+}
+
+/**
+ * Fill Deezer fan counts by hand, ahead of the crawl's ten-a-run trickle.
+ * Ticketmaster-id'd artists go first: they already score highest on metadata,
+ * so they're where a missing scale signal distorts the ranking most.
+ */
+export async function backfillDeezerFans(env: CoreEnv, limit: number) {
+  const db = getDb(env.DB);
+  const unasked = await db
+    .select({ id: artists.id, name: artists.name })
+    .from(artists)
+    .where(isNull(artists.deezerFans))
+    .orderBy(sql`${artists.ticketmasterId} is null`, artists.name)
+    .limit(limit);
+  let known = 0;
+  for (const a of unasked) {
+    const fans = await deezerFans(a.name).catch(() => null);
+    if (fans != null) known++;
+    await db
+      .update(artists)
+      .set({ deezerFans: fans ?? 0 })
+      .where(eq(artists.id, a.id));
+  }
+  const left = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(artists)
+    .where(isNull(artists.deezerFans))
+    .get();
+  return { asked: unasked.length, known, unknown: unasked.length - known, remaining: left?.n ?? null };
 }
 
 /** Put every artist not already queued onto the crawl queue for a source. */
@@ -1298,13 +1366,43 @@ async function spotifyProfile(
 
 // --- Deezer (open API, no key) ----------------------------------------------
 
+/**
+ * Which of Deezer's search hits is the artist. Their index is littered with
+ * empty duplicate pages that outrank the real one — searching "Kesha" returns
+ * a blank 12-fan page first while the 4.2M-fan Kesha sits further down. Among
+ * exact name matches (case-folded), the real page is the one people actually
+ * follow, so the largest fan count wins; no exact match falls back to the
+ * first hit, which is at least Deezer's own best guess.
+ */
+export function pickDeezerArtist(name: string, candidates: unknown): any | null {
+  const list = Array.isArray(candidates) ? candidates : [];
+  const wanted = name.trim().toLowerCase();
+  const exact = list.filter(
+    (a: any) => typeof a?.name === 'string' && a.name.trim().toLowerCase() === wanted && a?.id,
+  );
+  if (!exact.length) return list.find((a: any) => a?.id) ?? null;
+  return exact.reduce((best: any, a: any) =>
+    (typeof a.nb_fan === 'number' ? a.nb_fan : -1) > (typeof best.nb_fan === 'number' ? best.nb_fan : -1) ? a : best,
+  );
+}
+
+async function deezerSearch(name: string): Promise<any | null> {
+  const search = await fetchWithTimeout(
+    `https://api.deezer.com/search/artist?limit=25&q=${encodeURIComponent(name)}`,
+  ).then((r) => r.json<any>());
+  return pickDeezerArtist(name, search.data);
+}
+
+/** The artist's Deezer fan count, or null when Deezer doesn't know them. */
+export async function deezerFans(name: string): Promise<number | null> {
+  const artist = await deezerSearch(name);
+  return typeof artist?.nb_fan === 'number' ? artist.nb_fan : null;
+}
+
 /** Top tracks + fan count from Deezer's open API. Each track carries a 30s
  *  preview mp3 and a link to the full track. */
 async function deezerTopTracks(name: string): Promise<{ tracks: any[]; fans: number | null }> {
-  const search = await fetchWithTimeout(`https://api.deezer.com/search/artist?limit=1&q=${encodeURIComponent(name)}`).then((r) =>
-    r.json<any>(),
-  );
-  const artist = search.data?.[0];
+  const artist = await deezerSearch(name);
   if (!artist?.id) return { tracks: [], fans: null };
   const top = await fetchWithTimeout(`https://api.deezer.com/artist/${artist.id}/top?limit=5`).then((r) => r.json<any>());
   const tracks = (top.data ?? []).map((t: any) => ({
@@ -1590,6 +1688,16 @@ export async function artistInfo(env: CoreEnv, artistId: string) {
     deezerTopTracks(row.name).catch(() => ({ tracks: [], fans: null })),
     wikipediaBio(row.name).catch(() => null),
   ]);
+
+  // The page just paid for a fresh fan count — keep it, so notability ranks on
+  // today's number instead of whenever the crawl last passed this artist.
+  if (deezer.fans != null) {
+    await db
+      .update(artists)
+      .set({ deezerFans: deezer.fans })
+      .where(eq(artists.id, row.id))
+      .catch((err: unknown) => console.warn('deezer fans store failed:', err));
+  }
 
   return {
     spotify_url: spotify?.url ?? null,

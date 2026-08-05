@@ -22,6 +22,12 @@ export const artists = sqliteTable('artists', {
   mbid: text('mbid'),
   imageUrl: text('image_url'),
   genres: text('genres').notNull().default('[]'),
+  /**
+   * Deezer fan count — the artist-scale signal in `notability` (migration
+   * 0020). Null means never fetched; filled by the crawl, artist-page views
+   * and the admin backfill.
+   */
+  deezerFans: integer('deezer_fans'),
   /** When a client last asked about this artist; drives crawl priority. */
   lastRequestedAt: text('last_requested_at'),
   /**

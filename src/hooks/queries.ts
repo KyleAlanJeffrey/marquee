@@ -37,7 +37,11 @@ import type {
 export const EVENTS_BY_IDS_MAX = 200;
 const FOLLOWING_IDS_MAX = 100;
 
-/** Upcoming shows near a point (curated set for the Explore dashboard). */
+/** Upcoming shows near a point (curated set for the Explore dashboard).
+ *  Featured-ranked: the hero and secondary cards should lead with the acts
+ *  people have heard of, not whoever plays soonest — Explore re-sorts its
+ *  COMING UP rail back to date order itself. Maps also read this; pin
+ *  placement doesn't care about order. */
 export function useNearbyEvents(coords: Coords | null, radiusMiles: number) {
   return useQuery({
     queryKey: ['nearby-events', coords, radiusMiles],
@@ -47,7 +51,7 @@ export function useNearbyEvents(coords: Coords | null, radiusMiles: number) {
       // travel with the session token. See RequestOpts in api.ts.
       const page = await apiPost<Page<NearbyEvent>>(
         '/nearby',
-        { lat: coords!.lat, lng: coords!.lng, radius: radiusMiles, limit: 400, offset: 0 },
+        { lat: coords!.lat, lng: coords!.lng, radius: radiusMiles, limit: 400, offset: 0, sort: 'featured' },
         { anonymous: true },
       );
       return page.items;

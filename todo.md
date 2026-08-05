@@ -100,10 +100,10 @@ What's left is the residuals:
   crawl run (the overlap doubles ended once `"crons": []` explicitly
   deleted the website's leftover schedule — omitting the key doesn't).
   Residuals:
-  - [ ] Delete ADMIN_TOKEN from the website Worker (it no longer reads
-    it), and repoint any operator scripts at the marquee-jobs origin
-    (paths are unchanged). The fresh token minted for marquee-jobs was
-    the rotation.
+  - [x] ADMIN_TOKEN deleted from the website Worker (Kyle, 2026-08-05);
+    the fresh token minted for marquee-jobs was the rotation. Operator
+    scripts point at the marquee-jobs origin from now on (paths are
+    unchanged).
   - [ ] Auto-deploy: `.github/workflows/deploy-jobs.yml` redeploys
     marquee-jobs on pushes that touch `worker/**` or the jobs config. A
     `CLOUDFLARE_API_TOKEN` secret is set but Cloudflare rejects it —
@@ -140,15 +140,33 @@ What's left is the residuals:
   Amos / J. Cole / Noah Kahan / David Byrne / Childish Gambino where date
   order read "Official Dailey & Vincent" and "Open Mic Night"; 187 id-less
   long-tail rows sink. Browse defaults to TOP with a BY DATE toggle beside
-  the grid/list one. Residuals:
-  - [ ] A venue-scale signal — IVE at Oakland Arena scores the same 5 as a
-    club act with identical metadata; nothing in the database says "arena"
-    yet. Venue busyness (upcoming-show count per room) is the cheap proxy,
-    a capacity source the real one.
+  the grid/list one. Second cut 2026-08-05 closed two residuals:
+  - [x] **Artist-scale signal** — the venue proxies were measured against
+    production SF and both failed: upcoming-show count ranks The
+    Independent (53) above Oakland Arena (40); average price ranks The
+    Chapel ($120) above the arena ($86) on sparse resale-noisy coverage.
+    What works is the headliner's own draw: Deezer fan count (keyless API;
+    Spotify's popularity is behind the quota wall). Migration 0020 adds
+    `artists.deezer_fans`; notability gains decade bands (+3 ≥200k, +2
+    ≥20k, +1 ≥2k — measured: Kesha 4.2M, Toto 974k, IVE 265k, Aldous
+    Harding 22.5k, club acts in the hundreds). Deezer's search index is
+    littered with blank impostor duplicates that outrank the real page
+    (search "Kesha" → a 12-fan blank first, the 4.2M one further down), so
+    `pickDeezerArtist` takes max-fans among exact name matches — pinned by
+    tests, and it fixes artist-page top tracks too, which had the same
+    bug. Fill paths: 10/crawl-run on marquee-jobs (ask-once, 0 = asked and
+    unknown), fresh store on artist-page views, and
+    `POST /api/admin/backfill-deezer-fans?limit=40` on marquee-jobs.
+    - [ ] Kyle: run the backfill against production (needs the new
+      ADMIN_TOKEN) if you don't want to wait ~1 week for the crawl to
+      fill ~6k artists at 960/day. TM-id'd artists fill first either way.
+  - [x] **Explore rails ranked** — Explore's one nearby query now asks for
+    `sort=featured`, so the hero and the two secondary cards are the most
+    notable acts in range; the COMING UP rail re-sorts itself back to date
+    order client-side (a "coming up" that isn't soonest-first reads
+    broken). Maps share the query and don't care about pin order.
   - [ ] Revisit weights when RSVPs/reviews have volume — the social term is
     capped at +6 and should eventually dominate the metadata guesses.
-  - [ ] Explore's own rails (featured hero, Trending Nearby) still run on
-    date order — decide whether they switch to `sort=featured` too.
 
 - [~] **Social design pass** (Kyle, 2026-07-31) — the thinking is
   **[`docs/design-social.md`](docs/design-social.md)**; the slices, in the
