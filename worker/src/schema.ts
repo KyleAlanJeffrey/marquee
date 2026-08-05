@@ -164,6 +164,19 @@ export const discoveryLog = sqliteTable('discovery_log', {
 });
 
 /**
+ * DICE events hydrated and found unusable — no billed acts, usually (season
+ * passes, open-decks nights, bills written only into the title). Remembered so
+ * the sweep's hydration budget isn't spent on the same ids every six hours:
+ * measured on Queens, the date-sorted head went 25-for-25 artistless and the
+ * sweep converged to hydrating 60 events for zero rows. Rechecked after a week
+ * (see `DICE_SKIP_RECHECK_DAYS`) because promoters do attach lineups late.
+ */
+export const diceSkips = sqliteTable('dice_skips', {
+  id: text('id').primaryKey(),
+  checkedAt: text('checked_at').notNull(),
+});
+
+/**
  * When each listing page was last announced to IndexNow — see migration 0007 and
  * `submitFresh`. Only `/` and the city hubs are recorded, so the table is bounded
  * by the number of towns with shows and a repeat submission updates in place.

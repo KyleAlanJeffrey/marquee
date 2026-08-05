@@ -12,6 +12,7 @@ import {
   backfillCrawlQueue,
   backfillDeezerFans,
   crawlBandsintown,
+  ingestDice,
   ingestSeatGeek,
 } from '../sources';
 
@@ -30,6 +31,9 @@ const sourceConfig = (env: JobsEnv) => ({
   ticketmaster: Boolean(env.TICKETMASTER_API_KEY),
   bandsintown: Boolean(env.BANDSINTOWN_APP_ID),
   seatgeek: Boolean(env.SEATGEEK_CLIENT_ID),
+  // Keyless: DICE's consumer search endpoint is open, so it is always on —
+  // and the silent-source check still applies to it.
+  dice: true,
   spotify: Boolean(env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET),
 });
 
@@ -136,6 +140,33 @@ admin.post('/discover-seatgeek', async (c) => {
     return c.json(await ingestSeatGeek(c.env, lat, lng, radius));
   } catch (err) {
     console.error('discover-seatgeek failed:', err);
+    return c.json({ error: 'discovery failed' }, 500);
+  }
+});
+
+/** One DICE sweep of an area — same contract as `/discover-seatgeek`. */
+admin.post('/discover-dice', async (c) => {
+  if (!authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+  const url = new URL(c.req.url);
+  const num = (key: string, fallback: number): number | null => {
+    const raw = url.searchParams.get(key);
+    if (raw === null) return fallback;
+    if (raw.trim() === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+  const lat = num('lat', 37.7749);
+  const lng = num('lng', -122.4194);
+  const rawRadius = num('radius', 25);
+  if (lat === null || lng === null || rawRadius === null) {
+    return c.json({ error: 'lat, lng and radius must be numbers' }, 400);
+  }
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return c.json({ error: 'lat/lng out of range' }, 400);
+  const radius = Math.min(Math.max(rawRadius, 1), 150);
+  try {
+    return c.json(await ingestDice(c.env, lat, lng, radius));
+  } catch (err) {
+    console.error('discover-dice failed:', err);
     return c.json({ error: 'discovery failed' }, 500);
   }
 });

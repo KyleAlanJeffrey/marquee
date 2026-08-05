@@ -1952,7 +1952,7 @@ async function batchChunked<T>(db: DB, stmts: any[], size = 50): Promise<T[]> {
   return out;
 }
 
-async function inBatches(db: DB, stmts: any[], size = 50): Promise<void> {
+export async function inBatches(db: DB, stmts: any[], size = 50): Promise<void> {
   await batchChunked(db, stmts, size);
 }
 

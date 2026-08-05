@@ -1,0 +1,253 @@
+[
+  {
+    "id": "69dd6449449029000171b2ba",
+    "perm_name": "l8d37r-clipping-spellling-shabazz-palaces-splendor-misery-fest-13th-aug-knockdown-center-new-york-tickets",
+    "name": "clipping., SPELLLING, Shabazz Palaces + : Splendor & Misery Fest",
+    "date_unix": 1786660200,
+    "dates": {
+      "timezone": "America/New_York",
+      "announcement_date": "2026-04-15T22:00:00-04:00",
+      "sale_end_date": "2026-08-13T17:00:00-04:00",
+      "sale_start_date": "2026-04-15T22:00:00-04:00",
+      "event_start_date": "2026-08-13T18:30:00-04:00",
+      "pre_sale_start_date": null,
+      "event_end_date": "2026-08-14T00:00:00-04:00",
+      "is_multi_days_event": false
+    },
+    "status": "on-sale",
+    "secondary_status": null,
+    "price": {
+      "currency": "USD",
+      "amount": null,
+      "sales_tax": null,
+      "amount_from": 3044
+    },
+    "attendance_type": "live_only",
+    "summary_lineup": {
+      "top_artists": [
+        {
+          "artist_id": "3765",
+          "name": "clipping.",
+          "is_headliner": false,
+          "image": {
+            "url": "https://dice-i-scdn-co.imgix.net/image/ab6761610000e5ebcc61b54c332a2c8baaaf375b"
+          }
+        },
+        {
+          "artist_id": "50304",
+          "name": "SPELLLING",
+          "is_headliner": false,
+          "image": {
+            "url": "https://dice-media.imgix.net/attachments/2024-11-25/b4864e0e-e40b-47b5-bc78-8e460b24d38c.jpg?rect=60%2C0%2C600%2C600"
+          }
+        },
+        {
+          "artist_id": "185",
+          "name": "Shabazz Palaces",
+          "is_headliner": false,
+          "image": {
+            "url": "https://dice-media.imgix.net/attachments/2024-04-15/a421331f-f8ff-4260-b92f-b8af4c7b5faa.jpg?rect=0%2C0%2C640%2C640"
+          }
+        },
+        {
+          "artist_id": "58987",
+          "name": "Fatboi Sharif",
+          "is_headliner": false,
+          "image": {
+            "url": "https://dice-media.imgix.net/attachments/2022-09-06/d7820339-03c1-4d0c-9bcf-9bbedeb25072.jpg?rect=0%2C0%2C640%2C640"
+          }
+        },
+        {
+          "artist_id": "39006",
+          "name": "Evicshen",
+          "is_headliner": false,
+          "image": {
+            "url": "https://dice-media.imgix.net/attachments/2022-09-26/2a222e67-156d-4e4b-8c67-c252a2a9c65f.jpg?rect=0%2C0%2C640%2C640"
+          }
+        }
+      ],
+      "total_artists": 6
+    },
+    "venues": [
+      {
+        "id": "2421",
+        "name": "Knockdown Center",
+        "address": "52-19 Flushing Ave, Maspeth, NY 11378, USA",
+        "location": {
+          "lat": 40.71496339999999,
+          "lng": -73.9134793
+        },
+        "city": {
+          "name": "New York",
+          "country_code": "US",
+          "country_name": "United States of America"
+        },
+        "perm_name": "knockdown-center-e776"
+      }
+    ]
+  },
+  {
+    "id": "69f4bb683ba6d900015e6bc1",
+    "perm_name": "yoeem2-sg-lewis-dj-set-in-the-ruins-fri-sat-21st-aug-ruins-at-knockdown-center-new-york-tickets",
+    "name": "SG Lewis (DJ Set) in The Ruins (Fri + Sat)",
+    "date_unix": 1787338800,
+    "dates": {
+      "timezone": "America/New_York",
+      "announcement_date": "2026-05-07T12:00:00-04:00",
+      "sale_end_date": "2026-08-22T19:00:00-04:00",
+      "sale_start_date": "2026-05-13T11:00:00-04:00",
+      "event_start_date": "2026-08-21T15:00:00-04:00",
+      "pre_sale_start_date": null,
+      "event_end_date": "2026-08-22T22:00:00-04:00",
+      "is_multi_days_event": true
+    },
+    "status": "sold-out",
+    "secondary_status": "waiting-list",
+    "price": {
+      "currency": "USD",
+      "amount": null,
+      "sales_tax": null,
+      "amount_from": 6434
+    },
+    "attendance_type": "live_only",
+    "summary_lineup": {
+      "top_artists": [
+        {
+          "artist_id": "1455",
+          "name": "SG Lewis",
+          "is_headliner": false,
+          "image": {
+            "url": "https://dice-media.imgix.net/attachments/2026-05-19/05761a38-a79d-4649-8ef7-9b88160d6da6.jpg?rect=0%2C978%2C3910%2C3910"
+          }
+        }
+      ],
+      "total_artists": 1
+    },
+    "venues": [
+      {
+        "id": "7071",
+        "name": "Ruins at Knockdown Center",
+        "address": "52-19 Flushing Ave, Queens, NY 11378, USA",
+        "location": {
+          "lat": 40.7156792,
+          "lng": -73.9143788
+        },
+        "city": {
+          "name": "New York",
+          "country_code": "US",
+          "country_name": "United States of America"
+        },
+        "perm_name": "ruins-at-knockdown-center-owog"
+      }
+    ]
+  },
+  {
+    "id": "6a57b5af5d2d6d0001cbcdf5",
+    "perm_name": "g53v9p-horse-meat-disco-ny-labor-day-weekend-6th-sep-knockdown-center-new-york-tickets",
+    "name": "Horse Meat Disco NY Labor Day Weekend",
+    "date_unix": 1788746400,
+    "dates": {
+      "timezone": "America/New_York",
+      "announcement_date": "2026-07-21T12:00:00-04:00",
+      "sale_end_date": "2026-09-06T23:30:00-04:00",
+      "sale_start_date": "2026-07-23T12:00:00-04:00",
+      "event_start_date": "2026-09-06T22:00:00-04:00",
+      "pre_sale_start_date": null,
+      "event_end_date": "2026-09-07T05:00:00-04:00",
+      "is_multi_days_event": false
+    },
+    "status": "on-sale",
+    "secondary_status": null,
+    "price": {
+      "currency": "USD",
+      "amount": 8652,
+      "sales_tax": 0,
+      "amount_from": null
+    },
+    "attendance_type": "live_only",
+    "summary_lineup": {
+      "top_artists": [],
+      "total_artists": 0
+    },
+    "venues": [
+      {
+        "id": "2421",
+        "name": "Knockdown Center",
+        "address": "52-19 Flushing Ave, Maspeth, NY 11378, USA",
+        "location": {
+          "lat": 40.71496339999999,
+          "lng": -73.9134793
+        },
+        "city": {
+          "name": "New York",
+          "country_code": "US",
+          "country_name": "United States of America"
+        },
+        "perm_name": "knockdown-center-e776"
+      }
+    ]
+  },
+  {
+    "id": "69ebcc2bebf4ae0001f329a0",
+    "perm_name": "v3dbk7-claude-vonstroke-lumia-jasper-crenshaw-7th-aug-ruins-at-knockdown-center-new-york-tickets",
+    "name": "Claude VonStroke, Lumia, Jasper Crenshaw",
+    "date_unix": 1786129200,
+    "dates": {
+      "timezone": "America/New_York",
+      "announcement_date": "2026-04-30T12:00:00-04:00",
+      "sale_end_date": "2026-08-07T20:00:00-04:00",
+      "sale_start_date": "2026-04-30T12:00:00-04:00",
+      "event_start_date": "2026-08-07T15:00:00-04:00",
+      "pre_sale_start_date": null,
+      "event_end_date": "2026-08-07T22:00:00-04:00",
+      "is_multi_days_event": false
+    },
+    "status": "on-sale",
+    "secondary_status": null,
+    "price": {
+      "currency": "USD",
+      "amount": 3817,
+      "sales_tax": 0,
+      "amount_from": null
+    },
+    "attendance_type": "live_only",
+    "summary_lineup": {
+      "top_artists": [
+        {
+          "artist_id": "875",
+          "name": "Claude Vonstroke",
+          "is_headliner": false,
+          "image": {
+            "url": "https://dice-media.imgix.net/attachments/2020-05-19/859708e6-7642-47d7-9081-64c5e60c53dc.jpg?rect=0%2C1%2C1023%2C1023"
+          }
+        },
+        {
+          "artist_id": "129278",
+          "name": "Lumia",
+          "is_headliner": false,
+          "image": {
+            "url": "https://dice-media.imgix.net/attachments/2026-02-12/601bffaf-b1d1-452a-b3a6-81e603db2592.jpg?rect=0%2C0%2C640%2C640"
+          }
+        }
+      ],
+      "total_artists": 2
+    },
+    "venues": [
+      {
+        "id": "7071",
+        "name": "Ruins at Knockdown Center",
+        "address": "52-19 Flushing Ave, Queens, NY 11378, USA",
+        "location": {
+          "lat": 40.7156792,
+          "lng": -73.9143788
+        },
+        "city": {
+          "name": "New York",
+          "country_code": "US",
+          "country_name": "United States of America"
+        },
+        "perm_name": "ruins-at-knockdown-center-owog"
+      }
+    ]
+  }
+]

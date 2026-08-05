@@ -298,6 +298,25 @@ What's left is the residuals:
   - [ ] Then the website advertises the app: store badges on `/`, and a smart
     banner on web pages rather than "Open the app" pointing at itself.
   - In-app account deletion (a store requirement) is done — `8b97812`.
+- [x] **DICE discovery source** (Kyle, 2026-08-05, "we're missing some venues —
+  knockdown.center for one"). Measured first: Knockdown's own calendar listed 47
+  shows, production carried 29, and all of the missing (Flying Lotus, Boy
+  Harsher, L7, Cate Le Bon…) ticketed through DICE alone. `api.dice.fm/
+  unified_search` is open (no key): geo+tag search paginates with
+  `next_page_cursor`, **sent back as `cursor`** — its response name silently
+  replays page one. Geo results are *slim* (no lineup, no perm_name), so the
+  sweep is two-phase: enumerate ids (8 pages × `music:gig`+`music:dj`, date-
+  interleaved across tags or the cap starves one of them), hydrate only unknown
+  ids via `GET /events/{id}` (60/sweep). Artistless listings (season passes,
+  open-decks — 411 of 1192 NYC candidates) go in `dice_skips` (migration 0021,
+  re-checked weekly) or the date-sorted head wedges the sweep at zero forever —
+  measured before the fix. USD-only prices (cents, `amount_from` or `amount`),
+  events with no billed act are skipped rather than minting "Horse Meat Disco NY
+  Labor Day Weekend" as an artist. Local proof: 48 upcoming Knockdown rows ≈
+  the venue's whole calendar. Left for later: parsing bills out of titles
+  ("Carrying, Ok King, Stryk9, Ekblad") would recover the artistless half of
+  the catalogue, but string-minted artists are the exact trap the venue-name
+  work spent weeks digging out of.
 - [ ] **The venue-name bugs**, which are also SEO bugs (titles get rewritten by
   Google when they name two places). Junk-named *new* venues now adopt their
   same-spot room at ingest (2026-07-31); what's left:

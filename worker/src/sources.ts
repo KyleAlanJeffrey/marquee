@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 
 import {
   artistsWithUpcoming,
@@ -9,6 +9,7 @@ import {
   ensureArtistByName,
   ensureArtistsByName,
   finishRun,
+  inBatches,
   isoAt,
   nowIso,
   persist,
@@ -37,7 +38,7 @@ import { cleanVenueName, dashBillingVenueName, guessUtcOffsetHours, nameCarriesA
 import { utcMsFromLocal, zoneFor } from './timezone';
 import { fetchVenueEnrichment, type VenueEnrichment } from './venue-info';
 import type { CoreEnv } from './env';
-import { artists, discoveryLog, events, venues } from './schema';
+import { artists, diceSkips, discoveryLog, events, venues } from './schema';
 
 // --- outbound HTTP ----------------------------------------------------------
 
@@ -1163,13 +1164,338 @@ export async function ingestSeatGeek(
   }
 }
 
+// --- DICE ---------------------------------------------------------------------
+//
+// DICE tickets the independent rooms neither Ticketmaster nor SeatGeek lists —
+// measured on Knockdown Center (Queens): its own calendar showed 47 shows, we
+// carried 29, and every one of the missing 18 (Flying Lotus, Boy Harsher, L7,
+// Cate Le Bon…) sold through DICE alone. `unified_search` is the consumer app's
+// own endpoint: unauthenticated POST, `{lat, lng, tag, count}` in, day-sectioned
+// events soonest-first out, with `next_page_cursor` for the next page (sent back
+// as `cursor` — sending it back under its response name silently returns page
+// one again).
+//
+// The sweep is two-phase because the geo search returns *slim* events — no
+// lineup, no `perm_name`, nothing an event row can be built from — while
+// `GET /events/{id}` returns the full object. So the search enumerates ids, the
+// database says which are new, and only those are hydrated, a bounded number
+// per sweep.
+
+const DICE_API = 'https://api.dice.fm';
+const DICE_MAX_RETRIES = 3;
+/** Asking for more than 100 quietly returns ~92 anyway. */
+const DICE_COUNT = 100;
+/**
+ * Search pages per tag per sweep. Eight covers the whole listing even in New
+ * York, DICE's densest US metro (measured: `music:gig` exhausts at page 8,
+ * `music:dj` at 6 — four pages stopped five weeks out and missed every show
+ * Kyle first noticed missing); sparser metros exhaust in a page or two and the
+ * loop breaks early on the absent cursor either way.
+ */
+const DICE_MAX_PAGES = 8;
+/**
+ * The catalogue splits shows across tags; these two are the concert-shaped ones.
+ * Knockdown's calendar needed both — 21 of its shows were `music:gig`, 28
+ * `music:dj` — and `music:party` is club flyers, not billed acts.
+ */
+const DICE_TAGS = ['music:gig', 'music:dj'];
+/**
+ * Detail fetches per sweep. Soonest-first, so the cap takes the shows that
+ * matter now and leaves the tail to the next sweep; a metro's backlog drains in
+ * a day or two of six-hourly sweeps and then each sweep hydrates only what's
+ * newly announced.
+ */
+const DICE_HYDRATE_MAX = 60;
+
+/** The start as UTC: DICE publishes ISO-with-offset, plus epoch as a fallback. */
+export function diceUtc(e: any): string | null {
+  const iso = e?.dates?.event_start_date;
+  if (typeof iso === 'string' && iso) {
+    const t = Date.parse(iso);
+    if (!Number.isNaN(t)) return isoAt(t);
+  }
+  const unix = e?.date_unix;
+  if (typeof unix === 'number' && Number.isFinite(unix) && unix > 0) return isoAt(unix * 1000);
+  return null;
+}
+
+/**
+ * The state out of "52-19 Flushing Ave, Maspeth, NY 11378, USA" — DICE's city
+ * object stops at the country, so the address is the only place a US region
+ * appears. Non-US addresses simply don't match, and null is honest there.
+ */
+export function diceRegion(address: unknown): string | null {
+  if (typeof address !== 'string') return null;
+  const m = address.match(/,\s*([A-Z]{2})\s+\d{5}(?:-\d{4})?\b/);
+  return m ? m[1] : null;
+}
+
+function diceVenue(e: any): VenueRow | null {
+  // Some shows list two rooms of one building ("Knockdown Center" + "Ruins at
+  // Knockdown Center"); the first is the primary billing, and the canonical
+  // same-spot rule folds the rest anyway.
+  const v = Array.isArray(e?.venues) ? e.venues[0] : null;
+  const name = typeof v?.name === 'string' ? v.name.trim() : '';
+  if (!v?.id || !name) return null;
+  return {
+    source: 'dice',
+    source_venue_id: String(v.id),
+    name,
+    city: typeof v.city?.name === 'string' ? v.city.name : null,
+    region: diceRegion(v.address),
+    country: typeof v.city?.country_code === 'string' ? v.city.country_code : null,
+    lat: typeof v.location?.lat === 'number' ? v.location.lat : null,
+    lng: typeof v.location?.lng === 'number' ? v.location.lng : null,
+  };
+}
+
+/** Billed acts, headliner first when DICE marks one (it rarely does). */
+export function dicePerformers(e: any): SgPerformer[] {
+  const raw = Array.isArray(e?.summary_lineup?.top_artists) ? e.summary_lineup.top_artists : [];
+  const seen = new Set<string>();
+  const out: SgPerformer[] = [];
+  for (const a of [...raw].sort(
+    (x, y) => Number(y?.is_headliner === true) - Number(x?.is_headliner === true),
+  )) {
+    const name = typeof a?.name === 'string' ? a.name.trim() : '';
+    if (!name) continue;
+    const folded = name.toLowerCase();
+    if (seen.has(folded)) continue;
+    seen.add(folded);
+    const image = a?.image?.url;
+    out.push({ name, imageUrl: typeof image === 'string' && image ? image : null });
+    if (out.length >= SG_LINEUP_MAX) break;
+  }
+  return out;
+}
+
+/**
+ * Cheapest ticket in dollars. DICE prices in integer cents, under `amount_from`
+ * when tiers differ and `amount` when they don't; USD-only because the column
+ * carries no currency and a €30 stored as "30" would read as dollars.
+ */
+export function dicePrice(e: any): number | null {
+  const p = e?.price;
+  if (!p || p.currency !== 'USD') return null;
+  const cents =
+    typeof p.amount_from === 'number' && p.amount_from > 0
+      ? p.amount_from
+      : typeof p.amount === 'number' && p.amount > 0
+        ? p.amount
+        : null;
+  return cents === null ? null : Math.round(cents) / 100;
+}
+
+/**
+ * Pure mapping, pinned to a recorded payload in `test/dice.test.ts`. Events
+ * without a billed act (club nights sold on the flyer alone) are skipped — an
+ * event row needs an artist, and inventing one from the title would put
+ * "Horse Meat Disco NY Labor Day Weekend" on artist pages as a band.
+ */
+export function diceToEventInputs(
+  diceEvents: any[],
+  artistIdFor: (foldedName: string) => string | undefined,
+): EventInput[] {
+  return diceEvents.flatMap((e: any) => {
+    if (!e?.id || typeof e.id !== 'string') return [];
+    const startsAt = diceUtc(e);
+    if (!startsAt) return [];
+    const performers = dicePerformers(e);
+    const headliner = performers[0];
+    if (!headliner) return [];
+    const artistId = artistIdFor(headliner.name.toLowerCase());
+    if (!artistId) return [];
+    const permName = typeof e.perm_name === 'string' && e.perm_name ? e.perm_name : null;
+    return [
+      {
+        source: 'dice',
+        source_event_id: e.id,
+        name: typeof e.name === 'string' && e.name.trim() ? e.name.trim() : headliner.name,
+        starts_at: startsAt,
+        ticket_url: permName ? `https://dice.fm/event/${permName}` : null,
+        price_from: dicePrice(e),
+        sold_out: e.status === 'sold-out' ? true : null,
+        lineup: performers.length > 1 ? performers.map((p) => p.name) : null,
+        artist_id: artistId,
+        venue: diceVenue(e),
+      },
+    ];
+  });
+}
+
+async function diceFetch(path: string, init?: RequestInit): Promise<any> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetchWithTimeout(`${DICE_API}${path}`, init);
+    if ((res.status === 429 || res.status >= 500) && attempt < DICE_MAX_RETRIES) {
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      continue;
+    }
+    if (!res.ok) throw new Error(`DICE ${path.split('/')[1]}: ${res.status}`);
+    return res.json();
+  }
+}
+
+/**
+ * Ids of upcoming shows near a point, soonest first *across the tags* — each
+ * tag's pages arrive date-sorted, but concatenating them would put every gig
+ * before the first DJ night, and the hydration cap would then spend itself on
+ * one tag (measured: two sweeps of Queens hydrated 120 events and reached zero
+ * of Knockdown's DJ-tagged shows). The search's own radius is opaque, so the
+ * caller's promise is enforced here: an event whose venue has coordinates
+ * provably outside `radiusMiles` is dropped, and one with no coordinates is
+ * kept — the Bandsintown rows live without them too.
+ */
+async function diceEventIdsNear(lat: number, lng: number, radiusMiles: number): Promise<string[]> {
+  const startsById = new Map<string, number>();
+  for (const tag of DICE_TAGS) {
+    let cursor: string | null = null;
+    for (let page = 0; page < DICE_MAX_PAGES; page++) {
+      const json = await diceFetch('/unified_search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng, tag, count: DICE_COUNT, ...(cursor ? { cursor } : {}) }),
+      });
+      const sections = Array.isArray(json?.sections) ? json.sections : [];
+      let batch = 0;
+      for (const s of sections) {
+        for (const it of Array.isArray(s?.items) ? s.items : []) {
+          const e = it?.type === 'event' ? it.event : null;
+          if (!e?.id || typeof e.id !== 'string') continue;
+          batch++;
+          const v = Array.isArray(e.venues) ? e.venues[0] : null;
+          const vLat = v?.location?.lat;
+          const vLng = v?.location?.lng;
+          if (typeof vLat === 'number' && typeof vLng === 'number') {
+            // Equirectangular is plenty at metro scale.
+            const miles = Math.hypot(
+              (vLat - lat) * 69,
+              (vLng - lng) * 69 * Math.cos((lat * Math.PI) / 180),
+            );
+            if (miles > radiusMiles) continue;
+          }
+          const start = Date.parse(e.dates?.event_start_date ?? '');
+          startsById.set(e.id, Number.isNaN(start) ? Number.MAX_SAFE_INTEGER : start);
+        }
+      }
+      cursor = typeof json?.next_page_cursor === 'string' ? json.next_page_cursor : null;
+      if (!cursor || batch === 0) break;
+    }
+  }
+  return [...startsById.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id);
+}
+
+/** How long an unusable event stays skipped before its lineup is re-checked. */
+const DICE_SKIP_RECHECK_DAYS = 7;
+
+/**
+ * Which of these DICE ids need no hydration: already on file (one `sources`-map
+ * probe answers for both plain dice rows and shows another source found first —
+ * the invariant in `persist`: every row records its own upstream id in
+ * `sources`), or hydrated recently and found unusable. Without the second set
+ * the sweep starves: the date-sorted head fills with season passes and
+ * open-decks nights, and 60 hydrations return the same nothing every six hours.
+ */
+async function knownDiceEventIds(db: DB, ids: string[]): Promise<Set<string>> {
+  const known = new Set<string>();
+  const recheckBefore = isoAt(Date.now() - DICE_SKIP_RECHECK_DAYS * 86_400_000);
+  // D1 allows 100 bound parameters per query.
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    const rows = await db
+      .select({ id: sql<string>`json_extract(${events.sources}, '$."dice"')` })
+      .from(events)
+      .where(inArray(sql`json_extract(${events.sources}, '$."dice"')`, chunk));
+    for (const r of rows) known.add(r.id);
+    const skips = await db
+      .select({ id: diceSkips.id })
+      .from(diceSkips)
+      .where(and(inArray(diceSkips.id, chunk), gt(diceSkips.checkedAt, recheckBefore)));
+    for (const r of skips) known.add(r.id);
+  }
+  return known;
+}
+
+/**
+ * One DICE sweep of an area, persisted. Shaped like `ingestSeatGeek` — separate
+ * run rows per source, `persist` merging shows the other sources already carry —
+ * plus the hydration step the slim search results force. Detail fetches that
+ * fail individually are skipped, not fatal: the next sweep still sees the id as
+ * unknown and tries again.
+ */
+export async function ingestDice(
+  env: CoreEnv,
+  lat: number,
+  lng: number,
+  radius: number,
+): Promise<{ scanned: number; hydrated: number; ingested: number; artists_created: number }> {
+  const db = getDb(env.DB);
+  const run = await startRun(db, 'dice', 'discover');
+  try {
+    const candidates = await diceEventIdsNear(lat, lng, radius);
+    const known = await knownDiceEventIds(db, candidates);
+    const fresh = candidates.filter((id) => !known.has(id)).slice(0, DICE_HYDRATE_MAX);
+    // Hydrated a few at a time: sequential is 60 round trips on a request a
+    // client is waiting on, and all-at-once is a burst DICE has no reason to
+    // tolerate. Workers allow 6 simultaneous outbound connections anyway.
+    const diceEvents: any[] = [];
+    for (let i = 0; i < fresh.length; i += 6) {
+      const settled = await Promise.allSettled(
+        fresh.slice(i, i + 6).map((id) => diceFetch(`/events/${id}`)),
+      );
+      for (const [j, s] of settled.entries()) {
+        if (s.status === 'fulfilled') diceEvents.push(s.value);
+        else console.error(`dice event ${fresh[i + j]} hydration failed:`, s.reason);
+      }
+    }
+    // Headliners only, like SeatGeek: the crawl's frontier expansion promotes
+    // support acts at a rate D1's write quota can take.
+    const headliners = diceEvents.flatMap((e) => dicePerformers(e).slice(0, 1));
+    const { ids, created } = await ensureArtistsByName(db, headliners);
+    const inputs = diceToEventInputs(diceEvents, (folded) => ids.get(folded));
+    const newIds = await persist(db, inputs);
+    // Whatever was hydrated and *still* isn't on file — unmappable, or thrown
+    // out inside `persist` — gets a skip row. Judging by "did a row appear"
+    // rather than "did the mapping produce an input" covers both paths with the
+    // same probe, so nothing can fall between them and re-hydrate forever.
+    const hydratedIds = diceEvents.map((e) => String(e.id));
+    const landed = await knownDiceEventIds(db, hydratedIds);
+    const skipped = hydratedIds.filter((id) => !landed.has(id));
+    if (skipped.length) {
+      const now = nowIso();
+      await inBatches(
+        db,
+        skipped.map((id) =>
+          db
+            .insert(diceSkips)
+            .values({ id, checkedAt: now })
+            .onConflictDoUpdate({ target: diceSkips.id, set: { checkedAt: now } }),
+        ),
+      );
+    }
+    await finishRun(db, run, {
+      scanned: candidates.length,
+      inserted: newIds.length,
+      note: `${diceEvents.length} hydrated, ${skipped.length} skipped, ${created} new artist(s)`,
+    });
+    return {
+      scanned: candidates.length,
+      hydrated: diceEvents.length,
+      ingested: newIds.length,
+      artists_created: created,
+    };
+  } catch (err) {
+    await finishRun(db, run, { failed: 1, note: String(err).slice(0, 200) });
+    throw err;
+  }
+}
+
 // --- Ingestion orchestrators ------------------------------------------------
 
 /**
- * Sweep an area for shows. Both geographic sources are asked — Ticketmaster for
- * the ticketed catalogue, SeatGeek for the clubs it doesn't list — and the
- * six-hour throttle covers the pair, since they cost one round trip each to the
- * same question.
+ * Sweep an area for shows. Every geographic source is asked — Ticketmaster for
+ * the ticketed catalogue, SeatGeek for the clubs it doesn't list, DICE for the
+ * independent rooms neither carries — and the six-hour throttle covers the set,
+ * since they cost a handful of round trips each to the same question.
  */
 export async function discover(env: CoreEnv, lat: number, lng: number, radius: number) {
   const db = getDb(env.DB);
@@ -1223,6 +1549,19 @@ export async function discover(env: CoreEnv, lat: number, lng: number, radius: n
     }
   }
 
+  // DICE needs no key — its consumer search endpoint is open — so it is always
+  // attempted and counts toward the all-sources-down outage check like the rest.
+  let dice = { scanned: 0, ingested: 0, artists_created: 0 } as Awaited<ReturnType<typeof ingestDice>>;
+  {
+    attempted++;
+    try {
+      dice = await ingestDice(env, lat, lng, radius);
+    } catch (err) {
+      console.error('dice discover failed:', err);
+      failed.push('dice');
+    }
+  }
+
   // Every source down is an outage, not an empty area — surface it as an error so
   // the caller can retry, rather than reporting a successful sweep of nothing.
   if (attempted > 0 && failed.length === attempted) {
@@ -1240,12 +1579,13 @@ export async function discover(env: CoreEnv, lat: number, lng: number, radius: n
       .onConflictDoUpdate({ target: discoveryLog.cell, set: { fetchedAt: sql`excluded.fetched_at` } });
   }
   return {
-    ingested: tmIngested + sg.ingested,
-    scanned: tmScanned + sg.scanned,
+    ingested: tmIngested + sg.ingested + dice.ingested,
+    scanned: tmScanned + sg.scanned + dice.scanned,
     ...(failed.length ? { failed } : {}),
     by_source: {
       ticketmaster: { scanned: tmScanned, ingested: tmIngested },
       seatgeek: { scanned: sg.scanned, ingested: sg.ingested, artists_created: sg.artists_created },
+      dice: { scanned: dice.scanned, ingested: dice.ingested, artists_created: dice.artists_created },
     },
   };
 }

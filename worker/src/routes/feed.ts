@@ -36,10 +36,8 @@ feed.post('/following', zValidator('json', followingBody), async (c) => {
 // Client-driven ingestion: pull fresh shows for an area (server-throttled).
 feed.post('/discover-events', zValidator('json', discoverBody), async (c) => {
   const { lat, lng, radius } = c.req.valid('json');
-  // Either geographic source is enough to make the sweep worth running.
-  if (!c.env.TICKETMASTER_API_KEY && !c.env.SEATGEEK_CLIENT_ID) {
-    return c.json({ error: 'no discovery source configured', ingested: 0 }, 503);
-  }
+  // DICE needs no key, so a sweep is always worth running — the keyed sources
+  // simply join in when they're configured.
   try {
     return c.json(await discover(c.env, lat, lng, radius));
   } catch (err) {
