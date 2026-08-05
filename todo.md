@@ -102,13 +102,18 @@ What's left is the residuals:
   website API — it's request-driven, same as the mirror writes. Migrations
   stay owned by the website config only. Deploy-time steps that are not in
   the PR:
-  - [ ] First deploy: `npm run deploy:jobs`, then set secrets on marquee-jobs
-    (BANDSINTOWN_APP_ID, TICKETMASTER_API_KEY, SEATGEEK_CLIENT_ID,
-    SPOTIFY_CLIENT_ID/SECRET, INDEXNOW_KEY, and a **freshly minted**
-    ADMIN_TOKEN — this is the rotation).
-  - [ ] Delete ADMIN_TOKEN from the website Worker (it no longer reads it),
-    and repoint any operator scripts at the marquee-jobs origin (paths are
-    unchanged).
+  - [ ] Before merging the PR: `npm run deploy:jobs` (done 2026-08-05), set
+    secrets on marquee-jobs (BANDSINTOWN_APP_ID, TICKETMASTER_API_KEY,
+    SEATGEEK_CLIENT_ID, SPOTIFY_CLIENT_ID/SECRET, INDEXNOW_KEY, and a
+    **freshly minted** ADMIN_TOKEN — this is the rotation), then confirm
+    `/api/admin/health` on marquee-jobs reports every source configured.
+    Merging first would leave the crawl as a logged no-op ("… not set" in
+    ingest_runs) until the secrets landed. Until the merge deploys, both
+    crons fire — safe (ingestion upserts, indexnow_log updates in place),
+    just double the upstream calls for a few minutes.
+  - [ ] After merge: delete ADMIN_TOKEN from the website Worker (it no
+    longer reads it), and repoint any operator scripts at the marquee-jobs
+    origin (paths are unchanged).
   - [ ] Second Workers Builds project on the repo pointing at
     `wrangler.jobs.jsonc` (deploy command `npx wrangler deploy -c
     wrangler.jobs.jsonc`, no expo build needed) — or keep deploying it by

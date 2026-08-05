@@ -1,9 +1,10 @@
 // Cloudflare config for the jobs Worker: everything that isn't serving the
 // site. The Cron Trigger (the 15-minute Bandsintown crawl + IndexNow
 // submissions) and the /api/admin/* endpoints run here, against the same D1
-// as the website Worker (wrangler.jsonc) — so a bad ingestion deploy can't
-// take the site down, and the crawl stops spending the site's CPU and
-// subrequest budgets.
+// as the website Worker (wrangler.jsonc). What the split isolates is Worker
+// execution: the crawl stops spending the site's CPU and subrequest budgets,
+// and a broken ingestion deploy stops serving requests here, not there. D1
+// stays a shared failure domain — bad *data* still reaches both.
 //
 // Deploy: `npm run deploy:jobs` (wrangler deploy -c wrangler.jobs.jsonc), or a
 // second Workers Builds project on this repo pointing at this config file.
