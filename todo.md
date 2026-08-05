@@ -282,8 +282,11 @@ What's left is the residuals:
   FlatLists as header elements. Verified on fresh Expo Go mounts: both fields
   type, search, and keep focus; web still glows. `autoCorrect` off on artist
   fields ("Aldous" was becoming "Aldo is").
-  - [ ] Small follow-up: a deep-linked full-screen log-show presentation lays
-    its own header under the status bar, so the back chevron can be untappable.
+  - [x] Follow-up (same day): the deep-linked full-screen presentation laid its
+    header under the status bar — fixed with a native SafeAreaView around the
+    header (the insets *hook* reports the window inset even inside a sheet and
+    double-padded it; the own-frame SafeAreaView pads only when full-screen).
+    Verified both presentations on the simulator.
   - The blue gear bubble covering the TopBar search icon and the modal X is
     Expo Go's dev-menu overlay — dev-only, not a bug to fix.
 - [ ] **App-store prep** — mine except the builds and submissions:
