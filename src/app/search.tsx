@@ -2,15 +2,16 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { FollowButton } from '@/components/follow-button';
 import { GenreChip } from '@/components/genre-chip';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
+import { SearchBar } from '@/components/search-bar';
 import { ThemedText } from '@/components/themed-text';
-import { Fonts, Glow, Radius, Spacing } from '@/constants/theme';
+import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ensureArtist } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
@@ -30,7 +31,6 @@ export default function SearchScreen() {
   const { isFollowing, toggle } = useFollows();
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
-  const [focused, setFocused] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
   const search = useArtistSearch(query);
   const towns = useTownSearch(query);
@@ -73,47 +73,25 @@ export default function SearchScreen() {
         title="Find artists, towns and people"
         description="Search millions of artists, jump straight to the upcoming shows in any town, or find people to follow."
       />
-      <View
-        style={[
-          styles.searchBar,
-          {
-            backgroundColor: theme.inputBg,
-            borderColor: focused ? theme.primary : theme.border,
-          },
-          // The design language asks a focused field to glow in the primary, not
-          // just change its border colour.
-          focused && Glow.primary,
-        ]}>
-        <Ionicons name="search" size={18} color={focused ? theme.primary : theme.textTertiary} />
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          placeholder="Artists, towns or people…"
-          placeholderTextColor={theme.textTertiary}
-          autoFocus
-          autoCorrect={false}
-          returnKeyType="search"
-          style={[styles.input, { color: theme.text }]}
-        />
-        {input.length > 0 && (
-          <Ionicons
-            name="close-circle"
-            size={18}
-            color={theme.textTertiary}
-            onPress={() => setInput('')}
-          />
-        )}
-      </View>
-
       <FlatList
         data={search.data ?? []}
         keyExtractor={(a) => a.spotify_id}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.list}
+        // The header is passed as an element (not a component) so it reconciles
+        // instead of remounting on each keystroke — a remount would drop the
+        // keyboard mid-word. See SearchBar for why the focus glow must not live
+        // in this component's state.
         ListHeaderComponent={
           <View>
+            <SearchBar
+              value={input}
+              onChangeText={setInput}
+              placeholder="Artists, towns or people…"
+              accessibilityLabel="Search artists, towns and people"
+              barStyle={styles.searchBar}
+              inputStyle={styles.input}
+            />
             {townRows.length > 0 && (
               <View style={styles.section}>
                 <ThemedText type="label" style={{ color: theme.textTertiary }}>

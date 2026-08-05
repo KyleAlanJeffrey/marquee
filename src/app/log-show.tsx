@@ -15,9 +15,10 @@ import { ArtistArt } from '@/components/artist-art';
 import { GlassCard } from '@/components/glass-card';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
+import { SearchBar } from '@/components/search-bar';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
-import { Fonts, Glow, Radius, Spacing } from '@/constants/theme';
+import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useArtistPastEvents, useArtistSearch, useFetchArtistHistory } from '@/hooks/queries';
 import { apiPut } from '@/lib/api';
@@ -129,7 +130,6 @@ function FindArtist({
   const theme = useTheme();
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
-  const [focused, setFocused] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
   const [pickFailed, setPickFailed] = useState<string | null>(null);
   const search = useArtistSearch(query);
@@ -162,88 +162,76 @@ function FindArtist({
   const results = search.data ?? [];
 
   return (
-    <View style={{ flex: 1 }}>
-      <View
-        style={[
-          styles.searchBar,
-          { backgroundColor: theme.inputBg, borderColor: focused ? theme.primary : theme.border },
-          focused && Glow.primary,
-        ]}>
-        <Ionicons name="search" size={18} color={focused ? theme.primary : theme.textTertiary} />
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          placeholder="Who did you see?"
-          placeholderTextColor={theme.textTertiary}
-          autoFocus
-          autoCorrect={false}
-          returnKeyType="search"
-          accessibilityLabel="Artist name"
-          style={[styles.input, { color: theme.text }]}
-        />
-        {input.length > 0 && (
-          <Ionicons name="close-circle" size={18} color={theme.textTertiary} onPress={() => setInput('')} />
-        )}
-      </View>
-
-      <FlatList
-        data={results}
-        keyExtractor={(r) => r.spotify_id}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          pickFailed ? (
-            <ThemedText type="labelSm" style={{ color: theme.error, paddingBottom: Spacing.two }}>
+    <FlatList
+      data={results}
+      keyExtractor={(r) => r.spotify_id}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.listContent}
+      style={{ flex: 1 }}
+      // The header is passed as an element (not a component) so it reconciles
+      // instead of remounting on each keystroke — a remount would drop the
+      // keyboard mid-word. See SearchBar for why the focus glow must not live
+      // in this component's state.
+      ListHeaderComponent={
+        <View style={{ gap: Spacing.two }}>
+          <SearchBar
+            value={input}
+            onChangeText={setInput}
+            placeholder="Who did you see?"
+            accessibilityLabel="Artist name"
+            barStyle={styles.searchBar}
+            inputStyle={styles.input}
+          />
+          {pickFailed ? (
+            <ThemedText type="labelSm" style={{ color: theme.error }}>
               COULDN&apos;T OPEN {pickFailed.toUpperCase()} JUST NOW — TAP TO TRY AGAIN
             </ThemedText>
           ) : search.isFetching && results.length === 0 ? (
             <ActivityIndicator color={theme.primary} style={{ padding: Spacing.four }} />
-          ) : null
-        }
-        ListFooterComponent={
-          // Always reachable, whatever the search says: the school hall gig has
-          // no Spotify page. Carrying the typed name saves retyping it.
-          <PressableScale
-            haptic
-            accessibilityRole="button"
-            accessibilityLabel="Add a show by hand instead"
-            onPress={() => onByHand(input.trim())}
-            style={[styles.byHand, { borderColor: theme.border }]}>
-            <Ionicons name="create-outline" size={18} color={theme.cyan} />
-            <View style={{ flex: 1 }}>
-              <ThemedText type="smallBold">
-                {input.trim() ? `Add “${input.trim()}” by hand` : 'Not on file? Add it by hand'}
-              </ThemedText>
-              <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                FOR SHOWS NO CATALOGUE EVER LISTED
-              </ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
-          </PressableScale>
-        }
-        renderItem={({ item }) => (
-          <PressableScale
-            haptic
-            accessibilityRole="button"
-            accessibilityLabel={`Pick ${item.name}`}
-            disabled={opening != null}
-            onPress={() => pick(item)}
-            style={[styles.row, { borderColor: theme.border }]}>
-            <ArtistArt uri={item.image_url} style={styles.rowArt} iconSize={16} />
-            <ThemedText type="smallBold" numberOfLines={1} style={{ flex: 1 }}>
-              {item.name}
+          ) : null}
+        </View>
+      }
+      ListFooterComponent={
+        // Always reachable, whatever the search says: the school hall gig has
+        // no Spotify page. Carrying the typed name saves retyping it.
+        <PressableScale
+          haptic
+          accessibilityRole="button"
+          accessibilityLabel="Add a show by hand instead"
+          onPress={() => onByHand(input.trim())}
+          style={[styles.byHand, { borderColor: theme.border }]}>
+          <Ionicons name="create-outline" size={18} color={theme.cyan} />
+          <View style={{ flex: 1 }}>
+            <ThemedText type="smallBold">
+              {input.trim() ? `Add “${input.trim()}” by hand` : 'Not on file? Add it by hand'}
             </ThemedText>
-            {opening === item.spotify_id ? (
-              <ActivityIndicator color={theme.primary} size="small" />
-            ) : (
-              <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
-            )}
-          </PressableScale>
-        )}
-      />
-    </View>
+            <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+              FOR SHOWS NO CATALOGUE EVER LISTED
+            </ThemedText>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+        </PressableScale>
+      }
+      renderItem={({ item }) => (
+        <PressableScale
+          haptic
+          accessibilityRole="button"
+          accessibilityLabel={`Pick ${item.name}`}
+          disabled={opening != null}
+          onPress={() => pick(item)}
+          style={[styles.row, { borderColor: theme.border }]}>
+          <ArtistArt uri={item.image_url} style={styles.rowArt} iconSize={16} />
+          <ThemedText type="smallBold" numberOfLines={1} style={{ flex: 1 }}>
+            {item.name}
+          </ThemedText>
+          {opening === item.spotify_id ? (
+            <ActivityIndicator color={theme.primary} size="small" />
+          ) : (
+            <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+          )}
+        </PressableScale>
+      )}
+    />
   );
 }
 
@@ -496,6 +484,9 @@ function NightSheet({ artist, show }: { artist: PickedArtist; show: ArtistPastEv
             onChangeText={setArtistName}
             placeholder="Who did you see? (required)"
             placeholderTextColor={theme.textTertiary}
+            // A band name is not prose — autocorrect turns "Aldous" into
+            // "Aldo is" (measured on the simulator).
+            autoCorrect={false}
             accessibilityLabel="Artist name"
             maxLength={200}
             style={[styles.field, { color: theme.text, borderColor: theme.border }]}
@@ -611,11 +602,10 @@ const styles = StyleSheet.create({
   },
   headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   searchBar: {
+    // No margins: it sits in the list header, inset by the list's own padding.
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
-    marginHorizontal: Spacing.three,
-    marginBottom: Spacing.two,
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.pill,
     borderWidth: 1,

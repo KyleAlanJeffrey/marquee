@@ -270,6 +270,22 @@ What's left is the residuals:
   tidier-looking tree; `lib/notifications.ts` keeps its hook because the file
   is a subsystem with module-level side effects, not a misfiled hook. The rule
   is written at the top of `src/hooks/queries.ts`.
+- [x] **Simulator dead inputs** (Kyle, 2026-08-05) — the log-show and /search
+  modal search fields took taps but never kept the keyboard. Root cause found
+  by probing, not the theories that came first: on iOS, flipping React state
+  during the focus window (the `onFocus={() => setFocused(true)}` glow) makes
+  the field resign first responder immediately — probes showed FOCUS → BLUR
+  back-to-back, and even a `setTimeout(0)` deferral lands inside the responder
+  handoff and dies the same way. Keystroke re-renders after focus settles are
+  fine. Fix: shared `SearchBar` component (`src/components/search-bar.tsx`)
+  whose focus glow is web-only; both screens' bars also moved inside their
+  FlatLists as header elements. Verified on fresh Expo Go mounts: both fields
+  type, search, and keep focus; web still glows. `autoCorrect` off on artist
+  fields ("Aldous" was becoming "Aldo is").
+  - [ ] Small follow-up: a deep-linked full-screen log-show presentation lays
+    its own header under the status bar, so the back chevron can be untappable.
+  - The blue gear bubble covering the TopBar search icon and the modal X is
+    Expo Go's dev-menu overlay — dev-only, not a bug to fix.
 - [ ] **App-store prep** — mine except the builds and submissions:
   - [ ] **Blocked on Kyle:** the EAS project id (`a9540056-…`) belongs to an
     account `eas whoami` isn't a member of. Either `eas login` as its owner or
