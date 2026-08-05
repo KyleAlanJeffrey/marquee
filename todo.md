@@ -76,14 +76,27 @@ What's left is the residuals:
 
 ## P1 · Next
 
-- [ ] **Letterboxd-style logging of past shows** (Kyle, 2026-08-05) — adding
-  a previously seen show is clunky: the past-shows list is slow to load,
-  and tapping a show logs it without ever asking for a rating or review.
-  Target the Letterboxd add flow: one fast entry point → search the artist
-  → pick the show from their history → a single sheet that asks
-  when/rating/review in one motion → saved to the log. The unified
-  log/review composer from the design pass already exists on past-event
-  pages; this is about reaching it in seconds from anywhere.
+- [~] **Letterboxd-style logging of past shows** (Kyle, 2026-08-05) — landed
+  the same day: a `/log-show` modal in three steps — WHO (artist search,
+  with an always-reachable by-hand branch that keeps what you typed),
+  WHICH NIGHT (their history, with the one upstream fetch fired on entry
+  instead of after the list is found; already-logged nights are marked and
+  reopen for editing), HOW WAS IT (the point: summary card, big stars, one
+  text field, save). The text field is owned by the toggle — off it's the
+  private note, on it posts as the public review instead; the note still
+  never crosses over silently. Entry points: LOG A SHOW on the Log tab
+  (button + empty state), and the artist page's "Seen them before?" now
+  opens the modal at that artist's nights. Subsumed and deleted: the
+  in-page past-shows list that logged with a silent checkmark, and the
+  standalone by-hand form. Verified in the browser through the write gate
+  (signed-out save routes to sign-in and the draft survives the round
+  trip). Residuals:
+  - [ ] Kyle: one signed-in save end-to-end (I can't sign in) — rating +
+    note should land in the log, and the toggle should post a review
+    visible on the event page.
+  - [ ] The review toggle only offers itself on catalogue nights; when a
+    manual show is later promotable to a real event (open product
+    decision), it inherits the toggle.
 - [~] **Share concerts** (Kyle, 2026-08-05) — first cut landed the same day:
   a share button in the event page's top bar, next to the bookmark. The
   link is always `marquee.rocks/event/<id>` whatever host the sender is on

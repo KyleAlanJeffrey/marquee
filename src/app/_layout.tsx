@@ -92,6 +92,16 @@ export default function RootLayout() {
                       headerTitleStyle: { fontFamily: Fonts.headlineMd, color: theme.text },
                     }}
                   />
+                  {/* Logging a show is a quick interruption from anywhere — the
+                      Log tab, an artist page — and lands you back where you were.
+                      No stock header: the flow carries its own stepped one. */}
+                  <Stack.Screen
+                    name="log-show"
+                    options={{
+                      presentation: 'modal',
+                      headerShown: false,
+                    }}
+                  />
                   {/* A modal, because it is always an interruption: you reached it
                       by trying to keep something, and you should land back where
                       you were rather than somewhere new. */}

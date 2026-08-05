@@ -6,7 +6,6 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
-import { AddShowForm } from '@/components/add-show-form';
 import { EmptyState } from '@/components/empty-state';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
@@ -135,19 +134,13 @@ export default function LogScreen() {
           <ActivityIndicator color={theme.primary} />
         </View>
       ) : attended.length === 0 ? (
-        <View style={{ flex: 1 }}>
-          <EmptyState
-            icon="checkmark-done-outline"
-            title="No shows logged yet"
-            message="Open a gig you went to and tap “Were you there?”. Your log is private to your account — nobody else can see it."
-            actionLabel="Find shows"
-            onAction={() => router.push('/explore')}
-          />
-          {/* The other way in: a show the catalogue never listed. */}
-          <View style={styles.addForm}>
-            <AddShowForm />
-          </View>
-        </View>
+        <EmptyState
+          icon="checkmark-done-outline"
+          title="No shows logged yet"
+          message="Log the concerts you've been to — find the night, rate it, say what it was like. Your log is private to your account."
+          actionLabel="Log your first show"
+          onAction={() => router.push('/log-show')}
+        />
       ) : (
         <FlatList
           data={view === 'wall' ? wallRows : rows}
@@ -192,7 +185,19 @@ export default function LogScreen() {
                 {average ? ` · ${average} average` : ''}
                 {' · private to you'}
               </ThemedText>
-              <AddShowForm />
+              {/* The one way in: search the artist, pick the night, rate it —
+                  the by-hand path lives inside the same flow. */}
+              <PressableScale
+                haptic
+                accessibilityRole="button"
+                accessibilityLabel="Log a show you went to"
+                onPress={() => router.push('/log-show')}
+                style={[styles.logBtn, { borderColor: theme.primaryEdge, backgroundColor: theme.primaryFill }]}>
+                <Ionicons name="add" size={18} color={theme.primary} />
+                <ThemedText type="smallBold" style={{ color: theme.primary }}>
+                  LOG A SHOW
+                </ThemedText>
+              </PressableScale>
             </View>
           }
           renderItem={({ item, index }) => {
@@ -361,8 +366,17 @@ export default function LogScreen() {
 }
 
 const styles = StyleSheet.create({
-  addForm: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.four },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.three },
+  logBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.one,
+    marginTop: Spacing.two,
+    paddingVertical: Spacing.two + 2,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
   content: { paddingBottom: Spacing.six + Spacing.four },
   head: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two, paddingBottom: Spacing.three, gap: 2 },
   headTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
