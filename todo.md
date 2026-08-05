@@ -132,8 +132,8 @@ What's left is the residuals:
   Console's "Improve item appearance") — fixed the same day: event pages
   gained `description`, `endDate` (= start; nobody publishes concert end
   times and inventing a duration would be read as fact) and `organizer`
-  (the venue, as an Organization at its canonical URL — schema.org defines
-  organizer as who *hosts*). City hubs switched to the summary-page
+  (the venue, as an Organization at its canonical URL — Google's Event
+  docs describe organizer as who *hosts*). City hubs switched to the summary-page
   pattern (ListItem = position + url only), which is what Google's
   carousel docs prescribe and removes the ~209 hub items that were being
   counted as Events missing image/offers/everything. What stays

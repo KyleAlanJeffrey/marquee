@@ -458,9 +458,9 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
       image: row.artistImage ? absolute(origin, `/img/artist/${row.artistId}`) : absolute(origin, OG_IMAGE),
       location,
-      // schema.org's organizer is "the person or organization that is hosting
-      // the event" — the venue, in other words. The promoter we genuinely
-      // don't know, but hosting is exactly what a venue does.
+      // Google's Event docs describe organizer as the person or organization
+      // hosting the event — the venue, in other words. The promoter we
+      // genuinely don't know, but hosting is exactly what a venue does.
       ...(row.venueName && row.venueId
         ? {
             organizer: {
