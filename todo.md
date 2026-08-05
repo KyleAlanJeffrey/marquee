@@ -76,6 +76,20 @@ What's left is the residuals:
 
 ## P1 · Next
 
+- [~] **Share concerts** (Kyle, 2026-08-05) — first cut landed the same day:
+  a share button in the event page's top bar, next to the bookmark. The
+  link is always `marquee.rocks/event/<id>` whatever host the sender is on
+  (the SSR pages behind it already unfurl with real titles and the mirrored
+  artist image); the message is what · where · when. Native gets the share
+  sheet (iOS url field, Android link-in-message), mobile web gets
+  `navigator.share`, desktop web copies to the clipboard and says so with a
+  checkmark. The pure payload builder is pinned by tests. Residuals:
+  - [ ] Adopt on the other pages — artist, venue, profile, list — the
+    component and payload builder are already generic enough.
+  - [ ] "Share to a friend on Marquee" (in-app, needs a messaging or
+    notification decision) is a different feature; don't confuse the two.
+  - [ ] Share cards get much better when the OG-cards item ships (see the
+    design pass) — same URLs, richer unfurl.
 - [ ] **Split the Workers** (Kyle, 2026-08-04) — the primary worker keeps the
   website and its API; everything else moves to a second worker. What "else"
   is today: the 15-minute Bandsintown crawl + frontier expansion (the cron),

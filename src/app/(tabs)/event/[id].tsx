@@ -18,6 +18,7 @@ import { GradientButton } from '@/components/gradient-button';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { RsvpCounts } from '@/components/rsvp-counts';
+import { ShareButton } from '@/components/share-button';
 import { StaticMap } from '@/components/static-map';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
@@ -28,6 +29,7 @@ import { useSavedShows } from '@/lib/saved-shows-store';
 import { openUrl } from '@/lib/open-url';
 import { useEvent, useEventBuzz, useEventLineup } from '@/hooks/queries';
 import { formatEventDate, formatTime, formatVenue, formatZoneLabel } from '@/lib/format';
+import { eventShare } from '@/lib/share';
 import { socialLinks } from '@/lib/social';
 import { ticketSources } from '@/lib/tickets';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -510,19 +512,34 @@ export default function EventScreen() {
           back
           title="Event"
           action={
-            <PressableScale
-              haptic
-              accessibilityRole="button"
-              accessibilityState={{ selected: saved }}
-              accessibilityLabel={saved ? `Remove ${e.name} from saved` : `Save ${e.name} for later`}
-              onPress={toggleSave}
-              style={styles.saveTop}>
-              <Ionicons
-                name={saved ? 'bookmark' : 'bookmark-outline'}
-                size={22}
-                color={theme.cyan}
+            <View style={styles.topActions}>
+              {/* Hand this show to somebody — the reason half these pages get
+                  opened in the first place. */}
+              <ShareButton
+                payload={eventShare({
+                  id: e.id,
+                  name: e.name,
+                  venueName: e.venue?.name ?? null,
+                  venueCity: e.venue?.city ?? null,
+                  when: formatEventDate(e.starts_at, tz),
+                })}
+                subject={e.name}
+                style={styles.saveTop}
               />
-            </PressableScale>
+              <PressableScale
+                haptic
+                accessibilityRole="button"
+                accessibilityState={{ selected: saved }}
+                accessibilityLabel={saved ? `Remove ${e.name} from saved` : `Save ${e.name} for later`}
+                onPress={toggleSave}
+                style={styles.saveTop}>
+                <Ionicons
+                  name={saved ? 'bookmark' : 'bookmark-outline'}
+                  size={22}
+                  color={theme.cyan}
+                />
+              </PressableScale>
+            </View>
           }
         />
       </View>
@@ -681,6 +698,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   topBarAbs: { position: 'absolute', top: 0, left: 0, right: 0 },
+  topActions: { flexDirection: 'row', gap: Spacing.two },
   // Sits over the hero, so it gets its own dark disc to stay legible.
   saveTop: {
     width: 36,
