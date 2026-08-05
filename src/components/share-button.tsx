@@ -29,7 +29,9 @@ export function ShareButton({
   style?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
-  const [copied, setCopied] = useState(false);
+  // 'copied' and 'failed' both need saying out loud — in either case nothing
+  // visible happened, and a silent button reads as a dead one.
+  const [flash, setFlash] = useState<'copied' | 'failed' | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -40,10 +42,10 @@ export function ShareButton({
 
   const onPress = async () => {
     const outcome = await share(payload);
-    if (outcome === 'copied') {
-      setCopied(true);
+    if (outcome === 'copied' || outcome === 'unavailable') {
+      setFlash(outcome === 'copied' ? 'copied' : 'failed');
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 2000);
+      timer.current = setTimeout(() => setFlash(null), 2000);
     }
   };
 
@@ -51,13 +53,19 @@ export function ShareButton({
     <PressableScale
       haptic
       accessibilityRole="button"
-      accessibilityLabel={copied ? 'Link copied' : `Share ${subject}`}
+      accessibilityLabel={
+        flash === 'copied'
+          ? 'Link copied'
+          : flash === 'failed'
+            ? 'Sharing is not available here'
+            : `Share ${subject}`
+      }
       onPress={onPress}
       style={style}>
       <Ionicons
-        name={copied ? 'checkmark' : 'share-outline'}
+        name={flash === 'copied' ? 'checkmark' : flash === 'failed' ? 'alert-circle-outline' : 'share-outline'}
         size={size}
-        color={copied ? theme.primary : (color ?? theme.cyan)}
+        color={flash === 'copied' ? theme.primary : flash === 'failed' ? theme.error : (color ?? theme.cyan)}
       />
     </PressableScale>
   );
