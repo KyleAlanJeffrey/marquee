@@ -58,6 +58,12 @@
   ],
   // No cron here: the 15-minute artist crawl runs on the jobs Worker
   // (wrangler.jobs.jsonc), so ingestion can't spend this Worker's budgets.
+  // The empty array is load-bearing — omitting `triggers` entirely leaves any
+  // previously deployed schedule in place, still firing at a Worker that no
+  // longer exports a scheduled handler.
+  "triggers": {
+    "crons": [],
+  },
   "observability": {
     "enabled": true,
   },
