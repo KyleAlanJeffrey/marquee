@@ -128,6 +128,22 @@ What's left is the residuals:
   - [ ] After the first cron fires on marquee-jobs, check `/api/admin/health`
     there and confirm the website Worker's cron metrics go quiet.
 
+- [~] **Event rich-result warnings** (Kyle, 2026-08-05, from Search
+  Console's "Improve item appearance") — fixed the same day: event pages
+  gained `description`, `endDate` (= start; nobody publishes concert end
+  times and inventing a duration would be read as fact) and `organizer`
+  (the venue, as an Organization at its canonical URL — schema.org defines
+  organizer as who *hosts*). City hubs switched to the summary-page
+  pattern (ListItem = position + url only), which is what Google's
+  carousel docs prescribe and removes the ~209 hub items that were being
+  counted as Events missing image/offers/everything. What stays
+  deliberately unfixed:
+  - price/priceCurrency stay absent unless the feed's local currency is
+    USD — no currency column; asserting USD abroad is the lie CodeRabbit
+    already caught once.
+  - `validFrom` stays absent — no on-sale dates in any feed.
+  - [ ] Watch Search Console after the next recrawl; counts should fall
+    toward the ~107 detail pages, then to only the price warnings.
 - [~] **Smarter ranking for area shows** (Kyle, 2026-08-03) — first cut
   landed the same day: a `notability` score in `nearbyEvents` behind
   `sort=featured` (TM id +3, Spotify id +2, image +1, genres +1, RSVPs up

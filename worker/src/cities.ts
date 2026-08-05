@@ -589,6 +589,12 @@ export function cityHtml(origin: string, d: CityData): string {
   ];
 
   if (d.shows.length) {
+    // The summary-page pattern: a hub's ListItems carry only position + url,
+    // and the full MusicEvent markup lives on the detail page each one points
+    // at. Inlining fullish events here is the single-page pattern, and it's
+    // what had Search Console counting hundreds of hub items as Events with
+    // "missing" description/endDate/organizer/image/offers — fields whose one
+    // honest home is the event page.
     graph.push({
       '@type': 'ItemList',
       name: `Upcoming concerts in ${town.label}`,
@@ -596,25 +602,7 @@ export function cityHtml(origin: string, d: CityData): string {
       itemListElement: d.shows.map((s, i) => ({
         '@type': 'ListItem',
         position: i + 1,
-        item: {
-          '@type': 'MusicEvent',
-          name: s.name,
-          url: `${origin}/event/${s.id}`,
-          startDate: s.timeUnknown ? s.startsAt.slice(0, 10) : s.startsAt,
-          eventStatus: 'https://schema.org/EventScheduled',
-          eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
-          performer: { '@type': 'MusicGroup', name: s.artistName },
-          location: {
-            '@type': 'MusicVenue',
-            name: s.venueName ?? town.label,
-            address: {
-              '@type': 'PostalAddress',
-              addressLocality: town.city,
-              addressRegion: town.region ?? undefined,
-              addressCountry: town.country ?? undefined,
-            },
-          },
-        },
+        url: `${origin}/event/${s.id}`,
       })),
     });
   }

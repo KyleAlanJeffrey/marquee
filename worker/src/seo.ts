@@ -407,9 +407,11 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       }
     : undefined;
 
+  const description = `${row.name} plays ${where || 'live'} on ${when}. Doors, tickets and the rest of the tour.`;
+
   return {
     title: `${title} · ${NAME}`,
-    description: `${row.name} plays ${where || 'live'} on ${when}. Doors, tickets and the rest of the tour.`,
+    description,
     // A show that has happened is a dead page: nothing to buy, nothing to attend,
     // and it will never be right again. Kept crawlable for its links, out of the
     // index for the same reason a newspaper doesn't reprint last week's listings.
@@ -444,13 +446,30 @@ async function eventSeo(env: Env, id: string, origin: string): Promise<PageSeo |
       '@type': 'MusicEvent',
       name: row.name,
       url: `${origin}/event/${id}`,
+      description,
       // Date-only for an unannounced set time — schema.org allows it, and a
       // noon placeholder published as a startDate would be machine-read as fact.
       startDate: row.timeUnknown ? row.startsAt.slice(0, 10) : row.startsAt,
+      // Nobody publishes when a concert ends, and inventing a duration would be
+      // machine-read as fact too. Google only asks that the field exist; start
+      // is the one honest value we have for it.
+      endDate: row.timeUnknown ? row.startsAt.slice(0, 10) : row.startsAt,
       eventStatus: 'https://schema.org/EventScheduled',
       eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
       image: row.artistImage ? absolute(origin, `/img/artist/${row.artistId}`) : absolute(origin, OG_IMAGE),
       location,
+      // schema.org's organizer is "the person or organization that is hosting
+      // the event" — the venue, in other words. The promoter we genuinely
+      // don't know, but hosting is exactly what a venue does.
+      ...(row.venueName && row.venueId
+        ? {
+            organizer: {
+              '@type': 'Organization',
+              name: row.venueName,
+              url: `${origin}/venue/${row.venueId}`,
+            },
+          }
+        : null),
       performer: { '@type': 'MusicGroup', name: row.artistName },
       ...(row.ticketUrl
         ? {
@@ -551,6 +570,9 @@ async function artistSeo(env: Env, id: string, origin: string): Promise<PageSeo 
         name: s.name,
         url: `${origin}/event/${s.id}`,
         startDate: s.timeUnknown ? s.startsAt.slice(0, 10) : s.startsAt,
+        // Same shrug as the event page: no one publishes an end time, and the
+        // field existing is what's asked for.
+        endDate: s.timeUnknown ? s.startsAt.slice(0, 10) : s.startsAt,
         ...(s.venueName ? { location: { '@type': 'MusicVenue', name: s.venueName } } : null),
       })),
     },
