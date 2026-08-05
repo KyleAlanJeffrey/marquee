@@ -69,7 +69,7 @@ export default function LogShowScreen() {
         description="Add a concert you've been to — find the night, rate it, say what it was like."
       />
       <View style={styles.header}>
-        {step.kind !== 'who' && !params.artistId ? (
+        {step.kind === 'night' || (step.kind === 'which' && !params.artistId) ? (
           <PressableScale
             haptic={false}
             accessibilityRole="button"
@@ -131,6 +131,7 @@ function FindArtist({
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const [opening, setOpening] = useState<string | null>(null);
+  const [pickFailed, setPickFailed] = useState<string | null>(null);
   const search = useArtistSearch(query);
 
   useEffect(() => {
@@ -140,9 +141,12 @@ function FindArtist({
 
   // The Spotify hit becomes a stored artist (same resolution the search screen
   // does), because past events and the history fetch are keyed by our id.
+  // ensureArtist never throws — it answers null on failure — so the row must
+  // say so out loud: a spinner that just stops reads as a dead button.
   async function pick(item: ArtistSearchResult) {
     if (opening) return;
     setOpening(item.spotify_id);
+    setPickFailed(null);
     const id = await ensureArtist({
       artistId: null,
       spotifyId: item.spotify_id,
@@ -152,6 +156,7 @@ function FindArtist({
     });
     setOpening(null);
     if (id) onPick({ id, name: item.name, imageUrl: item.image_url });
+    else setPickFailed(item.name);
   }
 
   const results = search.data ?? [];
@@ -189,7 +194,11 @@ function FindArtist({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          search.isFetching && results.length === 0 ? (
+          pickFailed ? (
+            <ThemedText type="labelSm" style={{ color: theme.error, paddingBottom: Spacing.two }}>
+              COULDN&apos;T OPEN {pickFailed.toUpperCase()} JUST NOW — TAP TO TRY AGAIN
+            </ThemedText>
+          ) : search.isFetching && results.length === 0 ? (
             <ActivityIndicator color={theme.primary} style={{ padding: Spacing.four }} />
           ) : null
         }
@@ -364,6 +373,9 @@ function NightSheet({ artist, show }: { artist: PickedArtist; show: ArtistPastEv
   const [rating, setRating] = useState<number | null>(existing?.rating ?? null);
   const [text, setText] = useState(existing?.note ?? '');
   const [publicReview, setPublicReview] = useState(false);
+  // Editable on the by-hand path: the branch can be reached with nothing typed,
+  // and a required field you can't edit is a dead end.
+  const [artistName, setArtistName] = useState(artist.name);
   const [venue, setVenue] = useState('');
   const [city, setCity] = useState('');
   const [date, setDate] = useState('');
@@ -384,7 +396,7 @@ function NightSheet({ artist, show }: { artist: PickedArtist; show: ArtistPastEv
 
     let entry: NewAttendance;
     if (manual) {
-      if (!artist.name.trim()) {
+      if (!artistName.trim()) {
         setProblem('Who did you see? The artist is the one required field.');
         return;
       }
@@ -397,16 +409,18 @@ function NightSheet({ artist, show }: { artist: PickedArtist; show: ArtistPastEv
         // A manual id: never resolves against the catalogue, never collides
         // with one, and survives forever in the snapshot like any log entry.
         eventId: `manual-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-        name: artist.name.trim(),
-        // Noon UTC keeps the date on the right calendar day everywhere.
+        name: artistName.trim(),
+        // Noon, pinned to UTC below — the pair renders as the entered calendar
+        // date in every reader's zone, including UTC+13, where a bare noon-UTC
+        // instant read off the device clock would already be tomorrow.
         startsAt: `${date.trim()}T12:00:00Z`,
         artistId: artist.id,
-        artistName: artist.name.trim(),
+        artistName: artistName.trim(),
         artistImageUrl: artist.imageUrl,
         venueId: null,
         venueName: venue.trim() || null,
         venueCity: city.trim() || null,
-        venueTimezone: null,
+        venueTimezone: 'UTC',
       };
     } else {
       entry = {
@@ -438,8 +452,13 @@ function NightSheet({ artist, show }: { artist: PickedArtist; show: ArtistPastEv
         });
       } catch (err) {
         console.warn('review post failed:', err);
+        // The words must survive the failure: keep them as the private note,
+        // so closing the modal now loses nothing.
+        if (body) rate(entry, { note: body });
         setSaving(false);
-        setProblem('Logged privately, but posting the review failed — you can post it from the show page.');
+        setProblem(
+          'Logged, and your words are saved as a private note — posting the review failed. Try again, or post from the show page.',
+        );
         return;
       }
     }
@@ -455,7 +474,7 @@ function NightSheet({ artist, show }: { artist: PickedArtist; show: ArtistPastEv
         <ArtistArt uri={artist.imageUrl} style={styles.summaryArt} iconSize={22} />
         <View style={{ flex: 1 }}>
           <ThemedText type="smallBold" numberOfLines={2}>
-            {show ? show.event_name : artist.name || 'Your show'}
+            {show ? show.event_name : artistName.trim() || 'Your show'}
           </ThemedText>
           {show ? (
             <ThemedText type="labelSm" style={{ color: theme.textTertiary }} numberOfLines={1}>
@@ -472,6 +491,15 @@ function NightSheet({ artist, show }: { artist: PickedArtist; show: ArtistPastEv
 
       {manual && (
         <GlassCard style={styles.fields}>
+          <TextInput
+            value={artistName}
+            onChangeText={setArtistName}
+            placeholder="Who did you see? (required)"
+            placeholderTextColor={theme.textTertiary}
+            accessibilityLabel="Artist name"
+            maxLength={200}
+            style={[styles.field, { color: theme.text, borderColor: theme.border }]}
+          />
           <TextInput
             value={venue}
             onChangeText={setVenue}
@@ -506,7 +534,7 @@ function NightSheet({ artist, show }: { artist: PickedArtist; show: ArtistPastEv
         <StarRating
           size={34}
           value={rating}
-          subject={artist.name || 'this show'}
+          subject={artistName.trim() || 'this show'}
           placeholder="TAP TO RATE"
           onChange={setRating}
         />
