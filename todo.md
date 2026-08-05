@@ -323,10 +323,12 @@ What's left is the residuals:
     reverted; live key belongs in `.env.production` + Workers Builds
     only). The Account Portal redirect-fallback fields are placeholders;
     empty = app root, fine. Remaining, in order:
-    - [ ] DNS: `clerk.marquee.rocks` / `accounts.marquee.rocks` resolve to
-      nothing (measured 2026-08-05) — add the records from Clerk →
-      Configure → Domains in Cloudflare, **DNS only / grey cloud** (proxied
-      records break Clerk's TLS provisioning), wait for verified.
+    - [x] DNS (2026-08-05): all five records in Cloudflare as DNS-only —
+      the `accounts` record was briefly proxied, which reads as
+      Cloudflare error 1000 ("DNS points to prohibited IP", a 403 to
+      curl) because Clerk itself sits behind Cloudflare. Verified live:
+      ClerkJS 200 from clerk.marquee.rocks, the portal renders sign-in
+      at accounts.marquee.rocks with Apple/Google/Spotify buttons.
     - [ ] `.env.production`: swap in the `pk_live_` key.
     - [ ] Worker secrets: `CLERK_SECRET_KEY` → production `sk_live_…`;
       `CLERK_JWT_KEY` → the production instance's JWT public key.
