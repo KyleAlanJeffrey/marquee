@@ -1,0 +1,37 @@
+# Auto-deploy for the jobs Worker (marquee-jobs).
+#
+# The website Worker deploys through Cloudflare Workers Builds on every push to
+# main — but that pipeline only knows about wrangler.jsonc. This closes the gap
+# for wrangler.jobs.jsonc, and only runs when something the jobs Worker is
+# built from actually changed, so app-only pushes don't redeploy the cron.
+#
+# One-time setup: create a Cloudflare API token (dashboard -> My Profile ->
+# API Tokens -> "Edit Cloudflare Workers" template) and add it to this repo as
+# the CLOUDFLARE_API_TOKEN secret (repo Settings -> Secrets -> Actions).
+name: Deploy marquee-jobs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - 'wrangler.jobs.jsonc'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-jobs.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # The Worker bundles hono/drizzle/etc. from node_modules, so a real
+      # install is needed — but not the Expo web export, which is the slow part
+      # of the website pipeline and irrelevant here.
+      - run: npm ci
+      - run: npx wrangler deploy -c wrangler.jobs.jsonc
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
