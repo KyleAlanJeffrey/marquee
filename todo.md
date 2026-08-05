@@ -76,6 +76,14 @@ What's left is the residuals:
 
 ## P1 · Next
 
+- [ ] **Letterboxd-style logging of past shows** (Kyle, 2026-08-05) — adding
+  a previously seen show is clunky: the past-shows list is slow to load,
+  and tapping a show logs it without ever asking for a rating or review.
+  Target the Letterboxd add flow: one fast entry point → search the artist
+  → pick the show from their history → a single sheet that asks
+  when/rating/review in one motion → saved to the log. The unified
+  log/review composer from the design pass already exists on past-event
+  pages; this is about reaching it in seconds from anywhere.
 - [~] **Share concerts** (Kyle, 2026-08-05) — first cut landed the same day:
   a share button in the event page's top bar, next to the bookmark. The
   link is always `marquee.rocks/event/<id>` whatever host the sender is on
@@ -157,6 +165,9 @@ What's left is the residuals:
     bug. Fill paths: 10/crawl-run on marquee-jobs (ask-once, 0 = asked and
     unknown), fresh store on artist-page views, and
     `POST /api/admin/backfill-deezer-fans?limit=40` on marquee-jobs.
+    Verified in production 2026-08-05: the first marquee-jobs tick stored
+    8 real counts (Dimmu Borgir 201k lands the +3 band, Satyricon 97k the
+    +2).
     - [ ] Kyle: run the backfill against production (needs the new
       ADMIN_TOKEN) if you don't want to wait ~1 week for the crawl to
       fill ~6k artists at 960/day. TM-id'd artists fill first either way.
