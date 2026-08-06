@@ -400,9 +400,17 @@ What's left is the residuals:
       curl) because Clerk itself sits behind Cloudflare. Verified live:
       ClerkJS 200 from clerk.marquee.rocks, the portal renders sign-in
       at accounts.marquee.rocks with Apple/Google/Spotify buttons.
-    - [ ] `.env.production`: swap in the `pk_live_` key.
+    - [x] `.env.production`: `pk_live_` key in (47df17b).
     - [ ] Worker secrets: `CLERK_SECRET_KEY` → production `sk_live_…`;
-      `CLERK_JWT_KEY` → the production instance's JWT public key.
+      `CLERK_JWT_KEY` → the production instance's JWT public key. (Kyle
+      says updated; still wants an end-to-end check that a write sticks.)
+    - [x] **Native app sign-in (2026-08-06)**: the production iOS build's
+      hosted-portal sign-in failed with the generic connection error until
+      the iOS App ID `ST54366XJ2.rocks.marquee` was registered in Clerk →
+      Configure → Native applications. That registration alone fixed it —
+      the dashboard rejects a bare `marquee://` redirect entry as invalid,
+      and none is needed; the App ID covers the scheme. (Expo Go can never
+      exercise this path — the redirect plugin only exists in real builds.)
     - [x] **The post-sign-up portal bounce, diagnosed and fixed
       (2026-08-05)**: sign-up lived at `/sign-in?mode=sign-up`; Clerk's
       hash router navigates to `#/verify-email-address` mid-flow, the
