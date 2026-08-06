@@ -298,6 +298,14 @@ What's left is the residuals:
     done in a minute and progress lives on expo.dev.
     - [x] `EXPO_TOKEN` is set and proven — the v1.0.4 tag run built through
       it.
+    - [x] `ascAppId` corrected to **6798407800** (Kyle, 2026-08-06, "the ios
+      submission got submitted to the wrong app"): the pinned 6798406543 was
+      misread from a screenshot when non-interactive submits were first wired
+      up, and both v1.0.4 and the first v1.0.5 submission landed on that
+      record. The right one is "marquee rocks" (bundle rocks.marquee, Apple
+      ID from its App Information page); v1.0.5 was resubmitted there —
+      same binary, no rebuild. Kyle: expire the stray builds on the old
+      record's TestFlight page if it bothers anyone.
     - [ ] Kyle: the Google Service Account key is still NOT in EAS — the
       v1.0.5 CLI release (2026-08-06) died at "Google Service Account Keys
       cannot be set up in --non-interactive mode" after queuing the builds,
