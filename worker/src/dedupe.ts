@@ -134,7 +134,11 @@ export const VENUE_NAME_MAX = 64;
  * narrow. This one only governs what gets printed, where a false positive costs a
  * line of detail and a false negative prints a lie — so it can afford to be blunt.
  */
-const EVENT_TITLE_PATTERNS = [/\|.*,\s*[A-Z]{2}$/];
+// The comma must follow a real word, not sit empty ("Foo | , TX" is nobody's
+// billing). Two capitals suffice for the "state": all 8 production rows carry
+// genuine codes, and a maintained state allowlist would outweigh a rule whose
+// false positive costs one displayed line.
+const EVENT_TITLE_PATTERNS = [/\|[^|]*\w,\s*[A-Z]{2}$/];
 
 export function looksLikeEventTitle(name: string | null | undefined): boolean {
   const n = name?.trim();
