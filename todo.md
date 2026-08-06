@@ -333,6 +333,23 @@ What's left is the residuals:
     render in the next TestFlight build.
   - [ ] Android standalone builds need `android.config.googleMaps.apiKey` in
     app.json before the map screen works there (Expo Go Android is fine).
+- [x] **Event titles as venue names, round two** (Kyle, 2026-08-06, Alabama
+  Shakes screenshot titled "Buddy Guy 90th Birthday Concert"): a Bandsintown
+  event-title row on Radio City Music Hall's exact coordinates held 33 events
+  and *won* its cluster's head election — no colon, no tour word, 31 chars, so
+  every existing rule passed it. Fixed by rule, each pattern measured on
+  production first: birthday (6/6 junk), celebration (25/25), "in concert"
+  (20/20 of 97 sampled) joined `TOUR_NAME_PATTERNS` — the clustering tier —
+  because a name like that must not vouch or conflict; pipe+"City, ST" (8/8)
+  is display-only in `looksLikeEventTitle` since those names carry the real
+  venue's tokens and merge correctly on their own. Bare "concert" deliberately
+  untouched: 378 rows, dominated by real Concert Halls/Series/Concertgebouw.
+  First repair run re-headed the Texas "Buddy Guy 90 |" family onto the real
+  Majestic/ACL rows and merged 102 duplicate shows. `a685f63` + `a05c419`.
+  - Remaining pipe rows without a ", ST" suffix ("Nik Kershaw | Musings &
+    Lyrics 2027", ~98 rows) are still unhandled — they need segment-level
+    treatment like `cleanVenueName`, and some pipes are real descriptors
+    ("Godfrey Daniels | Live Music Listening Room"). By rule, later.
 - [x] **DICE discovery source** (Kyle, 2026-08-05, "we're missing some venues —
   knockdown.center for one"). Measured first: Knockdown's own calendar listed 47
   shows, production carried 29, and all of the missing (Flying Lotus, Boy
