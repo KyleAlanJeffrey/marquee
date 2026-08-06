@@ -17,6 +17,11 @@
 {
   "name": "marquee-jobs",
   "main": "worker/src/jobs.ts",
+  // Explicit so CI's *account-owned* API token (cfat_…) works: without this,
+  // wrangler discovers the account via GET /memberships — a user-scoped call
+  // that an account token can never make, which surfaces as an opaque 9106.
+  // Account ids aren't secrets; this one is in every wrangler log line.
+  "account_id": "2cf32f3440f6dd0e17b123a758535c4d",
   "compatibility_date": "2024-11-27",
   // Absolute URLs in IndexNow submissions are written against this host.
   "vars": {

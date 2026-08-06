@@ -24,7 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Fail in seconds with the fix spelled out, not minutes later with
-      # wrangler's generic auth error after a full npm ci.
+      # wrangler's generic auth error after a full npm ci. The shape checks
+      # exist because every failure so far was a malformed value, not a missing
+      # one — wrangler reports them all as the same opaque 9106.
       - name: Require CLOUDFLARE_API_TOKEN
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -33,6 +35,14 @@ jobs:
             echo "::error::The CLOUDFLARE_API_TOKEN repo secret is not set. Create a token (Cloudflare dashboard -> My Profile -> API Tokens -> 'Edit Cloudflare Workers' template) and add it under Settings -> Secrets and variables -> Actions."
             exit 1
           fi
+          case "$CLOUDFLARE_API_TOKEN" in
+            Bearer\ *|bearer\ *)
+              echo "::error::The CLOUDFLARE_API_TOKEN secret starts with 'Bearer ' — store only the raw token value; wrangler adds the Bearer prefix itself."
+              exit 1 ;;
+            *[!A-Za-z0-9_-]*)
+              echo "::error::The CLOUDFLARE_API_TOKEN secret contains whitespace or quotes. Paste only the raw token value (letters, digits, - and _), with nothing around it."
+              exit 1 ;;
+          esac
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
