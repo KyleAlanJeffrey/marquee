@@ -133,8 +133,8 @@ What's left is the residuals:
     also rejects the malformed shapes that produce the same 9106
     ("Bearer " prefix, quotes, whitespace) with a legible error. First
     green run: 31069337849. CI owns jobs deploys from here.
-    - [ ] Kyle: roll the token (its value was pasted into a chat) and
-      update the repo secret; the next CI run confirms the swap.
+    - [x] Kyle rolled the token and updated the secret (2026-08-06); the
+      deploy-jobs run after the swap is green, which is the confirmation.
 
 - [~] **Event rich-result warnings** (Kyle, 2026-08-05, from Search
   Console's "Improve item appearance") — fixed the same day: event pages
@@ -296,21 +296,20 @@ What's left is the residuals:
     `--auto-submit`) or by hand from the Actions tab (choose platform/profile/
     submit). `--no-wait` hands the build to EAS's servers, so the Action is
     done in a minute and progress lives on expo.dev.
-    - [ ] Kyle: create an access token for `kyle-jeffreys-team` (expo.dev →
-      account settings → Access tokens) and add it as the `EXPO_TOKEN` repo
-      secret; the guard step names the fix if it's missing or malformed.
-      Auto-submit also needs store credentials in EAS (`eas credentials`) —
-      the manual submission already proved iOS's are there.
+    - [x] `EXPO_TOKEN` is set and proven — the v1.0.4 tag run built through
+      it. Kyle also added the Google Service Account key to EAS
+      (2026-08-06), so Android is folded back into `--auto-submit`; the
+      v1.0.5 release is the first end-to-end test of Android submission.
   - [x] Auto-tag releases (Kyle, 2026-08-06): bump `expo.version` in
     `app.json`, push to main, and `.github/workflows/auto-tag-release.yml`
     tags the commit `v<version>` and dispatches the EAS production
     build+submit. It dispatches instead of relying on the tag trigger because
     tags pushed with a workflow's own `GITHUB_TOKEN` never fire other
     workflows (GitHub's recursion guard; `workflow_dispatch` via API is the
-    documented exception). Idempotent — if the tag exists, app.json edits do
-    nothing. Note the version drift it inherits: app.json still says `1.0.0`
-    while hand-made tags reached `v1.0.3`, so the next real release should
-    bump app.json past that (e.g. `1.0.4`).
+    documented exception). Idempotent — if the tag exists or the version
+    doesn't beat the highest release tag, app.json edits do nothing. Proven
+    same day: Kyle bumped to 1.0.4 (`a1d9d8f`) and the chain ran itself —
+    auto-tag → v1.0.4 → EAS build+submit, all green.
   - [ ] Screenshots (simulator + seeded data), the Play feature graphic, and the
     `expo-updates` decision (not installed → no OTA channel).
   - [ ] Then the website advertises the app: store badges on `/`, and a smart
@@ -326,14 +325,12 @@ What's left is the residuals:
   don't render at all (measured on SDK 56); nearest pin within 28 screen
   points wins. Verified on the simulator end-to-end (pin → sheet → venue
   page). `c60b74a`.
-  - [ ] Kyle: the Mapbox `pk.` token for `.env.production` (static maps on
-    venue pages in TestFlight; the interactive maps don't need it) was
-    blocked by GitHub push protection — the repo is public and GitHub flags
-    any Mapbox token. It's a public-by-design token that ships in the app
-    bundle regardless, so either allow it via the unblock link GitHub printed
-    (in this session's log) and commit, or put it in EAS/Workers Builds env
-    vars instead. Until then TestFlight static maps show the neon grid
-    fallback (the pre-existing state).
+  - [x] Mapbox `pk.` token: GitHub push protection blocked committing it to
+    `.env.production` (public repo — GitHub flags any Mapbox token, even the
+    public-by-design kind). Kyle resolved it the env-var way (2026-08-06,
+    `a1d9d8f` removed the line): the token lives in EAS/Workers Builds
+    environment variables, not in git. Worth confirming the static maps
+    render in the next TestFlight build.
   - [ ] Android standalone builds need `android.config.googleMaps.apiKey` in
     app.json before the map screen works there (Expo Go Android is fine).
 - [x] **DICE discovery source** (Kyle, 2026-08-05, "we're missing some venues —

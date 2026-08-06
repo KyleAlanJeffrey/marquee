@@ -80,22 +80,17 @@ jobs:
             eas build --platform "$PLATFORM" $base
             exit 0
           fi
-          # Auto-submit only where EAS holds store credentials. Android needs a
-          # Google Service Account key that eas cannot create non-interactively,
-          # and asking anyway kills the whole run *after* the builds have been
-          # queued — the first tag-style run died exactly there. When the Play
-          # key is in `eas credentials`, fold android back into --auto-submit.
-          android_submit_note() {
-            echo "::warning::Android built without submitting: EAS has no Google Service Account key yet. Add one via 'eas credentials' (Android -> Google Service Account), then remove this guard."
-          }
+          # Both platforms auto-submit: EAS holds the App Store credentials
+          # (proven by the v1.0.4 run) and the Google Service Account key
+          # (added 2026-08-06). Split into two invocations rather than
+          # --platform all so one store's failure can't take the other
+          # platform's queued build down with it.
           case "$PLATFORM" in
             ios)
               eas build --platform ios $base --auto-submit ;;
             android)
-              android_submit_note
-              eas build --platform android $base ;;
+              eas build --platform android $base --auto-submit ;;
             all)
               eas build --platform ios $base --auto-submit
-              android_submit_note
-              eas build --platform android $base ;;
+              eas build --platform android $base --auto-submit ;;
           esac
