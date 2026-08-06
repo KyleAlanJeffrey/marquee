@@ -357,7 +357,9 @@ What's left is the residuals:
   Three-part fix: the dashboard value corrected via `eas env`; `auth.tsx`
   now cuts the key at the first whitespace so the same paste accident
   builds a working app (keys never contain whitespace); v1.0.5 cut through
-  the auto-tag chain — which also makes it the first Android auto-submit.
+  the auto-tag chain. (Android auto-submit stayed blocked — the release run
+  itself proved EAS has no Google Service Account key; see the app-store
+  prep item.)
   Lesson for next time: when a store build misbehaves and local doesn't,
   diff the *build inputs* (`eas env:list --environment production`) before
   the code. `64b3077`.

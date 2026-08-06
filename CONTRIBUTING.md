@@ -46,8 +46,14 @@ Tag hygiene: the tag **is** the app version (`v1.0.5` ↔ `expo.version
 
   ```bash
   git tag -a v1.0.6 -m "Marquee 1.0.6" && git push origin v1.0.6
-  npx eas-cli build --platform all --profile production --auto-submit --no-wait
+  npx eas-cli build --platform ios --profile production --auto-submit --no-wait
+  npx eas-cli build --platform android --profile production --no-wait
   ```
+
+  Per-platform on purpose, mirroring the workflow: a combined
+  `--platform all --auto-submit` dies at Android's missing Play key *after*
+  queuing the builds and takes the iOS submission setup down with it —
+  measured on the v1.0.5 release.
 
   Tag first: it anchors the release and makes the auto-tagger a no-op for
   that version afterwards.
