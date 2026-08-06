@@ -297,9 +297,14 @@ What's left is the residuals:
     submit). `--no-wait` hands the build to EAS's servers, so the Action is
     done in a minute and progress lives on expo.dev.
     - [x] `EXPO_TOKEN` is set and proven — the v1.0.4 tag run built through
-      it. Kyle also added the Google Service Account key to EAS
-      (2026-08-06), so Android is folded back into `--auto-submit`; the
-      v1.0.5 release is the first end-to-end test of Android submission.
+      it.
+    - [ ] Kyle: the Google Service Account key is still NOT in EAS — the
+      v1.0.5 CLI release (2026-08-06) died at "Google Service Account Keys
+      cannot be set up in --non-interactive mode" after queuing the builds,
+      which is direct evidence EAS can't find one. Run `eas credentials`
+      → Android → Google Service Account and upload the JSON key file, then
+      remove the guard in eas-build.yml (the comment marks the spot).
+      Whatever was added on 2026-08-06, it wasn't this.
   - [x] Auto-tag releases (Kyle, 2026-08-06): bump `expo.version` in
     `app.json`, push to main, and `.github/workflows/auto-tag-release.yml`
     tags the commit `v<version>` and dispatches the EAS production
