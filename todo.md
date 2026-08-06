@@ -359,7 +359,8 @@ What's left is the residuals:
   builds a working app (keys never contain whitespace); v1.0.5 cut through
   the auto-tag chain. (Android auto-submit stayed blocked — the release run
   itself proved EAS has no Google Service Account key; see the app-store
-  prep item.)
+  prep item.) Kyle confirmed the TestFlight build opens and works,
+  2026-08-06 — incident closed.
   Lesson for next time: when a store build misbehaves and local doesn't,
   diff the *build inputs* (`eas env:list --environment production`) before
   the code. `64b3077`.
