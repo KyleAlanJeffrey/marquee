@@ -333,6 +333,21 @@ What's left is the residuals:
     render in the next TestFlight build.
   - [ ] Android standalone builds need `android.config.googleMaps.apiKey` in
     app.json before the map screen works there (Expo Go Android is fine).
+- [x] **v1.0.4 launch crash** (Kyle, 2026-08-06, "crashes immediately on
+  trying to open the app"): the EAS production env var
+  `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` carried the `.env.production` line's
+  trailing `# production — …` comment inside the value — env vars are not
+  shell — and Clerk throws on an unparseable key before the first frame.
+  Diagnosed by elimination: a local Release build of the identical code
+  launched clean on the committed fallback key, so the difference had to be
+  the EAS-side override (`eas env:list` showed the polluted value).
+  Three-part fix: the dashboard value corrected via `eas env`; `auth.tsx`
+  now cuts the key at the first whitespace so the same paste accident
+  builds a working app (keys never contain whitespace); v1.0.5 cut through
+  the auto-tag chain — which also makes it the first Android auto-submit.
+  Lesson for next time: when a store build misbehaves and local doesn't,
+  diff the *build inputs* (`eas env:list --environment production`) before
+  the code. `64b3077`.
 - [x] **Event titles as venue names, round two** (Kyle, 2026-08-06, Alabama
   Shakes screenshot titled "Buddy Guy 90th Birthday Concert"): a Bandsintown
   event-title row on Radio City Music Hall's exact coordinates held 33 events
