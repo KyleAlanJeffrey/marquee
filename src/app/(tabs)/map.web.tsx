@@ -44,7 +44,15 @@ function loadMapbox(): Promise<any> {
   return loader;
 }
 
-type VenueGroup = { key: string; lat: number; lng: number; name: string; events: NearbyEvent[]; following: boolean };
+type VenueGroup = {
+  key: string;
+  venueId: string | null;
+  lat: number;
+  lng: number;
+  name: string;
+  events: NearbyEvent[];
+  following: boolean;
+};
 
 export default function MapScreen() {
   const theme = useTheme();
@@ -84,7 +92,16 @@ export default function MapScreen() {
       if (e.venue_lat == null || e.venue_lng == null) continue;
       const key = `${e.venue_lat.toFixed(4)},${e.venue_lng.toFixed(4)}`;
       const g =
-        m.get(key) ?? { key, lat: e.venue_lat, lng: e.venue_lng, name: e.venue_name ?? 'Venue', events: [], following: false };
+        m.get(key) ??
+        {
+          key,
+          venueId: e.venue_id ?? null,
+          lat: e.venue_lat,
+          lng: e.venue_lng,
+          name: e.venue_name ?? 'Venue',
+          events: [],
+          following: false,
+        };
       g.events.push(e);
       if (isFollowing(ref(e))) g.following = true;
       m.set(key, g);
@@ -228,10 +245,29 @@ export default function MapScreen() {
       {selected && (
         <View style={[styles.sheet, { backgroundColor: theme.glass, borderColor: theme.border }, Glow.cyan]}>
           <View style={styles.sheetHead}>
-            <Ionicons name="location" size={16} color={theme.cyan} />
-            <ThemedText type="title" numberOfLines={1} style={{ flex: 1, fontSize: 18 }}>
-              {selected.name}
-            </ThemedText>
+            {/* The venue is the link, not a label — opening its page is why
+                anyone clicks a pin. Manual venues have no page and stay text. */}
+            {selected.venueId ? (
+              <PressableScale
+                haptic={false}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${selected.name}`}
+                onPress={() => router.push(`/venue/${selected.venueId}`)}
+                style={styles.sheetVenue}>
+                <Ionicons name="location" size={16} color={theme.cyan} />
+                <ThemedText type="title" numberOfLines={1} style={{ flex: 1, fontSize: 18 }}>
+                  {selected.name}
+                </ThemedText>
+                <Ionicons name="chevron-forward" size={18} color={theme.cyan} />
+              </PressableScale>
+            ) : (
+              <View style={styles.sheetVenue}>
+                <Ionicons name="location" size={16} color={theme.cyan} />
+                <ThemedText type="title" numberOfLines={1} style={{ flex: 1, fontSize: 18 }}>
+                  {selected.name}
+                </ThemedText>
+              </View>
+            )}
             <PressableScale
               haptic={false}
               accessibilityRole="button"
@@ -281,6 +317,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   sheetHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  sheetVenue: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
