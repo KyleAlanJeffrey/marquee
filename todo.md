@@ -346,10 +346,21 @@ What's left is the residuals:
   untouched: 378 rows, dominated by real Concert Halls/Series/Concertgebouw.
   First repair run re-headed the Texas "Buddy Guy 90 |" family onto the real
   Majestic/ACL rows and merged 102 duplicate shows. `a685f63` + `a05c419`.
+  - Verified end-to-end: second repair run clustered 52 more rows, the
+    Alabama Shakes event page (d8fa6d42…) serves "Radio City Music Hall", and
+    Radio City's row now holds the cluster's 42 events.
   - Remaining pipe rows without a ", ST" suffix ("Nik Kershaw | Musings &
     Lyrics 2027", ~98 rows) are still unhandled — they need segment-level
     treatment like `cleanVenueName`, and some pipes are real descriptors
     ("Godfrey Daniels | Live Music Listening Room"). By rule, later.
+  - [ ] Found while verifying: **artist names as venue names** are their own
+    junk class the string rules can never catch — production has heads named
+    "Pink Martini" and "s/Saint Etienne" sitting on symphony-hall coordinates
+    (surfaced when "The Muppet Christmas Carol In Concert" rows stopped
+    vouching and merged into them). Detecting these needs a cross-reference
+    against the artists table (venue.name token-equals a known artist), not a
+    pattern. Same-junk-headed clusters only trade one junk name for another,
+    so nothing regressed — but the class predates today and is worth a pass.
 - [x] **DICE discovery source** (Kyle, 2026-08-05, "we're missing some venues —
   knockdown.center for one"). Measured first: Knockdown's own calendar listed 47
   shows, production carried 29, and all of the missing (Flying Lotus, Boy
