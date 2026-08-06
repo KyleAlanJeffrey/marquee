@@ -301,11 +301,41 @@ What's left is the residuals:
       secret; the guard step names the fix if it's missing or malformed.
       Auto-submit also needs store credentials in EAS (`eas credentials`) —
       the manual submission already proved iOS's are there.
+  - [x] Auto-tag releases (Kyle, 2026-08-06): bump `expo.version` in
+    `app.json`, push to main, and `.github/workflows/auto-tag-release.yml`
+    tags the commit `v<version>` and dispatches the EAS production
+    build+submit. It dispatches instead of relying on the tag trigger because
+    tags pushed with a workflow's own `GITHUB_TOKEN` never fire other
+    workflows (GitHub's recursion guard; `workflow_dispatch` via API is the
+    documented exception). Idempotent — if the tag exists, app.json edits do
+    nothing. Note the version drift it inherits: app.json still says `1.0.0`
+    while hand-made tags reached `v1.0.3`, so the next real release should
+    bump app.json past that (e.g. `1.0.4`).
   - [ ] Screenshots (simulator + seeded data), the Play feature graphic, and the
     `expo-updates` decision (not installed → no OTA channel).
   - [ ] Then the website advertises the app: store badges on `/`, and a smart
     banner on web pages rather than "Open the app" pointing at itself.
   - In-app account deletion (a store requirement) is done — `8b97812`.
+- [x] **Native map rebuilt** (Kyle, 2026-08-06, "doesn't load the actual map,
+  not full screen, easier to click on the venue"): `map.tsx` is now a
+  full-screen interactive `react-native-maps` MapView (Apple Maps on iOS — no
+  token) with one glowing pin per venue group and a glass sheet whose venue
+  name links to `/venue/{id}` (web sheet too). Pin taps are hit-tested in JS
+  from `MapView.onPress`'s coordinate — under Expo Go's New Architecture the
+  Markers' native press events never arrive and image-based default pins
+  don't render at all (measured on SDK 56); nearest pin within 28 screen
+  points wins. Verified on the simulator end-to-end (pin → sheet → venue
+  page). `c60b74a`.
+  - [ ] Kyle: the Mapbox `pk.` token for `.env.production` (static maps on
+    venue pages in TestFlight; the interactive maps don't need it) was
+    blocked by GitHub push protection — the repo is public and GitHub flags
+    any Mapbox token. It's a public-by-design token that ships in the app
+    bundle regardless, so either allow it via the unblock link GitHub printed
+    (in this session's log) and commit, or put it in EAS/Workers Builds env
+    vars instead. Until then TestFlight static maps show the neon grid
+    fallback (the pre-existing state).
+  - [ ] Android standalone builds need `android.config.googleMaps.apiKey` in
+    app.json before the map screen works there (Expo Go Android is fine).
 - [x] **DICE discovery source** (Kyle, 2026-08-05, "we're missing some venues —
   knockdown.center for one"). Measured first: Knockdown's own calendar listed 47
   shows, production carried 29, and all of the missing (Flying Lotus, Boy

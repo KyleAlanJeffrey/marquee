@@ -1,0 +1,60 @@
+# Turns an app-version bump into a release, automatically.
+#
+# Bump expo.version in app.json, push to main, and this workflow tags the
+# commit v<version> and kicks off the EAS production build+submit. The tag is
+# the changelog anchor; the version in app.json is the single source of truth
+# for what to call it. Idempotent: if v<version> is already tagged (all three
+# existing tags were made by hand before this workflow existed), it does
+# nothing, so unrelated app.json edits never re-release.
+#
+# Why it dispatches eas-build.yml instead of relying on the tag push: tags
+# pushed with the workflow's own GITHUB_TOKEN deliberately do not trigger
+# other workflows (GitHub's recursion guard). Creating a workflow_dispatch
+# event through the API is the documented exception, so that's the handoff.
+# The tag trigger in eas-build.yml still works for tags pushed by hand.
+name: Auto-tag app releases
+
+on:
+  push:
+    branches: [main]
+    paths: [app.json]
+
+permissions:
+  contents: write # push the tag
+  actions: write # dispatch the EAS build
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag v<version> if it doesn't exist yet
+        id: tag
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('app.json'))['expo']['version'])")
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *)
+              echo "::error::expo.version in app.json is '$version', which doesn't look like a semver — refusing to tag."
+              exit 1 ;;
+          esac
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "::notice::$tag already exists — version didn't change, nothing to release."
+            echo "created=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Marquee $version"
+          git push origin "$tag"
+          echo "created=yes" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Kick off the EAS production build + submit
+        if: steps.tag.outputs.created == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run eas-build.yml --ref "${{ steps.tag.outputs.tag }}" \
+            -f platform=all -f profile=production -f submit=true
+          echo "::notice::EAS build dispatched for ${{ steps.tag.outputs.tag }} — progress at expo.dev and the Actions tab."
