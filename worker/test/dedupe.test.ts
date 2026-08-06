@@ -162,6 +162,32 @@ describe('venue identity', () => {
     }
   });
 
+  it('treats party and film-score names as no name at all (2026-08-06 additions)', () => {
+    // The production incident these encode: "Buddy Guy 90th Birthday Concert" sat
+    // on Radio City Music Hall's exact coordinates holding 33 events, and because
+    // its name still vouched, it *conflicted* with the hall instead of merging.
+    for (const junk of [
+      'Buddy Guy 90th Birthday Concert',
+      "Buddy's Got The Blues: A 90th Birthday Celebration",
+      'The Muppet Christmas Carol In Concert',
+      'Steeleye Span: In Concert',
+    ]) {
+      expect(looksLikeTourName(junk), junk).toBe(true);
+      expect(venueNameTokens(junk).size, junk).toBe(0);
+      expect(venueNamesConflict(junk, 'Radio City Music Hall'), junk).toBe(false);
+      expect(
+        sameVenue(at(junk, 40.759976, -73.9799772), at('Radio City Music Hall', 40.759976, -73.9799772)),
+        junk,
+      ).toBe(true);
+    }
+    // The guard the word patterns were narrowed around: bare "concert" names
+    // real rooms, and those must keep vouching for themselves.
+    for (const real of ['Peppermill Concert Hall', 'Deer Valley Concert Series', 'Concertgebouw de Vereeniging']) {
+      expect(looksLikeTourName(real), real).toBe(false);
+      expect(venueNameTokens(real).size, real).toBeGreaterThan(0);
+    }
+  });
+
   it('refuses to publish an event title as a venue name', () => {
     // Every one of these is a real production venue row, taken from the 1,054 that
     // carry an event title. The first two are why this predicate exists at all:

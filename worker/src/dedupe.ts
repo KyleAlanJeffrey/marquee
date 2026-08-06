@@ -83,6 +83,17 @@ const TOUR_NAME_PATTERNS = [
   /^supporting\b/i,
   /\sw\/\s/i,
   /\bpresents\b/i,
+  // The party and film-score shapes, promoted into the clustering tier on the
+  // same evidence bar as "tour": measured on production (2026-08-06), every
+  // matching row was an event title and none was a room — birthday 6/6,
+  // celebration 25/25, "in concert" 20/20 of a 97-row sample. The proof it was
+  // needed: "Buddy Guy 90th Birthday Concert" sat on Radio City Music Hall's
+  // exact coordinates holding 33 events, and with a name that still vouched it
+  // *conflicted* with the hall instead of merging into it. Bare "concert" stays
+  // out — 378 rows, dominated by real Concert Halls and Concert Series.
+  /\bbirthday\b/i,
+  /\bcelebration\b/i,
+  /\bin concert\b/i,
 ];
 
 export function looksLikeTourName(name: string): boolean {
@@ -105,29 +116,25 @@ export const VENUE_NAME_MAX = 64;
  *   don't introduce themselves;
  * - longer than a name gets — 67 rows.
  *
- * Three more shapes, added after "Buddy Guy 90th Birthday Concert" (sitting on
- * Radio City Music Hall's coordinates) won a cluster head election and titled an
- * Alabama Shakes event page. Each measured on production, 2026-08-06:
+ * One more shape here, added after "Buddy Guy 90th Birthday Concert" won a
+ * cluster head election on Radio City Music Hall's coordinates and titled an
+ * Alabama Shakes event page (the party and film-score words from that incident
+ * live in `TOUR_NAME_PATTERNS` — measured clean enough for clustering itself):
  *
- * - "birthday" or "celebration" — 6/6 and 25/25 rows were event titles ("HOT
- *   107.9 Presents Birthday Bash 23", "No Name #1: A Celebration of the Life and
- *   Music of Elliott Smith"). No room is named after a party;
- * - "in concert" — 97 rows, a 20-row sample was 20/20 film-with-orchestra and
- *   artist billings ("The Muppet Christmas Carol In Concert", "Steeleye Span: In
- *   Concert"). The word "concert" alone stays untouched: 378 rows carry it and
- *   they are dominated by real rooms (Concert Halls, Concert Series,
- *   the Concertgebouw);
- * - a pipe with a trailing "City, ST" — all 8 such rows were billings ("Buddy
- *   Guy 90 | Majestic Theatre - San Antonio, TX", "ROCK THE STOCKYARD FEST |
- *   BRISTOL, TN"). A pipe alone is NOT enough: "Godfrey Daniels | Live Music
- *   Listening Room" is a real venue wearing a descriptor.
+ * - a pipe with a trailing "City, ST" — all 8 such rows on production
+ *   (2026-08-06) were billings ("Buddy Guy 90 | Majestic Theatre - San
+ *   Antonio, TX", "ROCK THE STOCKYARD FEST | BRISTOL, TN"). A pipe alone is
+ *   NOT enough: "Godfrey Daniels | Live Music Listening Room" is a real venue
+ *   wearing a descriptor. Display-only on purpose — these names still carry
+ *   real venue tokens ("Majestic Theatre"), which is exactly what lets the
+ *   same-spot merge place them under the right head.
  *
  * Deliberately not folded into `looksLikeTourName`. That one governs *clustering*,
  * where a false positive quietly merges two rooms and loses shows, so it stays
  * narrow. This one only governs what gets printed, where a false positive costs a
  * line of detail and a false negative prints a lie — so it can afford to be blunt.
  */
-const EVENT_TITLE_PATTERNS = [/\bbirthday\b/i, /\bcelebration\b/i, /\bin concert\b/i, /\|.*,\s*[A-Z]{2}$/];
+const EVENT_TITLE_PATTERNS = [/\|.*,\s*[A-Z]{2}$/];
 
 export function looksLikeEventTitle(name: string | null | undefined): boolean {
   const n = name?.trim();
