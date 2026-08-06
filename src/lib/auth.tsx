@@ -18,7 +18,15 @@ import { createContext, useContext, useEffect, useMemo } from 'react';
 
 import { setTokenProvider } from '@/lib/api';
 
-export const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '';
+// Cut at the first whitespace: a publishable key never contains any, but a value
+// pasted into a dashboard sometimes does. The v1.0.4 TestFlight build crashed on
+// launch because the EAS env var carried the .env.production line's trailing
+// "# production — …" comment into the value, and Clerk throws on a key it can't
+// parse before the first frame renders. Trimming costs a valid key nothing and
+// turns that paste accident back into a working app.
+export const CLERK_PUBLISHABLE_KEY = (process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '')
+  .trim()
+  .split(/\s/, 1)[0];
 
 // A release build running on Clerk's *development* instance. Legal, and how the app
 // ships today — there is only one instance — but it caps sign-ups, stamps
