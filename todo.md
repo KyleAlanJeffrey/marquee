@@ -337,6 +337,12 @@ What's left is the residuals:
   feed (Archer Music Hall, Allentown — headed by a Bandsintown "Arrow" row
   placed in Pittsburgh). The head's coordinates are now guarded in SQL too, and
   the Arrow head's coords were corrected in production to its cluster's spot.
+  - [ ] Residual (CodeRabbit, pre-existing): concert reminders sync off the
+    nearby page's follow intersection, and that page caps at 400 — a followed
+    artist's show ranked past the cap gets no reminder. The Following tab
+    already asks the right question (`useUpcomingForFollowedArtists`, the
+    whole horizon inside the radius); reminders should sync from that query
+    instead of the feed page.
   - [ ] Residual: the cluster-spread audit found three more clusters whose
     members sit >0.5° apart, all non-US, all Bandsintown coords —
     TivoliVredenburg/Utrecht (108°!), Escenario GNP Seguros/Monterrey (2.6°),

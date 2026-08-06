@@ -33,7 +33,8 @@ on:
         type: boolean
         default: false
   push:
-    tags: ['v*']
+    # A digit after the v, so release tags trigger and "venue-fix" doesn't.
+    tags: ['v[0-9]*']
 
 jobs:
   build:
@@ -74,7 +75,27 @@ jobs:
           PROFILE: ${{ inputs.profile || 'production' }}
           SUBMIT: ${{ (github.event_name == 'push' || inputs.submit) && 'yes' || 'no' }}
         run: |
-          flags="--platform $PLATFORM --profile $PROFILE --non-interactive --no-wait"
-          if [ "$SUBMIT" = "yes" ]; then flags="$flags --auto-submit"; fi
-          echo "eas build $flags"
-          eas build $flags
+          base="--profile $PROFILE --non-interactive --no-wait"
+          if [ "$SUBMIT" != "yes" ]; then
+            eas build --platform "$PLATFORM" $base
+            exit 0
+          fi
+          # Auto-submit only where EAS holds store credentials. Android needs a
+          # Google Service Account key that eas cannot create non-interactively,
+          # and asking anyway kills the whole run *after* the builds have been
+          # queued — the first tag-style run died exactly there. When the Play
+          # key is in `eas credentials`, fold android back into --auto-submit.
+          android_submit_note() {
+            echo "::warning::Android built without submitting: EAS has no Google Service Account key yet. Add one via 'eas credentials' (Android -> Google Service Account), then remove this guard."
+          }
+          case "$PLATFORM" in
+            ios)
+              eas build --platform ios $base --auto-submit ;;
+            android)
+              android_submit_note
+              eas build --platform android $base ;;
+            all)
+              eas build --platform ios $base --auto-submit
+              android_submit_note
+              eas build --platform android $base ;;
+          esac
