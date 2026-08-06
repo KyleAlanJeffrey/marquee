@@ -1,5 +1,5 @@
 import { and, asc, between, desc, eq, gte, inArray, lt, lte, or, sql, type SQL } from 'drizzle-orm';
-import { alias } from 'drizzle-orm/sqlite-core';
+import { alias, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
 
 import { getDb, type DB } from './db';
 import { zoneFor } from './timezone';
@@ -202,6 +202,29 @@ const notability = sql<number>`
 
 export type NearbySort = 'featured' | 'date';
 
+/**
+ * The radius itself, in SQL, so ORDER BY and LIMIT apply to the circle and not
+ * the bounding box. The old shape — box, limit, then a haversine filter in
+ * JS — silently starved wide feeds: the box's corners reach radius×1.4, and
+ * under `featured` a notable show 130 miles out (in the box, outside the
+ * circle) took a seat in the 400-row page from an in-radius show and was then
+ * thrown away. Measured on production New York before the fix: 398 items at
+ * 10 miles, 380 at 25, 391 at 100 — a wider ask returning *less*.
+ * Equirectangular rather than haversine because SQLite has no trig; at these
+ * radii the divergence is well under a mile.
+ */
+const withinMilesSql = (
+  latCol: SQLiteColumn | SQL,
+  lngCol: SQLiteColumn | SQL,
+  lat: number,
+  lng: number,
+  cosLat: number,
+  radiusMiles: number,
+) =>
+  sql`((${latCol} - ${lat}) * 69.0) * ((${latCol} - ${lat}) * 69.0)
+    + ((${lngCol} - ${lng}) * ${69 * cosLat}) * ((${lngCol} - ${lng}) * ${69 * cosLat})
+    <= ${radiusMiles * radiusMiles}`;
+
 export async function nearbyEvents(
   db: DB,
   lat: number,
@@ -212,10 +235,11 @@ export async function nearbyEvents(
   sort: NearbySort = 'date',
 ) {
   const latDelta = radiusMiles / 69;
-  const lngDelta = radiusMiles / (69 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
+  const cosLat = Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
+  const lngDelta = radiusMiles / (69 * cosLat);
 
-  // Bounding-box prefilter on the indexed lat/lng; the exact radius check is the
-  // haversine below (SQLite has no spherical distance).
+  // Bounding-box prefilter on the indexed lat/lng; the circle itself is
+  // `withinMilesSql`, inside the query where LIMIT can see it.
   const canon = alias(venues, 'canon');
   const rows = await db
     .select({
@@ -255,6 +279,10 @@ export async function nearbyEvents(
         lte(events.startsAt, isoInDays(120)),
         between(venues.lat, lat - latDelta, lat + latDelta),
         between(venues.lng, lng - lngDelta, lng + lngDelta),
+        // On the attached row, like the box: that is the indexed one, and the
+        // doctrine below (canon supplies what's displayed) already accepts the
+        // rare drift between the two.
+        withinMilesSql(venues.lat, venues.lng, lat, lng, cosLat, radiusMiles),
       ),
     )
     // Featured: notable first, soonest within a band. The id tiebreak is what
@@ -269,23 +297,23 @@ export async function nearbyEvents(
     .limit(limit)
     .offset(offset);
 
-  const items = rows
-    .map((r) => ({
-      ...r,
-      artist_genres: parseGenres(r.artist_genres),
-      venue_name: publishedVenueName(r.venue_name),
-      // The zone the show actually happens in: a 23:00 gig in London is not a
-      // 3pm gig, whatever the reader's own clock says.
-      venue_timezone: zoneFor(r.venue_region, r.venue_country),
-      distance_miles:
-        r.venue_lat != null && r.venue_lng != null
-          ? haversineMiles(lat, lng, r.venue_lat, r.venue_lng)
-          : null,
-    }))
-    .filter((r) => r.distance_miles == null || r.distance_miles <= radiusMiles);
+  // No post-filter here: the SQL predicate already decided membership, and a
+  // second pass on the canonical row's haversine is exactly what used to
+  // return short pages. A show whose cluster head sits a hair past the line
+  // may display as 100.3 mi in a 100 mi feed; that's honest, not a leak.
+  const items = rows.map((r) => ({
+    ...r,
+    artist_genres: parseGenres(r.artist_genres),
+    venue_name: publishedVenueName(r.venue_name),
+    // The zone the show actually happens in: a 23:00 gig in London is not a
+    // 3pm gig, whatever the reader's own clock says.
+    venue_timezone: zoneFor(r.venue_region, r.venue_country),
+    distance_miles:
+      r.venue_lat != null && r.venue_lng != null
+        ? haversineMiles(lat, lng, r.venue_lat, r.venue_lng)
+        : null,
+  }));
 
-  // Page on the SQL row count (pre-haversine) so we keep advancing even when a
-  // page loses a few corner-of-the-bbox rows to the radius filter.
   const nextCursor = rows.length === limit ? offset + limit : null;
   return { items, nextCursor };
 }
@@ -315,7 +343,8 @@ export async function nearbyVenues(
   limit = 12,
 ) {
   const latDelta = radiusMiles / 69;
-  const lngDelta = radiusMiles / (69 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
+  const cosLat = Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
+  const lngDelta = radiusMiles / (69 * cosLat);
   const canon = alias(venues, 'canon');
   const upcoming = sql<number>`count(distinct ${events.id})`;
 
@@ -344,6 +373,7 @@ export async function nearbyVenues(
         // the name and the coordinates that get displayed.
         between(venues.lat, lat - latDelta, lat + latDelta),
         between(venues.lng, lng - lngDelta, lng + lngDelta),
+        withinMilesSql(venues.lat, venues.lng, lat, lng, cosLat, radiusMiles),
         sql`${canon.name} is not null and trim(${canon.name}) <> ''`,
       ),
     )
@@ -373,8 +403,8 @@ export async function nearbyVenues(
       distance_miles:
         r.lat != null && r.lng != null ? haversineMiles(lat, lng, r.lat, r.lng) : null,
     }))
-    // The box is square and the radius is round, so its corners reach ~1.4x.
-    .filter((r) => r.distance_miles == null || r.distance_miles <= radiusMiles)
+    // Membership was decided in SQL (`withinMilesSql`); no second pass on the
+    // canonical row's haversine, which used to shave rows off the corners.
     .sort((a, b) => b.upcoming - a.upcoming || (a.distance_miles ?? 0) - (b.distance_miles ?? 0))
     .slice(0, limit);
 }
