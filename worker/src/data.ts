@@ -423,7 +423,12 @@ export async function nearbyVenues(
     }))
     // Membership was decided in SQL (`withinMilesSql`); no second pass on the
     // canonical row's haversine, which used to shave rows off the corners.
-    .sort((a, b) => b.upcoming - a.upcoming || (a.distance_miles ?? 0) - (b.distance_miles ?? 0))
+    // A venue we can't place sorts after the ones we can, not at zero miles.
+    .sort(
+      (a, b) =>
+        b.upcoming - a.upcoming ||
+        (a.distance_miles ?? Number.MAX_VALUE) - (b.distance_miles ?? Number.MAX_VALUE),
+    )
     .slice(0, limit);
 }
 
