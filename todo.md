@@ -289,9 +289,18 @@ What's left is the residuals:
   - The blue gear bubble covering the TopBar search icon and the modal X is
     Expo Go's dev-menu overlay — dev-only, not a bug to fix.
 - [ ] **App-store prep** — mine except the builds and submissions:
-  - [ ] **Blocked on Kyle:** the EAS project id (`a9540056-…`) belongs to an
-    account `eas whoami` isn't a member of. Either `eas login` as its owner or
-    hand over an id under `kyle_jeffrey` / `stout-agtech`.
+  - [x] EAS project unblocked: `app.json` owner is `kyle-jeffreys-team` and
+    Kyle submitted the first iOS build (2026-08-05).
+  - [x] CI builds (Kyle, 2026-08-06): `.github/workflows/eas-build.yml` runs
+    `eas build` on version tags (`v*` → both platforms, production profile,
+    `--auto-submit`) or by hand from the Actions tab (choose platform/profile/
+    submit). `--no-wait` hands the build to EAS's servers, so the Action is
+    done in a minute and progress lives on expo.dev.
+    - [ ] Kyle: create an access token for `kyle-jeffreys-team` (expo.dev →
+      account settings → Access tokens) and add it as the `EXPO_TOKEN` repo
+      secret; the guard step names the fix if it's missing or malformed.
+      Auto-submit also needs store credentials in EAS (`eas credentials`) —
+      the manual submission already proved iOS's are there.
   - [ ] Screenshots (simulator + seeded data), the Play feature graphic, and the
     `expo-updates` decision (not installed → no OTA channel).
   - [ ] Then the website advertises the app: store badges on `/`, and a smart

@@ -1,0 +1,78 @@
+# Native app builds (and store submission) through EAS.
+#
+# Deliberately NOT on every push: an EAS build takes ~20 minutes and spends
+# build credits, and the website already deploys continuously through Workers
+# Builds. Two ways in instead:
+#   - push a version tag (v1.2.3) -> production build of both platforms,
+#     submitted to the stores when it finishes (EAS handles the submission
+#     server-side; store credentials live in EAS, not here);
+#   - run it by hand from the Actions tab, choosing platform/profile and
+#     whether to submit.
+#
+# One-time setup: create an access token for the kyle-jeffreys-team account
+# (expo.dev -> account settings -> Access tokens) and add it to this repo as
+# the EXPO_TOKEN secret. `--no-wait` keeps the runner's minutes out of it —
+# progress lives at expo.dev/accounts/kyle-jeffreys-team/projects/marquee/builds.
+name: EAS build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        type: choice
+        options: [all, ios, android]
+        default: all
+      profile:
+        description: Build profile (eas.json)
+        type: choice
+        options: [production, preview]
+        default: production
+      submit:
+        description: Submit to the stores when the build finishes
+        type: boolean
+        default: false
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Fail in seconds with the fix spelled out, not after npm ci with the
+      # CLI's generic auth error — same shape as deploy-jobs' token guard.
+      - name: Require EXPO_TOKEN
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::The EXPO_TOKEN repo secret is not set. Create an access token (expo.dev -> account settings -> Access tokens, for the kyle-jeffreys-team account) and add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          case "$EXPO_TOKEN" in
+            *[!A-Za-z0-9_-]*)
+              echo "::error::The EXPO_TOKEN secret contains whitespace or quotes. Paste only the raw token value, with nothing around it."
+              exit 1 ;;
+          esac
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - name: Build (and submit) on EAS
+        env:
+          # Tag pushes have no inputs; they mean "release", so they build
+          # everything at the production profile and submit.
+          PLATFORM: ${{ inputs.platform || 'all' }}
+          PROFILE: ${{ inputs.profile || 'production' }}
+          SUBMIT: ${{ (github.event_name == 'push' || inputs.submit) && 'yes' || 'no' }}
+        run: |
+          flags="--platform $PLATFORM --profile $PROFILE --non-interactive --no-wait"
+          if [ "$SUBMIT" = "yes" ]; then flags="$flags --auto-submit"; fi
+          echo "eas build $flags"
+          eas build $flags
