@@ -247,6 +247,10 @@ export function useSetRsvp(eventId: string) {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: rsvpKey(eventId) });
+      // RSVPs are activity now — both streams should show this one without
+      // waiting out their staleTime.
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      queryClient.invalidateQueries({ queryKey: ['activity'] });
       // The My Shows tab lists every answer, so it learns about this one.
       queryClient.invalidateQueries({ queryKey: ['my-rsvps'] });
     },

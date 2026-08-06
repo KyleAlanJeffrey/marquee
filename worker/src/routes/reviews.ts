@@ -342,10 +342,14 @@ reviewRoutes.get('/events/:id/rsvps', async (c) => {
   const eventId = c.req.param('id');
   const { userId } = await callerFrom(c.env, c.req.header('authorization'));
 
+  // The same visibility the people list applies — deleted accounts and
+  // blocked pairs — or "1 GOING" can sit over an empty name wall and read
+  // as a bug.
   const rows = await db
     .select({ status: eventRsvps.status, n: sql<number>`count(*)` })
     .from(eventRsvps)
-    .where(eq(eventRsvps.eventId, eventId))
+    .innerJoin(users, and(eq(users.id, eventRsvps.userId), isNull(users.deletedAt)))
+    .where(and(eq(eventRsvps.eventId, eventId), userId ? noBlockWith(userId, eventRsvps.userId) : undefined))
     .groupBy(eventRsvps.status);
   const counts = { going: 0, interested: 0 };
   for (const r of rows) counts[r.status as keyof typeof counts] = r.n;
@@ -545,7 +549,10 @@ async function activityPage(
       ),
     )
     .orderBy(desc(reviews.createdAt), desc(reviews.id))
-    .limit(FEED_PAGE);
+    // One past the page from each source: "exactly FEED_PAGE" is how an
+    // exhausted well and a full one look identical, and the difference is
+    // whether the client gets a cursor to an empty page.
+    .limit(FEED_PAGE + 1);
 
   const rsvpId = sql<string>`'r:' || ${eventRsvps.userId} || ':' || ${eventRsvps.eventId}`;
   const rsvpQuery = db
@@ -567,7 +574,11 @@ async function activityPage(
     .innerJoin(events, eq(events.id, eventRsvps.eventId))
     .where(
       and(
-        gt(events.startsAt, nowIso()),
+        // "Still to come" honours the same grace the RSVP write gate gives a
+        // time-unknown show: it can accept a "going" until midnight at the
+        // venue, so it keeps streaming until then too.
+        sql`${events.startsAt} > (case when ${events.timeUnknown}
+          then ${isoAt(Date.now() - TBD_GRACE_MS)} else ${nowIso()} end)`,
         followerId
           ? sql`exists (select 1 from person_follows
               where follower_id = ${followerId} and followee_id = ${eventRsvps.userId})`
@@ -577,7 +588,7 @@ async function activityPage(
       ),
     )
     .orderBy(desc(eventRsvps.createdAt), desc(rsvpId))
-    .limit(FEED_PAGE);
+    .limit(FEED_PAGE + 1);
 
   const [reviewItems, rsvpItems] = await Promise.all([reviewQuery, rsvpQuery]);
 
@@ -586,10 +597,11 @@ async function activityPage(
       a.createdAt === b.createdAt ? (a.id < b.id ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1,
     )
     .slice(0, FEED_PAGE);
-  // More exists if either source filled its page (its tail was cut off) or the
-  // merge itself overflowed. When neither did, both wells are dry.
+  // More exists only when something was genuinely cut off: a source overflowed
+  // its page+1 window, or the merge dropped rows. A dataset of exactly one
+  // page ends here with no cursor instead of promising an empty page.
   const hasMore =
-    reviewItems.length === FEED_PAGE || rsvpItems.length === FEED_PAGE || reviewItems.length + rsvpItems.length > FEED_PAGE;
+    reviewItems.length > FEED_PAGE || rsvpItems.length > FEED_PAGE || reviewItems.length + rsvpItems.length > FEED_PAGE;
   const last = merged[merged.length - 1];
   return {
     items: merged,

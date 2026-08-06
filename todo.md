@@ -56,8 +56,9 @@ What's left is the residuals:
    counters once volume justifies them, and `AggregateRating` JSON-LD on the
    server-rendered pages — deliberately deferred until real reviews exist, since
    fabricated-looking review markup is a manual-action category.
-4. [~] **Phase D residuals** — feed pagination beyond 50; any feed of
-   artist/venue activity (this one is people only, by design).
+4. [~] **Phase D residuals** — any feed of artist/venue activity (this one is
+   people only, by design). Pagination landed long ago (compound cursor), and
+   the feed itself grew RSVPs and a tab of its own in the Activity-tab PR.
 5. [~] **Phase E residual** — reportability once lists join the moderation
    kinds. (Item notes and reordering landed 2026-07-31: `PUT
    /:id/items/:kind/:refId` patches the note and/or swaps a place up or down,
