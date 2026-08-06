@@ -63,6 +63,8 @@ jobs:
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
+      # Proves the token is real before npm ci spends two minutes finding out.
+      - run: eas whoami
       - run: npm ci
       - name: Build (and submit) on EAS
         env:
