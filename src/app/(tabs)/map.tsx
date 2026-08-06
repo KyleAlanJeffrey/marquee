@@ -62,6 +62,9 @@ export default function MapScreen() {
   // Stored by key and resolved from the current groups, so a venue that drops
   // out of the feed closes the sheet on its own — same shape as the web map.
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // fitToCoordinates silently no-ops before the native map has laid out, and
+  // cached query data can win that race — so the fit waits for onMapReady.
+  const [mapReady, setMapReady] = useState(false);
 
   const all = useMemo(() => events.data?.items ?? [], [events.data]);
   const ref = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_spotify_id });
@@ -132,13 +135,13 @@ export default function MapScreen() {
 
   // Frame the pins once per visit; after that the camera belongs to the user.
   useEffect(() => {
-    if (fittedRef.current || groups.length === 0 || !mapRef.current) return;
+    if (!mapReady || fittedRef.current || groups.length === 0 || !mapRef.current) return;
     fittedRef.current = true;
     mapRef.current.fitToCoordinates(
       groups.map((g) => ({ latitude: g.lat, longitude: g.lng })),
       { edgePadding: { top: 120, right: 60, bottom: 120, left: 60 }, animated: false },
     );
-  }, [groups]);
+  }, [groups, mapReady]);
 
   if (!coords) {
     return (
@@ -174,6 +177,7 @@ export default function MapScreen() {
         showsMyLocationButton={false}
         showsPointsOfInterests={false}
         toolbarEnabled={false}
+        onMapReady={() => setMapReady(true)}
         onRegionChangeComplete={(region) => {
           regionRef.current = region;
         }}

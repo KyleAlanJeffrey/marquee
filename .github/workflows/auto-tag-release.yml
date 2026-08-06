@@ -32,15 +32,25 @@ jobs:
         id: tag
         run: |
           version=$(python3 -c "import json; print(json.load(open('app.json'))['expo']['version'])")
-          case "$version" in
-            [0-9]*.[0-9]*.[0-9]*) ;;
-            *)
-              echo "::error::expo.version in app.json is '$version', which doesn't look like a semver — refusing to tag."
-              exit 1 ;;
-          esac
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::expo.version in app.json is '$version', which doesn't look like a semver — refusing to tag."
+            exit 1
+          fi
           tag="v$version"
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
             echo "::notice::$tag already exists — version didn't change, nothing to release."
+            echo "created=no" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # The version must also beat every existing release tag, not merely
+          # be untagged: app.json trailed the hand-made tags when this workflow
+          # landed (1.0.0 vs v1.0.3), and without this gate the first unrelated
+          # app.json edit would have shipped a "new" v1.0.0. A notice, not a
+          # failure — unrelated app.json edits are legitimate pushes.
+          highest=$(git ls-remote --tags origin 'refs/tags/v*' | awk -F'refs/tags/' '{print $2}' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          if [ -n "$highest" ] && [ "$(printf '%s\n' "${highest#v}" "$version" | sort -V | tail -1)" != "$version" ]; then
+            echo "::notice::app.json says $version but $highest is already released — bump expo.version past it to cut a release."
             echo "created=no" >> "$GITHUB_OUTPUT"
             exit 0
           fi
