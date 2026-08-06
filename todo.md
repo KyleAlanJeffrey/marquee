@@ -346,6 +346,21 @@ What's left is the residuals:
     render in the next TestFlight build.
   - [ ] Android standalone builds need `android.config.googleMaps.apiKey` in
     app.json before the map screen works there (Expo Go Android is fine).
+- [x] **Social surfacing: the Activity tab** (Kyle, 2026-08-06, "I want to
+  see what other people have seen or are going to in an easy way… consolidate
+  some existing tabs", PR branch `social-activity-tab`): Letterboxd's exact
+  consolidation — the diary lives on the profile, the friends feed gets the
+  tab. Log left the tab bar (still at `/log`, fronted by a YOUR LOG card on
+  Profile); Activity took its slot with two scopes: FRIENDS (`/me/feed`, now
+  reviews **and** RSVPs) and EVERYONE (new `GET /activity`, the cold-start
+  answer — works signed out). RSVPs became **named** (deliberate reversal of
+  "counts name nobody" — an integer answers "who's going" for nobody):
+  `/events/:id/rsvps` returns `people`, going-first then followed-first, and
+  the Your Plans card renders them as tappable chips. Feed authors are
+  tappable now too (they never were). The mixed stream is two indexed
+  queries JS-merged on a compound (createdAt, id) cursor; the RSVP id is
+  synthesised (`r:<user>:<event>`), and RSVP items only stream for shows
+  still to come. Verified on the simulator against local D1 end to end.
 - [x] **v1.0.4 launch crash** (Kyle, 2026-08-06, "crashes immediately on
   trying to open the app"): the EAS production env var
   `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` carried the `.env.production` line's

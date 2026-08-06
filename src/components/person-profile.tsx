@@ -26,7 +26,7 @@ import {
   type PublicUser,
 } from '@/lib/people';
 import { usePersonLists } from '@/lib/curated';
-import { useBlockPerson, useFeed, useProfileReviews } from '@/lib/reviews';
+import { useBlockPerson, useProfileReviews } from '@/lib/reviews';
 import { useWriteGate } from '@/lib/write-gate';
 
 /**
@@ -260,10 +260,6 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
   const list = useFollowList(profileKey, tab, profile.isSuccess);
   const theirReviews = useProfileReviews(profileKey, profile.isSuccess);
   const shelves = usePersonLists(profileKey, profile.isSuccess);
-  // The feed lives on *your* profile — the social graph is reached through you
-  // (docs/social.md's answer to the naming collision). Only fetched for self.
-  const isSelfProfile = profile.data?.viewer?.isSelf ?? false;
-  const feed = useFeed(isSelfProfile);
 
   if (profile.isLoading) {
     return (
@@ -354,75 +350,9 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
       {/* Four favorites, straight under the name — the profile's signature. */}
       <FavoritesStrip profileKey={profileKey} favorites={profile.data.favorites ?? []} isSelf={isSelf} />
 
-      {/* The feed — what the people you follow have been to lately. Yours only,
-          first thing on your own profile: it's the reason to open the tab
-          twice a day, so it doesn't live under the follower lists any more.
-          Only once it has an answer; an empty graph shows a nudge, not a hole. */}
-      {/* A failed *older-page* fetch must not blank pages already on screen —
-          the full-width error is only for having nothing to show at all. */}
-      {isSelf && feed.isError && !feed.data && (
-        <View style={styles.centreBlock}>
-          <ErrorState onRetry={() => feed.refetch()} />
-        </View>
-      )}
-      {isSelf && !!feed.data && (
-        <>
-          <ThemedText type="label" style={[styles.reviewsLabel, { color: theme.cyan }]}>
-            FROM PEOPLE YOU FOLLOW
-          </ThemedText>
-          {feed.data.pages[0].items.length === 0 ? (
-            <ThemedText type="small" themeColor="textSecondary" style={styles.emptyNote}>
-              Nothing yet. Follow people and their public reviews land here.
-            </ThemedText>
-          ) : (
-            <GlassCard style={styles.listCard}>
-              {feed.data.pages.flatMap((p) => p.items).map((item) => (
-                <PressableScale
-                  key={item.id}
-                  haptic={false}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${item.eventName}`}
-                  onPress={() => router.push(`/event/${encodeURIComponent(item.eventId)}`)}
-                  style={[styles.reviewRow, { borderColor: theme.border }]}>
-                  <View style={styles.reviewHead}>
-                    <ThemedText type="smallBold" numberOfLines={1} style={{ flex: 1 }}>
-                      {item.eventName}
-                    </ThemedText>
-                    {item.rating != null && <StarRating value={item.rating} size={13} subject="the performance" />}
-                  </View>
-                  <ThemedText type="labelSm" style={{ color: theme.textTertiary }} numberOfLines={1}>
-                    {`${(item.authorName ?? (item.authorHandle ? `@${item.authorHandle}` : 'SOMEONE')).toUpperCase()} · ${formatEventDate(item.startsAt, null).toUpperCase()}`}
-                  </ThemedText>
-                  {!!item.body && (
-                    <ThemedText type="small" themeColor="textSecondary" numberOfLines={3}>
-                      {item.body}
-                    </ThemedText>
-                  )}
-                </PressableScale>
-              ))}
-              {feed.hasNextPage && (
-                <PressableScale
-                  haptic
-                  accessibilityRole="button"
-                  accessibilityLabel="Show older reviews from people you follow"
-                  onPress={() => !feed.isFetchingNextPage && feed.fetchNextPage()}
-                  style={[styles.moreBtn, { borderColor: feed.isFetchNextPageError ? theme.error : theme.border }]}>
-                  <ThemedText
-                    type="labelSm"
-                    themeColor={feed.isFetchNextPageError ? undefined : 'textSecondary'}
-                    style={feed.isFetchNextPageError ? { color: theme.error } : undefined}>
-                    {feed.isFetchingNextPage
-                      ? 'LOADING…'
-                      : feed.isFetchNextPageError
-                        ? 'COULDN’T LOAD — TRY AGAIN'
-                        : 'SHOW OLDER'}
-                  </ThemedText>
-                </PressableScale>
-              )}
-            </GlassCard>
-          )}
-        </>
-      )}
+      {/* The feed used to render here, mid-profile — it has a tab of its own
+          now (Activity), where a stream people are meant to check actually
+          gets checked. */}
 
       {/* The two counts are the tabs: tapping one is asking to see the list. */}
       <View style={styles.tabsRow}>

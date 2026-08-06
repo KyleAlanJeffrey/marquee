@@ -125,7 +125,9 @@ export default function LogScreen() {
         description="Every show you've been to, and what you thought of it. Private to your account."
       />
       <StageBackground />
-      <TopBar onSearchPress={() => router.push('/search')} />
+      {/* A pushed screen since Activity took the tab slot, so it needs the
+          way back it never used to. */}
+      <TopBar back onSearchPress={() => router.push('/search')} />
 
       {!ready ? (
         // The disk read hasn't landed. "You haven't been to anything" would be a

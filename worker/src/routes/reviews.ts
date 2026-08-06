@@ -60,10 +60,13 @@ async function blockedEitherWay(db: DB, a: string, b: string): Promise<boolean> 
  * Everyone the viewer is estranged from, either direction, as a subquery
  * condition. Written as `not exists` so the reviews query stays one round trip.
  */
-const noBlockBetween = (viewerId: string) => sql`not exists (
+const noBlockBetween = (viewerId: string) => noBlockWith(viewerId, reviews.userId);
+
+/** The same estrangement check against any author column — rsvps use it too. */
+const noBlockWith = (viewerId: string, author: typeof reviews.userId | typeof eventRsvps.userId) => sql`not exists (
   select 1 from user_blocks
-  where (blocker_id = ${viewerId} and blocked_id = ${reviews.userId})
-     or (blocker_id = ${reviews.userId} and blocked_id = ${viewerId})
+  where (blocker_id = ${viewerId} and blocked_id = ${author})
+     or (blocker_id = ${author} and blocked_id = ${viewerId})
 )`;
 
 /**
@@ -319,11 +322,21 @@ reviewRoutes.post('/reviews/:id/report', zValidator('json', reportBody), async (
 
 /**
  * RSVPs: the forward-looking half of the social layer. A review says what a
- * night was like; this says a night is going to matter. Counts are public and
- * anonymous — "12 going" names nobody — and only the caller ever learns their
- * own answer. The mirror-image rule to reviews applies: a show that has
- * already started takes no RSVP, because "went" is what the log is for.
+ * night was like; this says a night is going to matter. The mirror-image rule
+ * to reviews applies: a show that has already started takes no RSVP, because
+ * "went" is what the log is for.
+ *
+ * RSVPs are **named** (2026-08-06, reversing the launch-era "counts name
+ * nobody" rule): the whole point of saying you're going is that people can see
+ * you're going — "I want to see what other people are going to" was the ask,
+ * and an integer answers it for nobody. An answer is public the same way a
+ * public review is; the people list caps out rather than paginating (a name
+ * wall, not a directory), the viewer's follows float to the top because those
+ * are the names that change a decision, and blocks hide the estranged in both
+ * directions exactly as they do for reviews.
  */
+const RSVP_PEOPLE_MAX = 30;
+
 reviewRoutes.get('/events/:id/rsvps', async (c) => {
   const db = getDb(c.env.DB);
   const eventId = c.req.param('id');
@@ -345,7 +358,37 @@ reviewRoutes.get('/events/:id/rsvps', async (c) => {
         .get())?.status ?? null)
     : null;
 
-  return c.json({ counts, mine });
+  // 0/1 in SQL so it can drive the sort; the client reads it as a boolean-ish.
+  const followedByMe = userId
+    ? sql<number>`exists (select 1 from person_follows
+        where follower_id = ${userId} and followee_id = ${users.id})`
+    : sql<number>`0`;
+  const people = await db
+    .select({
+      id: users.id,
+      handle: users.handle,
+      displayName: users.displayName,
+      avatarUrl: users.avatarUrl,
+      status: eventRsvps.status,
+      followedByMe,
+    })
+    .from(eventRsvps)
+    .innerJoin(users, and(eq(users.id, eventRsvps.userId), isNull(users.deletedAt)))
+    .where(and(eq(eventRsvps.eventId, eventId), userId ? noBlockWith(userId, eventRsvps.userId) : undefined))
+    // Going before interested (commitment outranks curiosity), people you
+    // follow before strangers, then whoever answered most recently. The
+    // follow term only exists for signed-in viewers: anonymous callers'
+    // constant `0` would reach SQLite as an ORDER BY *column position*.
+    .orderBy(
+      ...[
+        sql`case ${eventRsvps.status} when 'going' then 0 else 1 end`,
+        ...(userId ? [desc(followedByMe)] : []),
+        desc(eventRsvps.createdAt),
+      ],
+    )
+    .limit(RSVP_PEOPLE_MAX);
+
+  return c.json({ counts, mine, people, people_limit: RSVP_PEOPLE_MAX });
 });
 
 reviewRoutes.put('/events/:id/rsvp', zValidator('json', rsvpBody), async (c) => {
@@ -425,29 +468,56 @@ reviewRoutes.get('/me/rsvps', async (c) => {
   return c.json({ items: items.map((e) => ({ ...e, rsvp_status: statusOf.get(e.event_id) })) });
 });
 
-reviewRoutes.get('/me/feed', async (c) => {
-  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
-  if (!userId) return c.json({ error: 'sign in required' }, 401);
-
-  // `?before=<createdAt>|<id>` pages into older reviews. Compound, because
-  // created_at is second-precision and two reviews can share a second — a
-  // timestamp-only cursor would skip whichever one landed on the boundary.
-  // Only the cursor this route itself minted is accepted; anything else is a
-  // 400, not a silently-wrong window.
-  const before = c.req.query('before')?.trim() || null;
-  let beforeAt: string | null = null;
-  let beforeId: string | null = null;
-  if (before) {
-    const parts = before.split('|');
-    if (parts.length !== 2 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(parts[0]) || !parts[1]) {
-      return c.json({ error: 'bad cursor' }, 400);
-    }
-    [beforeAt, beforeId] = parts;
+/**
+ * `?before=<createdAt>|<id>` pages into older items. Compound, because
+ * created_at is second-precision and two items can share a second — a
+ * timestamp-only cursor would skip whichever one landed on the boundary.
+ * Only a cursor these routes themselves minted is accepted; anything else is
+ * a 400, not a silently-wrong window.
+ */
+function parseCursor(raw: string | undefined): { beforeAt: string | null; beforeId: string | null } | null {
+  const before = raw?.trim() || null;
+  if (!before) return { beforeAt: null, beforeId: null };
+  const parts = before.split('|');
+  if (parts.length !== 2 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(parts[0]) || !parts[1]) {
+    return null;
   }
+  return { beforeAt: parts[0], beforeId: parts[1] };
+}
 
-  const db = getDb(c.env.DB);
-  const items = await db
+/**
+ * One page of the activity stream: public reviews and RSVPs, merged newest
+ * first. Two indexed queries and a JS merge rather than a UNION — the shapes
+ * differ enough that the union's null-padding costs more clarity than the
+ * merge costs cycles at FEED_PAGE rows.
+ *
+ * The RSVP half's item id is synthesised (`r:<user>:<event>` — the table's key
+ * is composite) and both halves order and cursor on (createdAt, id) with their
+ * own id expression, so the compound cursor stays exact across the merge.
+ * RSVPs only stream for shows still to come: "going to" a show that already
+ * happened is stale plans, and the review stream is the record of the night.
+ *
+ * `followerId` scopes to the caller's follow graph (`/me/feed`); without it
+ * the stream is everyone (`/activity`) — the cold-start answer for a network
+ * where nobody follows anybody yet, block-filtered when the viewer is known.
+ */
+async function activityPage(
+  db: DB,
+  opts: { followerId?: string; viewerId: string | null; beforeAt: string | null; beforeId: string | null },
+) {
+  const { followerId, viewerId, beforeAt, beforeId } = opts;
+
+  const olderThan = (createdAt: typeof reviews.createdAt | typeof eventRsvps.createdAt, idExpr: unknown) =>
+    beforeAt
+      ? or(
+          lt(createdAt, beforeAt),
+          beforeId ? and(eq(createdAt, beforeAt), sql`${idExpr} < ${beforeId}`) : undefined,
+        )
+      : undefined;
+
+  const reviewQuery = db
     .select({
+      type: sql<string>`'review'`,
       id: reviews.id,
       eventId: reviews.eventId,
       eventName: events.name,
@@ -455,37 +525,103 @@ reviewRoutes.get('/me/feed', async (c) => {
       rating: reviews.rating,
       venueRating: reviews.venueRating,
       body: reviews.body,
+      status: sql<string | null>`null`,
       createdAt: reviews.createdAt,
       ...AUTHOR_FIELDS,
     })
-    .from(personFollows)
-    .innerJoin(
-      reviews,
-      and(eq(reviews.userId, personFollows.followeeId), eq(reviews.visibility, 'public'), isNull(reviews.deletedAt)),
-    )
+    .from(reviews)
     .innerJoin(users, and(eq(users.id, reviews.userId), isNull(users.deletedAt)))
     .innerJoin(events, eq(events.id, reviews.eventId))
     .where(
       and(
-        eq(personFollows.followerId, userId),
-        beforeAt
-          ? or(
-              lt(reviews.createdAt, beforeAt),
-              beforeId ? and(eq(reviews.createdAt, beforeAt), lt(reviews.id, beforeId)) : undefined,
-            )
+        eq(reviews.visibility, 'public'),
+        isNull(reviews.deletedAt),
+        followerId
+          ? sql`exists (select 1 from person_follows
+              where follower_id = ${followerId} and followee_id = ${reviews.userId})`
           : undefined,
+        !followerId && viewerId ? noBlockBetween(viewerId) : undefined,
+        olderThan(reviews.createdAt, reviews.id),
       ),
     )
     .orderBy(desc(reviews.createdAt), desc(reviews.id))
     .limit(FEED_PAGE);
 
-  const last = items[items.length - 1];
-  return c.json({
-    items,
+  const rsvpId = sql<string>`'r:' || ${eventRsvps.userId} || ':' || ${eventRsvps.eventId}`;
+  const rsvpQuery = db
+    .select({
+      type: sql<string>`'rsvp'`,
+      id: rsvpId,
+      eventId: eventRsvps.eventId,
+      eventName: events.name,
+      startsAt: events.startsAt,
+      rating: sql<number | null>`null`,
+      venueRating: sql<number | null>`null`,
+      body: sql<string | null>`null`,
+      status: eventRsvps.status,
+      createdAt: eventRsvps.createdAt,
+      ...AUTHOR_FIELDS,
+    })
+    .from(eventRsvps)
+    .innerJoin(users, and(eq(users.id, eventRsvps.userId), isNull(users.deletedAt)))
+    .innerJoin(events, eq(events.id, eventRsvps.eventId))
+    .where(
+      and(
+        gt(events.startsAt, nowIso()),
+        followerId
+          ? sql`exists (select 1 from person_follows
+              where follower_id = ${followerId} and followee_id = ${eventRsvps.userId})`
+          : undefined,
+        !followerId && viewerId ? noBlockWith(viewerId, eventRsvps.userId) : undefined,
+        olderThan(eventRsvps.createdAt, rsvpId),
+      ),
+    )
+    .orderBy(desc(eventRsvps.createdAt), desc(rsvpId))
+    .limit(FEED_PAGE);
+
+  const [reviewItems, rsvpItems] = await Promise.all([reviewQuery, rsvpQuery]);
+
+  const merged = [...reviewItems, ...rsvpItems]
+    .sort((a, b) =>
+      a.createdAt === b.createdAt ? (a.id < b.id ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1,
+    )
+    .slice(0, FEED_PAGE);
+  // More exists if either source filled its page (its tail was cut off) or the
+  // merge itself overflowed. When neither did, both wells are dry.
+  const hasMore =
+    reviewItems.length === FEED_PAGE || rsvpItems.length === FEED_PAGE || reviewItems.length + rsvpItems.length > FEED_PAGE;
+  const last = merged[merged.length - 1];
+  return {
+    items: merged,
     limit: FEED_PAGE,
-    // Full page ⇒ probably more; the cursor is where this page ended.
-    nextCursor: items.length === FEED_PAGE ? `${last.createdAt}|${last.id}` : null,
-  });
+    nextCursor: hasMore && last ? `${last.createdAt}|${last.id}` : null,
+  };
+}
+
+reviewRoutes.get('/me/feed', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+
+  const cursor = parseCursor(c.req.query('before'));
+  if (!cursor) return c.json({ error: 'bad cursor' }, 400);
+
+  const db = getDb(c.env.DB);
+  return c.json(await activityPage(db, { followerId: userId, viewerId: userId, ...cursor }));
+});
+
+/**
+ * The whole room's recent activity, viewer optional. What makes the Activity
+ * tab's "Everyone" scope work before anyone has followed anyone — the same
+ * reason Letterboxd's Home leads with "Popular this week" rather than an
+ * empty friends feed.
+ */
+reviewRoutes.get('/activity', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  const cursor = parseCursor(c.req.query('before'));
+  if (!cursor) return c.json({ error: 'bad cursor' }, 400);
+
+  const db = getDb(c.env.DB);
+  return c.json(await activityPage(db, { viewerId: userId, ...cursor }));
 });
 
 /**

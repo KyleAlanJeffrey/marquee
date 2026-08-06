@@ -1,4 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { AddToListButton } from '@/components/add-to-list-button';
@@ -92,6 +94,8 @@ export function EventActions({
       onPress: () => guard('say you’re going to shows', () => set.mutate(mine === status ? null : status)),
     });
 
+  const people = rsvps.data?.people ?? [];
+
   return (
     <GlassCard style={styles.card}>
       <View style={styles.row}>
@@ -106,6 +110,46 @@ export function EventActions({
           onPress: () => guard('save shows for later', onToggleSave),
         })}
       </View>
+      {/* Who, by name — the counts on the pills say how many, this says whether
+          it's anyone you'd go with. Going outranks interested, people you
+          follow outrank strangers (the server sends them in that order), and
+          every chip opens the person. */}
+      {people.length > 0 && (
+        <View style={styles.people}>
+          {people.map((p) => {
+            const label = p.displayName ?? (p.handle ? `@${p.handle}` : 'Someone');
+            return (
+              <PressableScale
+                key={p.id}
+                haptic={false}
+                accessibilityRole="button"
+                accessibilityLabel={`${label}, ${p.status}${p.followedByMe ? ', someone you follow' : ''}`}
+                onPress={() => router.push(`/user/${encodeURIComponent(p.handle ?? p.id)}`)}
+                style={[
+                  styles.person,
+                  { borderColor: p.followedByMe ? theme.primaryEdge : theme.border },
+                  !!p.followedByMe && { backgroundColor: theme.primaryFill },
+                ]}>
+                {p.avatarUrl ? (
+                  <Image source={{ uri: p.avatarUrl }} style={[styles.personAvatar, { backgroundColor: theme.backgroundHigh }]} contentFit="cover" />
+                ) : (
+                  <View style={[styles.personAvatar, styles.personAvatarEmpty, { backgroundColor: theme.backgroundHigh }]}>
+                    <Ionicons name="person" size={11} color={theme.textTertiary} />
+                  </View>
+                )}
+                <ThemedText type="labelSm" numberOfLines={1} style={{ color: theme.textSecondary, maxWidth: 120 }}>
+                  {label.toUpperCase()}
+                </ThemedText>
+                <Ionicons
+                  name={p.status === 'going' ? 'checkmark-circle' : 'sparkles'}
+                  size={12}
+                  color={p.status === 'going' ? theme.primary : theme.cyan}
+                />
+              </PressableScale>
+            );
+          })}
+        </View>
+      )}
       <AddToListButton refKind="event" refId={eventId} subject={subject} />
       <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
         IT ALL LANDS ON THE MY SHOWS TAB
@@ -127,4 +171,17 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     borderWidth: 1,
   },
+  people: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one + 2 },
+  person: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one + 2,
+    paddingVertical: 4,
+    paddingLeft: 4,
+    paddingRight: Spacing.two,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
+  personAvatar: { width: 22, height: 22, borderRadius: Radius.pill },
+  personAvatarEmpty: { alignItems: 'center', justifyContent: 'center' },
 });

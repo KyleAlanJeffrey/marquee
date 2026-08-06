@@ -13,6 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAttendances } from '@/lib/attendances-store';
 import { useAuth } from '@/lib/auth';
 import { useFollows } from '@/lib/follows-store';
 import { RADIUS_OPTIONS, usePrefs } from '@/lib/prefs-store';
@@ -30,6 +31,7 @@ function Label({ children }: { children: string }) {
 export default function ProfileScreen() {
   const theme = useTheme();
   const { follows, unfollow } = useFollows();
+  const { attended } = useAttendances();
   const { signedIn, displayName, loading, userId } = useAuth();
   const { radiusMiles, setRadiusMiles, remindersEnabled, setRemindersEnabled, persisted } = usePrefs();
   const [toggling, setToggling] = useState(false);
@@ -78,6 +80,43 @@ export default function ProfileScreen() {
             <PersonProfile profileKey={userId} />
           </View>
         )}
+
+        {/* The private log's front door since it left the tab bar for
+            Activity — Letterboxd keeps the diary on the profile for the same
+            reason: it's yours, so it lives with you. */}
+        <Label>YOUR LOG</Label>
+        <GlassCard style={styles.card}>
+          <PressableScale
+            haptic
+            accessibilityRole="button"
+            accessibilityLabel="Open your concert log"
+            onPress={() => router.push('/log')}
+            style={styles.row}>
+            <Ionicons name="checkmark-done" size={24} color={theme.cyan} />
+            <View style={{ flex: 1 }}>
+              <ThemedText type="smallBold">
+                {attended.length === 0
+                  ? 'No shows logged yet'
+                  : `${attended.length} ${attended.length === 1 ? 'show' : 'shows'} logged`}
+              </ThemedText>
+              <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                PRIVATE TO YOU · THE WALL LIVES HERE
+              </ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+          </PressableScale>
+          <PressableScale
+            haptic
+            accessibilityRole="button"
+            accessibilityLabel="Log a show you went to"
+            onPress={() => router.push('/log-show')}
+            style={[styles.logBtn, { borderColor: theme.primaryEdge, backgroundColor: theme.primaryFill }]}>
+            <Ionicons name="add" size={18} color={theme.primary} />
+            <ThemedText type="smallBold" style={{ color: theme.primary }}>
+              LOG A SHOW
+            </ThemedText>
+          </PressableScale>
+        </GlassCard>
 
         {/* Next, because it is what the rest depends on: following and saving
             need an account. */}
@@ -228,6 +267,15 @@ const styles = StyleSheet.create({
   profileBlock: { marginBottom: Spacing.two },
   sectionLabel: { letterSpacing: 1.5, marginTop: Spacing.three, marginBottom: Spacing.two },
   card: { padding: Spacing.three, gap: Spacing.two },
+  logBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.one,
+    paddingVertical: Spacing.two + 2,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+  },
   listCard: { padding: 0, overflow: 'hidden' },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
