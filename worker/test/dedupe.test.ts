@@ -177,6 +177,33 @@ describe('venue identity', () => {
     }
   });
 
+  it('refuses the party, film-score and piped-billing shapes (2026-08-06 additions)', () => {
+    // Production rows again — the first is the one Kyle reported, a cluster head
+    // sitting on Radio City Music Hall's coordinates and titling event pages.
+    for (const junk of [
+      'Buddy Guy 90th Birthday Concert',
+      'HOT 107.9 Presents Birthday Bash 23',
+      'No Name #1: A Celebration of the Life and Music of Elliott Smith',
+      'Songs at Mirror Lake 20th Anniversary Celebration',
+      'The Muppet Christmas Carol In Concert',
+      'Indiana Jones and the Raiders of the Lost Ark In Concert',
+      'Buddy Guy 90 | Majestic Theatre - San Antonio, TX',
+      'ROCK THE STOCKYARD FEST | BRISTOL, TN',
+    ]) {
+      expect(looksLikeEventTitle(junk), junk).toBe(true);
+    }
+    // The guards those patterns were narrowed around: "concert" alone names real
+    // rooms, and a pipe without the trailing "City, ST" can be a descriptor.
+    for (const real of [
+      'Peppermill Concert Hall',
+      'Deer Valley Concert Series',
+      'Concertgebouw de Vereeniging',
+      'Godfrey Daniels | Live Music Listening Room',
+    ]) {
+      expect(looksLikeEventTitle(real), real).toBe(false);
+    }
+  });
+
   it('lets through an event title that is punctuated like a venue', () => {
     // Pinned as a known miss for the *string* rule, not an aspiration. It has no
     // colon, no "tour" and no "presents" — it separates with a dash, and so do
