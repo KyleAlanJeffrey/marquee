@@ -46,15 +46,16 @@ export function useNearbyEvents(coords: Coords | null, radiusMiles: number) {
   return useQuery({
     queryKey: ['nearby-events', coords, radiusMiles],
     enabled: coords != null,
-    queryFn: async (): Promise<NearbyEvent[]> => {
+    queryFn: async (): Promise<Page<NearbyEvent>> => {
       // POST body + anonymous: coordinates stay out of request logs and never
       // travel with the session token. See RequestOpts in api.ts.
-      const page = await apiPost<Page<NearbyEvent>>(
+      // The whole page comes back, not just items: `total` is the radius's
+      // real show count, which the page length stops tracking once it caps.
+      return apiPost<Page<NearbyEvent>>(
         '/nearby',
         { lat: coords!.lat, lng: coords!.lng, radius: radiusMiles, limit: 400, offset: 0, sort: 'featured' },
         { anonymous: true },
       );
-      return page.items;
     },
   });
 }

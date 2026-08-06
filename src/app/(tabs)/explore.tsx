@@ -89,7 +89,7 @@ export default function ExploreScreen() {
     };
   }, [coords, radiusMiles, queryClient]);
 
-  const allEvents = useMemo(() => events.data ?? [], [events.data]);
+  const allEvents = useMemo(() => events.data?.items ?? [], [events.data]);
 
   // Followed shows near the user — not shown here (see the Following tab), but
   // used to keep on-device reminders in sync and to refresh followed artists.
@@ -120,6 +120,12 @@ export default function ExploreScreen() {
     () => (genre === ALL ? allEvents : allEvents.filter((e) => (e.artist_genres ?? []).includes(genre))),
     [allEvents, genre],
   );
+
+  // What the headline counts. The page caps at 400, so its length reads
+  // "400 shows" at every radius wide enough to fill it — the server's `total`
+  // is the radius's real count. A genre chip filters only the loaded page,
+  // so its count stays the filtered page's own.
+  const shownCount = genre === ALL ? (events.data?.total ?? shown.length) : shown.length;
 
   // The feed arrives featured-ranked (see useNearbyEvents): the hero and the
   // two secondary cards are the most notable acts in range. COMING UP goes
@@ -237,13 +243,13 @@ export default function ExploreScreen() {
               <Ionicons name="location" size={14} color={theme.primary} />
               <ThemedText type="label" style={{ color: theme.primary }}>
                 {areaLabel
-                  ? `${shown.length} ${shown.length === 1 ? 'show' : 'shows'} within ${radiusMiles} mi`
+                  ? `${shownCount} ${shownCount === 1 ? 'show' : 'shows'} within ${radiusMiles} mi`
                   : `Within ${radiusMiles} mi`}
               </ThemedText>
             </View>
             <View>
               <ThemedText type="display" style={styles.hero}>
-                {areaLabel ? 'Live in' : `${shown.length} ${shown.length === 1 ? 'show' : 'shows'}`}
+                {areaLabel ? 'Live in' : `${shownCount} ${shownCount === 1 ? 'show' : 'shows'}`}
               </ThemedText>
               <ThemedText type="display" style={[styles.hero, { color: theme.primary }]}>
                 {areaLabel ? `${areaLabel}.` : 'near you.'}
@@ -312,7 +318,7 @@ export default function ExploreScreen() {
                       <View>
                         <ThemedText type="title">Around You</ThemedText>
                         <ThemedText type="small" themeColor="textSecondary">
-                          {shown.length} live {shown.length === 1 ? 'show' : 'shows'} nearby
+                          {shownCount} live {shownCount === 1 ? 'show' : 'shows'} nearby
                         </ThemedText>
                       </View>
                     </View>

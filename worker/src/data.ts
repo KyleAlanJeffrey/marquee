@@ -246,6 +246,23 @@ export async function nearbyEvents(
   // Bounding-box prefilter on the indexed lat/lng; the circle itself is
   // `withinMilesSql`, inside the query where LIMIT can see it.
   const canon = alias(venues, 'canon');
+  const where = and(
+    stillUpcoming(),
+    lte(events.startsAt, isoInDays(120)),
+    between(venues.lat, lat - latDelta, lat + latDelta),
+    between(venues.lng, lng - lngDelta, lng + lngDelta),
+    // On the attached row, like the box: that is the indexed one.
+    withinMilesSql(venues.lat, venues.lng, lat, lng, cosLat, radiusMiles),
+    // And on the cluster head, which supplies the coordinates the card
+    // displays: a head with junk coordinates otherwise puts "319 mi" on a
+    // 100-mile feed (production's Archer Music Hall cluster was headed by
+    // a Bandsintown row claiming Allentown but placed in Pittsburgh).
+    // Heads without coordinates stay in, like everywhere else.
+    or(
+      sql`${canon.lat} is null or ${canon.lng} is null`,
+      withinMilesSql(canon.lat, canon.lng, lat, lng, cosLat, radiusMiles),
+    ),
+  );
   const rows = await db
     .select({
       event_id: events.id,
@@ -278,25 +295,7 @@ export async function nearbyEvents(
     .innerJoin(artists, eq(artists.id, events.artistId))
     .innerJoin(venues, eq(venues.id, events.venueId))
     .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
-    .where(
-      and(
-        stillUpcoming(),
-        lte(events.startsAt, isoInDays(120)),
-        between(venues.lat, lat - latDelta, lat + latDelta),
-        between(venues.lng, lng - lngDelta, lng + lngDelta),
-        // On the attached row, like the box: that is the indexed one.
-        withinMilesSql(venues.lat, venues.lng, lat, lng, cosLat, radiusMiles),
-        // And on the cluster head, which supplies the coordinates the card
-        // displays: a head with junk coordinates otherwise puts "319 mi" on a
-        // 100-mile feed (production's Archer Music Hall cluster was headed by
-        // a Bandsintown row claiming Allentown but placed in Pittsburgh).
-        // Heads without coordinates stay in, like everywhere else.
-        or(
-          sql`${canon.lat} is null or ${canon.lng} is null`,
-          withinMilesSql(canon.lat, canon.lng, lat, lng, cosLat, radiusMiles),
-        ),
-      ),
-    )
+    .where(where)
     // Featured: notable first, soonest within a band. The id tiebreak is what
     // makes offset paging safe — equal score and equal start time is common
     // (same-night club shows), and unspecified order across pages skips and
@@ -308,6 +307,19 @@ export async function nearbyEvents(
     )
     .limit(limit)
     .offset(offset);
+
+  // How many shows the radius actually holds — the page is capped at `limit`,
+  // and a headline reading the page length claims "400 shows" at every radius
+  // wide enough to fill it. Same WHERE, no artists join (artist_id is a NOT
+  // NULL cascade FK, so the join never drops rows), no ordering to pay for.
+  const totalRow = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(events)
+    .innerJoin(venues, eq(venues.id, events.venueId))
+    .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
+    .where(where)
+    .get();
+  const total = totalRow?.n ?? 0;
 
   // No post-filter here: the SQL predicate already decided membership, and a
   // second pass on the canonical row's haversine is exactly what used to
@@ -327,7 +339,7 @@ export async function nearbyEvents(
   }));
 
   const nextCursor = rows.length === limit ? offset + limit : null;
-  return { items, nextCursor };
+  return { items, nextCursor, total };
 }
 
 /**

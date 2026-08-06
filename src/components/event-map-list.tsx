@@ -18,7 +18,7 @@ export function EventMapList({ coords, radius }: { coords: Coords; radius: numbe
   const events = useNearbyEvents(coords, radius);
   const { isFollowing } = useFollows();
 
-  const all = events.data ?? [];
+  const all = events.data?.items ?? [];
   const ref = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_spotify_id });
   const points: MapPoint[] = all
     .filter((e) => e.venue_lat != null && e.venue_lng != null)

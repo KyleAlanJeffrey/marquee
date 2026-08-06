@@ -193,7 +193,12 @@ export type VenueInfo = {
 };
 
 /** A page of a paginated list (cursor = next offset, or null when done). */
-export type Page<T> = { items: T[]; nextCursor: number | null };
+export type Page<T> = {
+  items: T[];
+  nextCursor: number | null;
+  /** Rows matching the whole query, not just this page (the nearby feed sends it). */
+  total?: number;
+};
 
 export type Artist = {
   id: string;

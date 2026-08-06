@@ -74,7 +74,7 @@ export default function MapScreen() {
   // venue that drops out of the feed closes the sheet on its own.
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  const all = useMemo(() => events.data ?? [], [events.data]);
+  const all = useMemo(() => events.data?.items ?? [], [events.data]);
   const ref = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_spotify_id });
 
   // One pin per venue (events stack there).
