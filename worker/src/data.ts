@@ -212,6 +212,11 @@ export type NearbySort = 'featured' | 'date';
  * 10 miles, 380 at 25, 391 at 100 — a wider ask returning *less*.
  * Equirectangular rather than haversine because SQLite has no trig; at these
  * radii the divergence is well under a mile.
+ *
+ * `cosLat` arrives clamped (≥0.01) so the callers' bounding-box division can't
+ * blow up. The clamp only diverges from the real cosine above 89.4° latitude —
+ * inside forty miles of a pole, where nothing has ever been on sale — so both
+ * the box and this predicate use the same clamped value and stay consistent.
  */
 const withinMilesSql = (
   latCol: SQLiteColumn | SQL,
@@ -279,10 +284,17 @@ export async function nearbyEvents(
         lte(events.startsAt, isoInDays(120)),
         between(venues.lat, lat - latDelta, lat + latDelta),
         between(venues.lng, lng - lngDelta, lng + lngDelta),
-        // On the attached row, like the box: that is the indexed one, and the
-        // doctrine below (canon supplies what's displayed) already accepts the
-        // rare drift between the two.
+        // On the attached row, like the box: that is the indexed one.
         withinMilesSql(venues.lat, venues.lng, lat, lng, cosLat, radiusMiles),
+        // And on the cluster head, which supplies the coordinates the card
+        // displays: a head with junk coordinates otherwise puts "319 mi" on a
+        // 100-mile feed (production's Archer Music Hall cluster was headed by
+        // a Bandsintown row claiming Allentown but placed in Pittsburgh).
+        // Heads without coordinates stay in, like everywhere else.
+        or(
+          sql`${canon.lat} is null or ${canon.lng} is null`,
+          withinMilesSql(canon.lat, canon.lng, lat, lng, cosLat, radiusMiles),
+        ),
       ),
     )
     // Featured: notable first, soonest within a band. The id tiebreak is what
@@ -374,6 +386,12 @@ export async function nearbyVenues(
         between(venues.lat, lat - latDelta, lat + latDelta),
         between(venues.lng, lng - lngDelta, lng + lngDelta),
         withinMilesSql(venues.lat, venues.lng, lat, lng, cosLat, radiusMiles),
+        // The head's coordinates are what get displayed and sorted on — same
+        // junk-head guard as the events feed.
+        or(
+          sql`${canon.lat} is null or ${canon.lng} is null`,
+          withinMilesSql(canon.lat, canon.lng, lat, lng, cosLat, radiusMiles),
+        ),
         sql`${canon.name} is not null and trim(${canon.name}) <> ''`,
       ),
     )

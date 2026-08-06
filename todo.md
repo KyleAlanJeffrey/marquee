@@ -317,6 +317,25 @@ What's left is the residuals:
   ("Carrying, Ok King, Stryk9, Ekblad") would recover the artistless half of
   the catalogue, but string-minted artists are the exact trap the venue-name
   work spent weeks digging out of.
+- [x] **Nearby radius filtered after the LIMIT** (Kyle, 2026-08-05: "100 miles
+  has less than 10"). The feed boxed on lat/lng, took its 400 rows, then dropped
+  the box's corners (radius ×1.4) in JS — so under `featured` sort a notable
+  show 130 mi out took a page seat from an in-radius show and was thrown away.
+  Measured on production New York: 398 items at 10 mi, 380 at 25, 391 at 100.
+  Fix: the radius is an equirectangular predicate inside the SQL where LIMIT
+  can see it (`withinMilesSql`), for both nearbyEvents and nearbyVenues; the JS
+  post-filters are gone. Fixing it surfaced a second bug the old filter had
+  been hiding: a cluster head with junk coordinates put "319 mi" on the 100-mi
+  feed (Archer Music Hall, Allentown — headed by a Bandsintown "Arrow" row
+  placed in Pittsburgh). The head's coordinates are now guarded in SQL too, and
+  the Arrow head's coords were corrected in production to its cluster's spot.
+  - [ ] Residual: the cluster-spread audit found three more clusters whose
+    members sit >0.5° apart, all non-US, all Bandsintown coords —
+    TivoliVredenburg/Utrecht (108°!), Escenario GNP Seguros/Monterrey (2.6°),
+    Unipol Arena/Bologna (1.1°). The SQL guard keeps them out of feeds they
+    don't belong in; the rows themselves still want repair, ideally a rule
+    (head coords = cluster consensus, or reject a member whose coords disagree
+    with its cluster by miles) rather than more hand UPDATEs.
 - [ ] **The venue-name bugs**, which are also SEO bugs (titles get rewritten by
   Google when they name two places). Junk-named *new* venues now adopt their
   same-spot room at ingest (2026-07-31); what's left:
