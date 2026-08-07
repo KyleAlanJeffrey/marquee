@@ -125,10 +125,15 @@ export function ShowLog({ header }: { header?: ReactElement }) {
     <>
       {!ready ? (
         // The disk read hasn't landed. "You haven't been to anything" would be a
-        // lie flashing over somebody's history on every cold start.
-        <View style={styles.center}>
-          <ActivityIndicator color={theme.primary} />
-        </View>
+        // lie flashing over somebody's history on every cold start. The header
+        // rides along so the tense switch doesn't vanish mid-load, stranding
+        // somebody on a spinner with no way back to Upcoming.
+        <>
+          {header}
+          <View style={styles.center}>
+            <ActivityIndicator color={theme.primary} />
+          </View>
+        </>
       ) : attended.length === 0 ? (
         <>
           {header}
