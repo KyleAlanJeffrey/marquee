@@ -269,6 +269,33 @@ export function useMyRsvps(enabled = true) {
   });
 }
 
+/** A going-RSVP whose night has passed — everything a log row needs. */
+export type PastRsvp = {
+  event_id: string;
+  event_name: string;
+  starts_at: string;
+  artist_id: string;
+  artist_name: string;
+  artist_image_url: string | null;
+  venue_id: string | null;
+  venue_name: string | null;
+  venue_city: string | null;
+  venue_timezone: string | null;
+};
+
+/**
+ * The shows you said you were going to that have now happened. Only fetched
+ * when signed in; `/me/rsvps` can't answer this because it deliberately
+ * returns only what's still to come.
+ */
+export function usePastRsvps(enabled: boolean) {
+  return useQuery({
+    queryKey: ['my-rsvps-past'],
+    enabled,
+    queryFn: (): Promise<{ items: PastRsvp[] }> => apiGet('/me/rsvps/past'),
+  });
+}
+
 export type RatingStats = { count: number; average: number | null };
 
 /** Reviews only headline a page once a few people agree — one rave is a rave. */

@@ -80,7 +80,7 @@ export default function ActivityScreen() {
               title="Nothing from your people yet"
               message="Follow people and their reviews and plans land here. Until then, Everyone is the whole room."
               actionLabel="Find people"
-              onAction={() => router.push('/search')}
+              onAction={() => router.push('/search?only=people')}
             />
           ) : (
             <EmptyState

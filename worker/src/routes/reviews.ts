@@ -1,12 +1,14 @@
 import { zValidator } from '@hono/zod-validator';
 import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { Hono } from 'hono';
 
 import { callerFrom, ensureUser } from '../auth';
-import { eventsByIds, isoAt, nowIso, TBD_GRACE_MS } from '../data';
+import { eventsByIds, isoAt, nowIso, publishedVenueName, TBD_GRACE_MS } from '../data';
+import { zoneFor } from '../timezone';
 import { getDb, type DB } from '../db';
 import type { AppEnv } from '../env';
-import { eventRsvps, events, personFollows, reports, reviewLikes, reviews, userBlocks, users } from '../schema';
+import { artists, eventRsvps, events, personFollows, reports, reviewLikes, reviews, userBlocks, users, venues } from '../schema';
 import { reportBody, reviewBody, rsvpBody } from '../schemas';
 
 /**
@@ -609,6 +611,72 @@ async function activityPage(
     nextCursor: hasMore && last ? `${last.createdAt}|${last.id}` : null,
   };
 }
+
+/**
+ * The going-RSVPs whose night has now been and gone — the shows the client
+ * turns into log entries ("I said I was going, so I went").
+ *
+ * A separate route because `/me/rsvps` deliberately answers only what's still
+ * to come: a past answer isn't a plan any more, so it drops out there and
+ * becomes invisible everywhere in the app. This is where it resurfaces, once,
+ * as history.
+ *
+ * Only `going`. "Interested" is a maybe, and a maybe is not an attendance —
+ * inventing one would put shows in somebody's history they never went to.
+ *
+ * The response carries everything a log row needs, because the client writes
+ * that row from this payload alone.
+ */
+reviewRoutes.get('/me/rsvps/past', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ error: 'sign in required' }, 401);
+
+  const db = getDb(c.env.DB);
+  const canon = alias(venues, 'canon');
+  const rows = await db
+    .select({
+      event_id: events.id,
+      event_name: events.name,
+      starts_at: events.startsAt,
+      artist_id: artists.id,
+      artist_name: artists.name,
+      artist_image_url: artists.imageUrl,
+      venue_id: canon.id,
+      venue_name: canon.name,
+      venue_city: canon.city,
+      venue_region: canon.region,
+      venue_country: canon.country,
+    })
+    .from(eventRsvps)
+    .innerJoin(events, eq(events.id, eventRsvps.eventId))
+    .innerJoin(artists, eq(artists.id, events.artistId))
+    .leftJoin(venues, eq(venues.id, events.venueId))
+    .leftJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
+    .where(
+      and(
+        eq(eventRsvps.userId, userId),
+        eq(eventRsvps.status, 'going'),
+        // Started, by the same clock the RSVP gate closes on: a time-unknown
+        // show isn't over until midnight at the venue, so it isn't history
+        // until then either.
+        sql`${events.startsAt} <= (case when ${events.timeUnknown}
+          then ${isoAt(Date.now() - TBD_GRACE_MS)} else ${nowIso()} end)`,
+      ),
+    )
+    .orderBy(desc(events.startsAt))
+    .limit(PAST_RSVP_MAX);
+
+  return c.json({
+    items: rows.map((r) => ({
+      ...r,
+      venue_name: publishedVenueName(r.venue_name),
+      venue_timezone: zoneFor(r.venue_region, r.venue_country),
+    })),
+  });
+});
+
+/** A backlog this size is somebody's whole year; more can wait for next time. */
+const PAST_RSVP_MAX = 50;
 
 reviewRoutes.get('/me/feed', async (c) => {
   const { userId } = await callerFrom(c.env, c.req.header('authorization'));

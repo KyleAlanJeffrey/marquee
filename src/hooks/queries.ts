@@ -300,10 +300,13 @@ export function useInfiniteVenueEvents(venueId: string, pageSize = 20) {
  * Spotify, so an empty query is valid and returns the busiest towns — which is
  * what makes the search screen useful before anyone types.
  */
-export function useTownSearch(query: string) {
+export function useTownSearch(query: string, enabled = true) {
   const q = query.trim();
   return useQuery({
     queryKey: ['town-search', q],
+    // Unlike the others this one answers an empty query (the busiest towns),
+    // so `enabled` is the only way a caller can opt out of it entirely.
+    enabled,
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<Town[]> => {
       const data = await apiGet<{ towns?: Town[] }>(`/towns?q=${encodeURIComponent(q)}&limit=8`);
@@ -312,13 +315,13 @@ export function useTownSearch(query: string) {
   });
 }
 
-export function useArtistSearch(query: string) {
+export function useArtistSearch(query: string, enabled = true) {
   // Keyed on the trimmed query it actually sends, like useTownSearch — " foo"
   // and "foo" are one request and should be one cache entry.
   const q = query.trim();
   return useQuery({
     queryKey: ['artist-search', q],
-    enabled: q.length >= 2,
+    enabled: enabled && q.length >= 2,
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<ArtistSearchResult[]> => {
       const data = await apiPost<{ artists?: ArtistSearchResult[] }>('/search-artists', {

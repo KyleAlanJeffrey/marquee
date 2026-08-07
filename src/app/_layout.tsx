@@ -19,6 +19,7 @@ import { Colors, Fonts } from '@/constants/theme';
 import { AuthProvider } from '@/lib/auth';
 import { useNotificationObserver } from '@/lib/notifications';
 import { ProfileSync } from '@/lib/people';
+import { RsvpSettler } from '@/lib/rsvp-settler';
 import { WriteGateProvider } from '@/lib/write-gate-provider';
 
 const queryClient = new QueryClient({
@@ -72,6 +73,9 @@ export default function RootLayout() {
               <PageMeta />
               {/* Refreshes the server's mirror of this account from Clerk on sign-in. */}
               <ProfileSync />
+              {/* Turns yesterday's "I'm going" into a logged show. Mounted at the
+                  root so it runs whichever tab the app opens on. */}
+              <RsvpSettler />
               {fontsLoaded && (
                 <Stack
                   screenOptions={{

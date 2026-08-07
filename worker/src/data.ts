@@ -70,7 +70,7 @@ const blankToNull = (v: string | null) => (v && v.trim() !== '' ? v : null);
  * 283 are alone in their cluster, meaning no other source filed a row within 50m
  * of it, so there is no correct name in the table to promote.
  */
-const publishedVenueName = (name: string | null): string | null => {
+export const publishedVenueName = (name: string | null): string | null => {
   const n = blankToNull(name);
   return n && looksLikeEventTitle(n) ? null : n;
 };

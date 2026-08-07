@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -15,7 +15,7 @@ import { Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ensureArtist } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
-import { personLabel, usePersonSearch } from '@/lib/people';
+import { personLabel, usePersonSearch, type PersonSearchResult } from '@/lib/people';
 import { useArtistSearch, useTownSearch } from '@/hooks/queries';
 import type { ArtistSearchResult, Town } from '@/lib/types';
 
@@ -29,11 +29,18 @@ const townLabel = (t: Town) => [t.city, t.region || t.country].filter(Boolean).j
 export default function SearchScreen() {
   const theme = useTheme();
   const { isFollowing, toggle } = useFollows();
+  // `?only=people` narrows the whole screen to people. Activity's "Find
+  // people" opens it that way: a button that says people and then answers
+  // with artists and towns is answering a question nobody asked, and the
+  // artist hits — the loudest rows, with follow buttons — bury the humans.
+  const { only } = useLocalSearchParams<{ only?: string }>();
+  const peopleOnly = only === 'people';
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
   const [opening, setOpening] = useState<string | null>(null);
-  const search = useArtistSearch(query);
-  const towns = useTownSearch(query);
+  // Nothing else is even fetched in people-only mode.
+  const search = useArtistSearch(query, !peopleOnly);
+  const towns = useTownSearch(query, !peopleOnly);
   const people = usePersonSearch(query);
 
   useEffect(() => {
@@ -67,15 +74,60 @@ export default function SearchScreen() {
   const townRows = towns.data ?? [];
   const peopleRows = people.data?.people ?? [];
 
+  /** A person, as a row. The list item in people-only mode; a header row in
+   *  the mixed one, where artists own the list. */
+  const personRow = (p: (typeof peopleRows)[number]) => (
+    <PressableScale
+      key={p.id}
+      haptic={false}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${personLabel(p)}'s profile`}
+      onPress={() => router.push(`/user/${encodeURIComponent(p.handle ?? p.id)}`)}
+      style={[styles.townRow, peopleOnly && styles.personRowInset]}>
+      {p.avatarUrl ? (
+        <Image
+          source={{ uri: p.avatarUrl }}
+          style={[styles.personAvatar, { backgroundColor: theme.backgroundElevated }]}
+          contentFit="cover"
+        />
+      ) : (
+        <View style={[styles.townIcon, { backgroundColor: theme.backgroundElevated }]}>
+          <Ionicons name="person" size={18} color={theme.primary} />
+        </View>
+      )}
+      <View style={{ flex: 1, gap: 2 }}>
+        <ThemedText type="smallBold" numberOfLines={1}>
+          {personLabel(p)}
+        </ThemedText>
+        <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+          {p.handle && p.displayName ? `@${p.handle} · ` : ''}
+          {p.followers} {p.followers === 1 ? 'follower' : 'followers'}
+        </ThemedText>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+    </PressableScale>
+  );
+
   return (
     <View style={[styles.screen, { backgroundColor: theme.background }]}>
+      {/* The modal's own header, set from here rather than the layout, because
+          only this screen knows which mode it opened in. */}
+      <Stack.Screen options={{ title: peopleOnly ? 'Find people' : 'Find artists' }} />
       <PageMeta
-        title="Find artists, towns and people"
-        description="Search millions of artists, jump straight to the upcoming shows in any town, or find people to follow."
+        title={peopleOnly ? 'Find people' : 'Find artists, towns and people'}
+        description={
+          peopleOnly
+            ? 'Find people on Marquee and follow the ones whose nights you want to see.'
+            : 'Search millions of artists, jump straight to the upcoming shows in any town, or find people to follow.'
+        }
       />
-      <FlatList
-        data={search.data ?? []}
-        keyExtractor={(a) => a.spotify_id}
+      {/* One list, two kinds of row — artists normally, people in people-only
+          mode. Typed as the union rather than split into two FlatLists so the
+          header (and the search bar inside it) is never remounted by a mode
+          change, which would drop the keyboard. */}
+      <FlatList<ArtistSearchResult | PersonSearchResult>
+        data={peopleOnly ? peopleRows : (search.data ?? [])}
+        keyExtractor={(item) => ('spotify_id' in item ? item.spotify_id : item.id)}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.list}
         // The header is passed as an element (not a component) so it reconciles
@@ -87,12 +139,12 @@ export default function SearchScreen() {
             <SearchBar
               value={input}
               onChangeText={setInput}
-              placeholder="Artists, towns or people…"
-              accessibilityLabel="Search artists, towns and people"
+              placeholder={peopleOnly ? 'Find people by name…' : 'Artists, towns or people…'}
+              accessibilityLabel={peopleOnly ? 'Search people' : 'Search artists, towns and people'}
               barStyle={styles.searchBar}
               inputStyle={styles.input}
             />
-            {townRows.length > 0 && (
+            {!peopleOnly && townRows.length > 0 && (
               <View style={styles.section}>
                 <ThemedText type="label" style={{ color: theme.textTertiary }}>
                   {query.length >= 2 ? 'TOWNS' : 'BUSIEST TOWNS'}
@@ -120,86 +172,62 @@ export default function SearchScreen() {
                 ))}
               </View>
             )}
-            {peopleRows.length > 0 && (
+            {!peopleOnly && peopleRows.length > 0 && (
               <View style={styles.section}>
                 <ThemedText type="label" style={{ color: theme.textTertiary }}>
                   PEOPLE
                 </ThemedText>
-                {peopleRows.map((p) => (
-                  <PressableScale
-                    key={p.id}
-                    haptic={false}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open ${personLabel(p)}'s profile`}
-                    onPress={() => router.push(`/user/${encodeURIComponent(p.handle ?? p.id)}`)}
-                    style={styles.townRow}>
-                    {p.avatarUrl ? (
-                      <Image
-                        source={{ uri: p.avatarUrl }}
-                        style={[styles.personAvatar, { backgroundColor: theme.backgroundElevated }]}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <View style={[styles.townIcon, { backgroundColor: theme.backgroundElevated }]}>
-                        <Ionicons name="person" size={18} color={theme.primary} />
-                      </View>
-                    )}
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <ThemedText type="smallBold" numberOfLines={1}>
-                        {personLabel(p)}
-                      </ThemedText>
-                      <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                        {p.handle && p.displayName ? `@${p.handle} · ` : ''}
-                        {p.followers} {p.followers === 1 ? 'follower' : 'followers'}
-                      </ThemedText>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
-                  </PressableScale>
-                ))}
+                {peopleRows.map(personRow)}
               </View>
             )}
-            {query.length >= 2 && (townRows.length > 0 || peopleRows.length > 0) && (
+            {!peopleOnly && query.length >= 2 && (townRows.length > 0 || peopleRows.length > 0) && (
               <View style={styles.section}>
                 <ThemedText type="label" style={{ color: theme.textTertiary }}>
                   ARTISTS
                 </ThemedText>
               </View>
             )}
-            {search.isLoading && query.length >= 2 && (
+            {(peopleOnly ? people.isLoading : search.isLoading) && query.length >= 2 && (
               <ActivityIndicator color={theme.primary} style={{ marginTop: Spacing.three }} />
             )}
           </View>
         }
         ListEmptyComponent={
-          search.isLoading && query.length >= 2 ? null : (
+          (peopleOnly ? people.isLoading : search.isLoading) && query.length >= 2 ? null : (
             <ThemedText themeColor="textSecondary" style={styles.hint}>
-              {query.length >= 2 && search.isFetched
-                ? `No artists found for “${query}”.`
-                : 'Search artists, towns and people — follow the acts you love to spotlight their shows near you, and the friends whose nights you want to see.'}
+              {peopleOnly
+                ? query.length >= 2 && people.isFetched
+                  ? `No one found for “${query}”.`
+                  : 'Search for people by name and follow the ones whose nights you want to see.'
+                : query.length >= 2 && search.isFetched
+                  ? `No artists found for “${query}”.`
+                  : 'Search artists, towns and people — follow the acts you love to spotlight their shows near you, and the friends whose nights you want to see.'}
             </ThemedText>
           )
         }
         renderItem={({ item, index }) => {
-          const following = isFollowing({ spotifyId: item.spotify_id });
-          const isOpening = opening === item.spotify_id;
+          if (peopleOnly) return personRow(item as (typeof peopleRows)[number]);
+          const artist = item as ArtistSearchResult;
+          const following = isFollowing({ spotifyId: artist.spotify_id });
+          const isOpening = opening === artist.spotify_id;
           return (
             <Animated.View
               entering={FadeInDown.delay(Math.min(index * 40, 300)).duration(320)}
               style={styles.row}>
               <PressableScale
                 haptic={false}
-                onPress={() => openArtist(item)}
+                onPress={() => openArtist(artist)}
                 style={styles.rowMain}>
                 <Image
-                  source={item.image_url ? { uri: item.image_url } : undefined}
+                  source={artist.image_url ? { uri: artist.image_url } : undefined}
                   style={[styles.avatar, { backgroundColor: theme.backgroundElevated }]}
                   contentFit="cover"
                 />
                 <View style={{ flex: 1, gap: 4 }}>
                   <ThemedText type="smallBold" numberOfLines={1}>
-                    {item.name}
+                    {artist.name}
                   </ThemedText>
-                  {item.genres.length > 0 && <GenreChip label={item.genres[0]} tone="neutral" />}
+                  {artist.genres.length > 0 && <GenreChip label={artist.genres[0]} tone="neutral" />}
                 </View>
                 {isOpening ? (
                   <ActivityIndicator color={theme.textTertiary} />
@@ -213,10 +241,10 @@ export default function SearchScreen() {
                 onToggle={() =>
                   toggle({
                     artistId: null,
-                    spotifyId: item.spotify_id,
-                    name: item.name,
-                    imageUrl: item.image_url,
-                    genres: item.genres,
+                    spotifyId: artist.spotify_id,
+                    name: artist.name,
+                    imageUrl: artist.image_url,
+                    genres: artist.genres,
                   })
                 }
               />
@@ -252,6 +280,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   personAvatar: { width: 40, height: 40, borderRadius: Radius.pill },
+  // People-only: the rows are the list, so they carry the gutter the section
+  // wrapper gives them in mixed mode.
+  personRowInset: { paddingHorizontal: Spacing.three },
   hint: { textAlign: 'center', padding: Spacing.five },
   row: {
     flexDirection: 'row',
