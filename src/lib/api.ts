@@ -14,6 +14,27 @@ function url(path: string): string {
 }
 
 /**
+ * An artist's photo, served by us instead of hotlinked from whoever we read it
+ * from.
+ *
+ * Two reasons it goes through the Worker. It keeps the listing providers out of
+ * the reader's network tab — the copy stopped naming them, and an `<img>`
+ * pointing at `photos.bandsintown.com` would have said it anyway, 46 times on
+ * one New York feed. And the mirror is more durable than the hotlink: upstream
+ * images rot, get resized, and rate-limit.
+ *
+ * Keyed by artist id, not by the upstream URL. A `?src=` parameter would have
+ * been simpler and would have published the very thing this hides.
+ *
+ * Callers pass the id **and** the stored URL: the id builds the link, and the
+ * URL is only read as "is there a photo at all", so an artist with none still
+ * gets the fallback art instead of a request that 404s.
+ */
+export function artistImageSrc(artistId: string | null | undefined): string | null {
+  return artistId ? `${ORIGIN}/img/artist/${encodeURIComponent(artistId)}` : null;
+}
+
+/**
  * How a request gets a session token attached.
  *
  * Registered by `<AuthProvider>` at mount rather than read from a module-level

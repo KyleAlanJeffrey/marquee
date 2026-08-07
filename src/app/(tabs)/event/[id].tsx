@@ -26,6 +26,7 @@ import { Colors, Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useFollows } from '@/lib/follows-store';
 import { useSavedShows } from '@/lib/saved-shows-store';
+import { artistImageSrc } from '@/lib/api';
 import { openUrl } from '@/lib/open-url';
 import { useEvent, useEventBuzz, useEventLineup } from '@/hooks/queries';
 import { formatEventDate, formatTime, formatVenue, formatZoneLabel } from '@/lib/format';
@@ -146,6 +147,9 @@ export default function EventScreen() {
   // placeholder, and "Doors 12:00 PM" would be an invention.
   const time = (iso: string) =>
     e.time_unknown ? null : [formatTime(iso, tz), zoneLabel].filter(Boolean).join(' ');
+  // The hero photo, from our mirror rather than hotlinked off whoever we read
+  // it from — the same reason the copy no longer names them.
+  const heroArt = e.artist.image_url ? (artistImageSrc(e.artist.id) ?? e.artist.image_url) : null;
   const buzz = socialLinks(e.artist.name, e.venue?.name);
   const support = lineup.data?.support ?? [];
   // Compared against the start rather than an estimated end: a show is something
@@ -173,7 +177,7 @@ export default function EventScreen() {
         {/* Hero — framed as a specific show (date + venue), not an artist page */}
         <View style={styles.hero}>
           <Image
-            source={e.artist.image_url ? { uri: e.artist.image_url } : undefined}
+            source={heroArt ? { uri: heroArt } : undefined}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             transition={250}
@@ -354,7 +358,7 @@ export default function EventScreen() {
           <PressableScale
             onPress={() => router.push(`/artist/${e.artist.id}`)}
             style={[styles.headliner, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
-            <ArtistArt uri={e.artist.image_url} style={styles.headlinerImg} iconSize={22} />
+            <ArtistArt uri={e.artist.image_url} artistId={e.artist.id} style={styles.headlinerImg} iconSize={22} />
             <View style={{ flex: 1 }}>
               <ThemedText type="labelSm" style={{ color: theme.cyan }}>
                 HEADLINER
@@ -525,7 +529,7 @@ export default function EventScreen() {
           <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
           <ThemedText type="title">Fan Gallery</ThemedText>
         </View>
-        <GalleryStrip imageUrl={e.artist.image_url} />
+        <GalleryStrip imageUrl={e.artist.image_url} artistId={e.artist.id} />
       </Animated.ScrollView>
 
       {/* Floating top bar with back, and save-for-later in the right slot: the

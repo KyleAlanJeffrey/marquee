@@ -29,7 +29,7 @@ export function ComingUpCard({ event, onPress }: { event: NearbyEvent; onPress: 
       scaleTo={0.98}
       style={[styles.card, { backgroundColor: theme.backgroundElevated, borderColor: theme.border }]}>
       <View style={styles.imageWrap}>
-        <ArtistArt uri={event.artist_image_url} style={StyleSheet.absoluteFill} iconSize={30} />
+        <ArtistArt uri={event.artist_image_url} artistId={event.artist_id} style={StyleSheet.absoluteFill} iconSize={30} />
         <View style={styles.imageScrim} />
         <View style={[styles.dateChip, { backgroundColor: 'rgba(0,0,0,0.45)', borderColor: theme.border }]}>
           <ThemedText type="labelSm" style={{ color: theme.primary }}>

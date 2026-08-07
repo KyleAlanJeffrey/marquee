@@ -29,7 +29,7 @@ export function FeaturedCard({ event, following, onPress, onToggleFollow }: Prop
       onPress={onPress}
       scaleTo={0.99}
       style={[styles.card, { borderColor: theme.border }, Glow.lift]}>
-      <ArtistArt uri={event.artist_image_url} style={StyleSheet.absoluteFill} iconSize={44} />
+      <ArtistArt uri={event.artist_image_url} artistId={event.artist_id} style={StyleSheet.absoluteFill} iconSize={44} />
       <LinearGradient
         colors={['rgba(0,0,0,0.15)', 'rgba(0,0,0,0.1)', theme.background]}
         locations={[0, 0.4, 1]}

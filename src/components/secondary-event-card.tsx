@@ -37,7 +37,7 @@ export function SecondaryEventCard({
         { backgroundColor: theme.backgroundElevated, borderColor: following ? theme.cyanEdge : theme.border },
       ]}>
       <PressableScale onPress={onPress} style={styles.main}>
-      <ArtistArt uri={event.artist_image_url} style={styles.img} iconSize={26} />
+      <ArtistArt uri={event.artist_image_url} artistId={event.artist_id} style={styles.img} iconSize={26} />
       <View style={styles.body}>
         <View style={styles.topRow}>
           <ThemedText type="labelSm" style={{ color: theme.primary, flex: 1 }} numberOfLines={1}>

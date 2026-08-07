@@ -349,7 +349,7 @@ export default function ArtistScreen() {
               <View style={[styles.accentBar, { backgroundColor: theme.primary }]} />
               <ThemedText type="title">Artist Gallery</ThemedText>
             </View>
-            <GalleryStrip imageUrl={a.image_url} />
+            <GalleryStrip imageUrl={a.image_url} artistId={a.id} />
           </View>
         }
       />

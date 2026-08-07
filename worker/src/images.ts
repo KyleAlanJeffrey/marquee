@@ -7,9 +7,10 @@
  * hotlinks rot, get resized upstream, and rate-limit. `GET /img/artist/:id`
  * is cache-aside: first request fetches the upstream image (guardedly),
  * stores it in R2, and serves it; every later request is an R2 read behind
- * the edge cache. Any failure at any step falls back to a redirect to the
- * upstream URL, so the mirror can only ever add durability, never subtract
- * an image.
+ * the edge cache. Any failure at any step streams the upstream bytes straight
+ * through instead, so the mirror can only ever add durability, never subtract
+ * an image — and, unlike the redirect it used to fall back to, without
+ * publishing the upstream host to the reader on the way.
  *
  * The object key ends in a hash of the upstream URL, which is what makes the
  * long `immutable` cache header honest: a changed upstream URL is a new key
@@ -135,11 +136,39 @@ export async function artistImage(env: CoreEnv, artistId: string): Promise<Respo
   // Response.redirect throws on anything it can't parse.
   if (!upstream || !URL.canParse(upstream)) return null;
 
-  const fallback = () => Response.redirect(upstream, 302);
+  /**
+   * What to serve when the mirror can't. **Never a redirect.**
+   *
+   * It used to be `Response.redirect(upstream, 302)`, which showed the photo
+   * but put the upstream URL in the reader's network tab — so the one thing
+   * this route exists to keep to itself was published by its own fallback,
+   * precisely on the requests that failed. Now the bytes are streamed through
+   * instead: same picture, and the only host the reader ever sees is ours.
+   *
+   * An origin we don't fetch from gets nothing rather than a pass-through —
+   * this must not become an open proxy for arbitrary hosts — and null becomes
+   * a 404 the client answers with its own fallback art.
+   */
+  const passThrough = async (): Promise<Response | null> => {
+    if (!allowed(upstream)) return null;
+    try {
+      const resp = await fetchWithinAllowlist(upstream);
+      if (!resp || !resp.ok || !resp.body) return null;
+      const contentType = resp.headers.get('content-type')?.split(';')[0].trim() ?? '';
+      if (!contentType.startsWith('image/')) return null;
+      // Streamed, not buffered: this path already failed once and shouldn't
+      // also hold a 5MB body in memory to prove it.
+      return new Response(resp.body, { headers: cacheHeaders(contentType) });
+    } catch {
+      return null;
+    }
+  };
+  const fallback = passThrough;
 
-  // No binding (a dev setup without the bucket) or an origin we don't fetch
-  // from: the image still shows, it just isn't ours.
-  if (!env.IMAGES || !allowed(upstream)) return fallback();
+  // No binding (a dev setup without the bucket): the image still shows, it
+  // just isn't stored.
+  if (!env.IMAGES) return await fallback();
+  if (!allowed(upstream)) return null;
 
   const key = `artist/${artistId}/${await urlHash(upstream)}`;
   try {
@@ -154,17 +183,17 @@ export async function artistImage(env: CoreEnv, artistId: string): Promise<Respo
     // requested — with `redirect: 'follow'` an off-list target would already
     // have been fetched by the time the final URL failed validation.
     const resp = await fetchWithinAllowlist(upstream);
-    if (!resp || !resp.ok) return fallback();
+    if (!resp || !resp.ok) return await fallback();
     const contentType = resp.headers.get('content-type')?.split(';')[0].trim() ?? '';
-    if (!contentType.startsWith('image/')) return fallback();
+    if (!contentType.startsWith('image/')) return await fallback();
     const declared = Number(resp.headers.get('content-length') ?? '0');
-    if (declared > MAX_BYTES) return fallback();
+    if (declared > MAX_BYTES) return await fallback();
     const bytes = await readCapped(resp, MAX_BYTES);
-    if (!bytes || bytes.byteLength === 0) return fallback();
+    if (!bytes || bytes.byteLength === 0) return await fallback();
 
     await env.IMAGES.put(key, bytes, { httpMetadata: { contentType } });
     return new Response(bytes, { headers: cacheHeaders(contentType) });
   } catch {
-    return fallback();
+    return await fallback();
   }
 }

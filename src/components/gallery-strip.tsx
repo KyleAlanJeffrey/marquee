@@ -5,14 +5,23 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { artistImageSrc } from '@/lib/api';
 
 /**
  * Horizontal photo strip. We only have the artist's single hero image, so we
  * present it across a few tiles with varied crops + tints — an atmosphere
  * gallery rather than fabricated distinct photos.
  */
-export function GalleryStrip({ imageUrl }: { imageUrl: string | null }) {
+export function GalleryStrip({
+  imageUrl,
+  artistId,
+}: {
+  imageUrl: string | null;
+  /** Served from our mirror when known — see `artistImageSrc`. */
+  artistId?: string | null;
+}) {
   const theme = useTheme();
+  const src = imageUrl ? (artistImageSrc(artistId) ?? imageUrl) : null;
   const crops: { x: number; y: number }[] = [
     { x: 0.5, y: 0.2 },
     { x: 0.2, y: 0.6 },
@@ -25,7 +34,7 @@ export function GalleryStrip({ imageUrl }: { imageUrl: string | null }) {
       {crops.map((c, i) => (
         <View key={i} style={[styles.tile, { backgroundColor: theme.backgroundHigh, borderColor: theme.border }]}>
           <Image
-            source={imageUrl ? { uri: imageUrl } : undefined}
+            source={src ? { uri: src } : undefined}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             contentPosition={{ top: `${c.y * 100}%`, left: `${c.x * 100}%` }}
