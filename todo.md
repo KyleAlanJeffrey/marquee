@@ -77,7 +77,28 @@ What's left is the residuals:
 
 ## P1 · Next
 
-- [ ] **Act on the performance audit** (Kyle, 2026-08-07) — the audit is
+- [~] **Act on the performance audit** (Kyle, 2026-08-07) — **passes 1–4 landed
+  the same day**; the checklist with every before/after number is in the audit
+  doc. Live now: `/api/nearby` 1.19–1.31s → **0.57–0.89s** (and 1.035s → 0.40s
+  for a single row, which is 755ms of server work down to ~120ms), landing
+  1.93–3.32s → **0.39–0.55s** warm, city hub 2.09–2.24s → **0.28–0.46s** warm,
+  the crawl's per-listing table scan gone, hashed assets `immutable`, and a 307
+  removed from every font. What's left:
+  - [ ] **`limit: 400` on the Explore feed** — needs your call, not a tune-up.
+    `useNearbyEvents` is shared with both maps and `event-map-list`, which want
+    the whole radius for pins, and Explore's genre chips come off the full page.
+    The clean answer is server-side genre facets plus a small page. Reasoning
+    and numbers under "7c" in the audit doc.
+  - [ ] Not attempted, still open from the audit: `/api/towns` (0.73s, the
+    158,625-row `allTowns` group-by is uncached outside the page cache),
+    `/api/events/:id/rsvps` (0.61s), the `created_at` indexes for
+    `/api/activity`, `GET /api/artists/:id/events` having no LIMIT, the
+    six-round-trip `/api/users/:key`, unwindowed `.map()` in `activity.tsx`,
+    and seeding the query cache from the server-rendered JSON-LD.
+  - [ ] Pre-existing and unrelated to this work: React error #418 (a hydration
+    mismatch) in the web console — reproduces identically on the old bundle.
+
+- [ ] **(original audit note)** — the audit is
   **[`docs/performance-audit.md`](docs/performance-audit.md)**, all of it
   measured against production D1 and the live site. The headline is that
   `ANALYZE` has never been run: on the exact `/api/nearby` predicate the
