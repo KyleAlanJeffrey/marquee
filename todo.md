@@ -362,6 +362,14 @@ What's left is the residuals:
   queries JS-merged on a compound (createdAt, id) cursor; the RSVP id is
   synthesised (`r:<user>:<event>`), and RSVP items only stream for shows
   still to come. Verified on the simulator against local D1 end to end.
+  - Second pass (Kyle, 2026-08-07, "I did like the log page… maybe that
+    should go in the my shows page in a historic vs future view"): the log
+    is now My Shows' **BEEN** tense next to **UPCOMING**, not a Profile
+    card. `<ShowLog>` is a component keeping its own list (the wall is
+    hundreds of tiles, so My Shows renders it instead of nesting), `/log`
+    redirects to `/saved?view=been` for old links, and the view param is
+    applied on *change* — the screen stays mounted in the tab navigator, so
+    mount-only reading silently ignored later links (caught on device).
 - [x] **v1.0.4 launch crash** (Kyle, 2026-08-06, "crashes immediately on
   trying to open the app"): the EAS production env var
   `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` carried the `.env.production` line's
