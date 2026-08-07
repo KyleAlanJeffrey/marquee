@@ -131,6 +131,9 @@ export const events = sqliteTable(
     startsAtIdx: index('events_starts_at_idx').on(t.startsAt),
     artistIdx: index('events_artist_idx').on(t.artistId, t.startsAt),
     dedupeIdx: index('events_dedupe_idx').on(t.venueId, t.artistId, t.startsAt),
+    // Every venue-scoped read filters venue_id AND starts_at; dedupeIdx can't
+    // serve them because artist_id sits between the two. Migration 0022.
+    venueTimeIdx: index('events_venue_time_idx').on(t.venueId, t.startsAt),
   }),
 );
 

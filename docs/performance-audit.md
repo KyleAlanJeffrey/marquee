@@ -261,15 +261,62 @@ revisit the split with clean numbers.
 
 ## Order of work
 
-| # | change | where | effort |
+Ticked as each one lands, with the measured after-number next to it so the
+claim and the evidence stay together. Started 2026-08-07.
+
+### Pass 1 — the database (items 1, 2, 10) — **landed 2026-08-07**
+
+- [x] **1. `ANALYZE`.** Ran on production (197ms, 47 rows of stats). **The plan
+  flipped on its own** — nothing pinned, no query rewritten: 93,049 rows /
+  277ms → **6,634 rows / 6.5ms** on the same predicate, a 14× drop in rows read
+  and 42× in SQL time. Migration `0022` carries it for fresh databases, and the
+  jobs cron re-runs it daily at 09:00 UTC so stats can't drift behind the crawl.
+- [x] **2. `count(*) over ()`** replaces the second full-join query
+  ([data.ts](worker/src/data.ts)). Removes 95,753 rows and a serial round trip
+  per request. Verified the artists join is count-neutral first (2,709 either
+  way; zero null and zero orphaned `artist_id`), and kept the old count as a
+  fallback for the one case a window function can't answer — an empty page at
+  `offset > 0`, where there's no row to read it off.
+- [x] **10. `events(venue_id, starts_at)`** index — migration `0022`.
+
+**Measured end to end on production**, against the 0.281s network floor:
+
+| | before | after | server-side work |
 |---|---|---|---|
-| 1 | `ANALYZE`, verify the plan flips, pin it if not | migration + D1 | 30 min |
-| 2 | `count(*) over ()` replaces the second query | data.ts:315 | 15 min |
-| 3 | Cache API + Cache Rule for `/` and `/concerts/*` | index.ts:147 | 1 h |
-| 4 | Split the `json_extract` OR arm | data.ts:1650 | 2 h |
-| 5 | `cors({ maxAge: 86400 })` | index.ts:26 | 1 min |
-| 6 | `immutable` on hashed assets; drop the font gate | wrangler + _layout | 1 h |
-| 7 | Explore: last-known coords, `limit` 40, gate on prefs | explore.tsx | 2 h |
-| 8 | Delete the `profile.isSuccess` gate | person-profile.tsx:260 | 5 min |
-| 9 | `anonymous: true` on public catalogue reads | queries.ts | 30 min |
-| 10 | `events(venue_id, starts_at)` index | migration | 15 min |
+| `POST /api/nearby` limit 400 | 1.19–1.31s | **0.57–0.86s** | −47% |
+| `POST /api/nearby` limit 1 | 1.035s | **0.40–0.51s** | 755ms → 120ms, **−84%** |
+
+Correctness re-checked on the live endpoint after deploy: `total` matches D1,
+`total_count` doesn't leak into items (22 fields, as before), paging is intact,
+and both empty-page paths — past the end at `offset 9000`, and an empty radius
+at `offset 0` — return the right totals.
+
+### Pass 2 — edge caching (items 3, 5)
+
+- [ ] **3. Cache API** on `/`, `/privacy`, `/concerts/:slug`, with
+  `ctx.waitUntil` revalidation. Baselines: landing 1.93–3.32s, city hub
+  2.09–2.24s, both with no `cf-cache-status` at all. —
+  [index.ts:147](worker/src/index.ts:147)
+- [ ] **5. `cors({ maxAge: 86400 })`** — the hot reads are all POST, so they
+  preflight every time. — [index.ts:26](worker/src/index.ts:26)
+
+### Pass 3 — the crawl (item 4)
+
+- [ ] **4. Split the `json_extract` OR arm** in `findExistingShows`. Baseline:
+  59,639 rows scanned per call vs 0 for the indexed arm alone, hundreds of
+  times per 15-minute tick. — [data.ts:1650](worker/src/data.ts:1650)
+
+### Pass 4 — the client (items 6–9)
+
+- [ ] **6. `immutable` on hashed assets; drop the font gate.** Baselines:
+  776 KB gzip bundle at `max-age=0, must-revalidate`; nothing paints until
+  ~395 KB of TTFs land. — wrangler + [_layout.tsx:79](src/app/_layout.tsx:79)
+- [ ] **7. Explore: last-known coords, `limit` 40, gate on prefs.** Baseline:
+  blocks on GPS, then 339 KB to draw three cards, twice. —
+  [explore.tsx](src/app/(tabs)/explore.tsx)
+- [ ] **8. Delete the `profile.isSuccess` gate** — three queries waiting on a
+  fourth they don't need. —
+  [person-profile.tsx:260](src/components/person-profile.tsx:260)
+- [ ] **9. `anonymous: true` on public catalogue reads** — stops the public
+  catalogue serializing behind a Clerk token. —
+  [queries.ts](src/hooks/queries.ts)

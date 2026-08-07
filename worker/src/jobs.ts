@@ -28,7 +28,44 @@ app.route('/admin', admin);
  * The batch is small because a scheduled Worker shares the same subrequest and
  * CPU budget as a request, and the queue is drained a little at a time.
  */
-const scheduled: ExportedHandlerScheduledHandler<JobsEnv> = async (_event, env) => {
+/**
+ * Which tick of the day re-runs ANALYZE. 09:00 UTC is early morning in the US
+ * and the middle of the working day in Europe — the crawl is the only thing
+ * else awake either way, and the statement measured 197ms on the production
+ * catalogue, so the hour is a preference rather than a constraint. The cron
+ * fires every 15 minutes, so the minute window picks exactly one of them.
+ */
+const ANALYZE_HOUR_UTC = 9;
+
+/**
+ * Refresh the query planner's statistics.
+ *
+ * SQLite plans with `sqlite_stat1` or, without it, with guesses. Production ran
+ * for months on the guesses and they were wrong where it hurt most: on the
+ * /api/nearby predicate the planner drove from the date index and read 93,049
+ * rows in 277ms, where the geo bounding box reads 6,634 in 6.5ms for the same
+ * answer (measured 2026-08-07; migration 0022 has the details). ANALYZE alone
+ * flipped it, with no query change.
+ *
+ * It runs daily because statistics are a snapshot and the crawl writes
+ * continuously — a catalogue that doubles under stale stats can talk the
+ * planner back into the bad plan. Failure is logged, never thrown: out-of-date
+ * statistics are a slow site, but a scheduled handler that dies here would
+ * abandon the crawl, which is a site that stops learning about shows.
+ */
+async function refreshPlannerStats(env: JobsEnv, scheduledTime: number) {
+  const at = new Date(scheduledTime);
+  if (at.getUTCHours() !== ANALYZE_HOUR_UTC || at.getUTCMinutes() >= 15) return;
+  try {
+    const started = Date.now();
+    await env.DB.prepare('ANALYZE').run();
+    console.log('analyze: ok in', Date.now() - started, 'ms');
+  } catch (err) {
+    console.warn('analyze failed:', err);
+  }
+}
+
+const scheduled: ExportedHandlerScheduledHandler<JobsEnv> = async (event, env) => {
   // Read before the crawl, so "created since" names exactly what this run wrote.
   const since = new Date().toISOString().slice(0, 19) + 'Z';
   let failure: unknown = null;
@@ -48,6 +85,10 @@ const scheduled: ExportedHandlerScheduledHandler<JobsEnv> = async (_event, env) 
   } catch (err) {
     console.warn('indexnow failed:', err);
   }
+
+  // After the crawl, so the statistics describe the catalogue including
+  // whatever this run just wrote.
+  await refreshPlannerStats(env, event.scheduledTime);
 
   // Re-thrown rather than swallowed: a scheduled handler that returns normally is
   // recorded as a successful invocation, and a crawl that never works would look

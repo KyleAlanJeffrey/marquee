@@ -290,6 +290,14 @@ export async function nearbyEvents(
       venue_country: canon.country,
       venue_lat: canon.lat,
       venue_lng: canon.lng,
+      // How many shows the radius actually holds. A window function is
+      // evaluated after WHERE and before LIMIT, so this is the full match
+      // count riding along on each row of the page — the same number the
+      // second query used to cost a whole extra join for. Safe to read off
+      // the artists-joined query: artist_id is a NOT NULL cascade FK, and
+      // production confirms zero null and zero orphaned artist ids, so the
+      // join drops nothing (measured 2,709 either way, 2026-08-07).
+      total_count: sql<number>`count(*) over ()`,
     })
     .from(events)
     .innerJoin(artists, eq(artists.id, events.artistId))
@@ -308,24 +316,35 @@ export async function nearbyEvents(
     .limit(limit)
     .offset(offset);
 
-  // How many shows the radius actually holds — the page is capped at `limit`,
-  // and a headline reading the page length claims "400 shows" at every radius
-  // wide enough to fill it. Same WHERE, no artists join (artist_id is a NOT
-  // NULL cascade FK, so the join never drops rows), no ordering to pay for.
-  const totalRow = await db
-    .select({ n: sql<number>`count(*)` })
-    .from(events)
-    .innerJoin(venues, eq(venues.id, events.venueId))
-    .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
-    .where(where)
-    .get();
-  const total = totalRow?.n ?? 0;
+  // The count rides along on the page (see `total_count` above). It used to be
+  // a second statement running the identical WHERE — both distance
+  // expressions, both joins — serially after this one, which measured 95,753
+  // rows and 264ms on production New York, on every page, including offset
+  // pages where the client already had the total.
+  //
+  // An empty page carries no row to read it off. At offset 0 that is genuinely
+  // "nothing in the radius"; deeper in, the count is simply unknown from here,
+  // so fall back to the old shape — a path a paging client reaches only by
+  // running off the end.
+  let total = rows[0]?.total_count ?? 0;
+  if (rows.length === 0 && offset > 0) {
+    const totalRow = await db
+      .select({ n: sql<number>`count(*)` })
+      .from(events)
+      .innerJoin(venues, eq(venues.id, events.venueId))
+      .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
+      .where(where)
+      .get();
+    total = totalRow?.n ?? 0;
+  }
 
   // No post-filter here: the SQL predicate already decided membership, and a
   // second pass on the canonical row's haversine is exactly what used to
   // return short pages. A show whose cluster head sits a hair past the line
   // may display as 100.3 mi in a 100 mi feed; that's honest, not a leak.
-  const items = rows.map((r) => ({
+  // `total_count` is the same number on every row and belongs to the page, not
+  // to a show — it's destructured out rather than shipped 400 times.
+  const items = rows.map(({ total_count: _total, ...r }) => ({
     ...r,
     artist_genres: parseGenres(r.artist_genres),
     venue_name: publishedVenueName(r.venue_name),
