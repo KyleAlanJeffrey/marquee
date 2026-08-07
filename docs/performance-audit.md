@@ -423,6 +423,227 @@ source files newer, and I pushed it over production several times before
 noticing the served tab bar read "Saved | Log" instead of "My Shows |
 Activity". `deploy` now runs `build` first.
 
+#### 7c: `limit: 400` — the map half is resolved
+
+**Update, same day.** The maps no longer read `useNearbyEvents` at all. Pins
+come from `/venues/nearby` and a venue's lineup is fetched on the tap that opens
+it, so the shared-hook objection is gone — see "The map is a map of rooms now"
+below.
+
+What remains is only Explore's own use: its genre chips are derived from the
+full page, so a short page means fewer and more skewed genres. That is a product
+call, not a tune-up, and the clean answer is server-side genre facets. Worth
+knowing before deciding: after pass 1 the payload is no longer the expensive
+part — `limit=1` and `limit=400` differ by roughly 0.3s, where the fixed cost
+used to be ~1.0s.
+
+`event-map-list.tsx` still uses the hook, and legitimately: it is a list of
+events with a decorative static map, not a pin map.
+
+## The map is a map of rooms now
+
+Pins used to be derived by grouping a 400-row page of *events* by venue
+coordinate, which had the relationship backwards — the map's coverage was a side
+effect of an event feed's page size. Measured on production New York, 50 miles:
+
+| | pins | payload |
+|---|---|---|
+| derived from 400 events (before) | **111** spots | 339,748 B |
+| `/venues/nearby` at limit 200 (after) | **183** spots | 54,381 B |
+
+Fewer pins for six times the bytes. A room whose shows fell past row 400 had no
+pin at all, and drawing a dot cost that venue's entire lineup up front.
+
+`/venues/nearby` costs 0.40–0.55s and — measured — **the same at limit 200 as at
+limit 12**, so the cap was raised from 50 to 200 (`NEARBY_VENUE_SCAN` bounds the
+work either way). The lineup is `useVenueUpcoming`, six rows, fired by the tap.
+
+One deliberate behaviour change: a pin highlights a **followed venue**. It used
+to light up when a followed *artist* happened to be playing there, which needed
+every pin's lineup loaded in advance to pick the colour of a dot, and described
+the night rather than the room the pin marks.
+
+Verified in the browser against production: 183 markers render, the map page
+issues **only** `POST /api/venues/nearby` (no `/api/nearby` at all), and
+`GET /venues/:id/events?limit=6` fires on the click and not before.
+
+## On splitting the app from the website
+
+The measurements don't support doing this first. The landing and city pages are
+already server-rendered HTML that never needs the app bundle, and their 2–3s
+TTFB is uncached D1 work (#4, #5), not React. Splitting would genuinely help —
+the marketing/SEO surface could drop the 776 KB bundle outright — but it is an
+architecture change competing with a configuration change that fixes the same
+number today.
+
+Suggested order: #1 and #2 (hours, no structural change), then #4 and #5
+(caching, same fix), then #3 (stops the cron poisoning read latency), then
+revisit the split with clean numbers.
+
+## Order of work
+
+Ticked as each one lands, with the measured after-number next to it so the
+claim and the evidence stay together. Started 2026-08-07.
+
+### Pass 1 — the database (items 1, 2, 10) — **landed 2026-08-07**
+
+- [x] **1. `ANALYZE`.** Ran on production (197ms, 47 rows of stats). **The plan
+  flipped on its own** — nothing pinned, no query rewritten: 93,049 rows /
+  277ms → **6,634 rows / 6.5ms** on the same predicate, a 14× drop in rows read
+  and 42× in SQL time. Migration `0022` carries it for fresh databases, and the
+  jobs cron re-runs it daily at 09:00 UTC so stats can't drift behind the crawl.
+- [x] **2. `count(*) over ()`** replaces the second full-join query
+  ([data.ts](worker/src/data.ts)). Removes 95,753 rows and a serial round trip
+  per request. Verified the artists join is count-neutral first (2,709 either
+  way; zero null and zero orphaned `artist_id`), and kept the old count as a
+  fallback for the one case a window function can't answer — an empty page at
+  `offset > 0`, where there's no row to read it off.
+- [x] **10. `events(venue_id, starts_at)`** index — migration `0022`.
+
+**Measured end to end on production**, against the 0.281s network floor:
+
+| | before | after | server-side work |
+|---|---|---|---|
+| `POST /api/nearby` limit 400 | 1.19–1.31s | **0.57–0.86s** | −47% |
+| `POST /api/nearby` limit 1 | 1.035s | **0.40–0.51s** | 755ms → 120ms, **−84%** |
+
+Correctness re-checked on the live endpoint after deploy: `total` matches D1,
+`total_count` doesn't leak into items (22 fields, as before), paging is intact,
+and both empty-page paths — past the end at `offset 9000`, and an empty radius
+at `offset 0` — return the right totals.
+
+### Pass 2 — edge caching (items 3, 5) — **landed 2026-08-07**
+
+- [x] **3. Cache API** on `/`, `/privacy`, `/concerts/:slug`
+  ([index.ts](worker/src/index.ts)). The cache is checked *before* the renderer
+  runs, so a hit on a city page skips all four D1 queries including the
+  158,625-row `allTowns`. `cf-cache-status: HIT` now appears on these pages,
+  where before there was no such header at all.
+- [x] **5. `cors({ maxAge: 86400 })`** — verified live:
+  `access-control-max-age: 86400` on an `OPTIONS /api/nearby` preflight.
+
+| | before | cold (MISS) | warm (HIT) |
+|---|---|---|---|
+| `/` | 1.93–3.32s | 2.64s | **0.39–0.55s** |
+| `/concerts/new-york-ny` | 2.09–2.24s | 2.04–2.12s | **0.28–0.46s** |
+| `/privacy` | 0.30s | 0.30s | 0.38s (no D1 either way) |
+
+Verified after deploy: cached bodies are byte-identical across hits (42,538 and
+79,292 bytes, matching the pre-change measurements), canonicals and `<h1>` are
+intact, a bogus slug still 404s and is *not* stored, `/concerts` still 301s, and
+event deep links still get their two JSON-LD blocks injected.
+
+Two deliberate choices worth knowing:
+
+- **The key drops the query string.** None of these three pages reads one, so
+  keying on the full URL would mint a fresh entry per `?utm_source=…` and miss
+  on all of them.
+- **Off-brand hosts bypass entirely.** The `*.workers.dev` copy writes different
+  canonicals and carries a `noindex` stamp, so sharing entries with the real
+  domain would leak one into the other in whichever direction raced first.
+
+Not done here: purging on ingest. A new show can take up to `s-maxage` (30 min)
+to appear on `/` or a city page. That is what the header always claimed, and
+IndexNow still pings the crawler immediately.
+
+### Pass 3 — the crawl (item 4) — **landed 2026-08-07**
+
+- [x] **4. The `json_extract` arm is now indexed** rather than split out —
+  migration `0023`, four expression indexes, one per source.
+
+The audit proposed splitting the OR so the indexable arms run first and the
+`json_extract` arm only runs on a miss. Measuring the data first killed that
+plan: a genuinely new listing misses *everything*, so the scan would still
+happen on exactly the ingest path that runs most. And the arm can't be dropped —
+**4,117 events carry more than one source id, and 2,289 rows are reachable only
+through it** (a bandsintown row found by the ticketmaster id in its `sources`
+JSON).
+
+SQLite indexes expressions directly, so the arm became a seek with **no query
+change at all** — nothing to re-verify about ordering or match precedence:
+
+| | rows read | SQL time |
+|---|---|---|
+| before | 59,639 (the whole table) | 59.7 ms |
+| after, the full `OR` the crawl issues | **1** | **0.34–0.86 ms** |
+
+The expression text has to match the query's character for character, including
+the JSON path quoting, or the planner silently falls back to the scan — so
+`INDEXED_SOURCE_IDS` in `data.ts` warns when a source has no index. The failure
+mode is slow, not broken, which is exactly the kind that survives review.
+
+> **Correction — the first version of this shipped without working.** The
+> measurement above was taken with the JSON path written as a **literal**, but
+> Drizzle binds it as a **parameter**, and SQLite matches an expression index by
+> comparing expression trees: a `?` is not the same tree as
+> `'$."ticketmaster"'`, because the planner decides before the value exists.
+> Same table, same index:
+>
+> ```
+> json_extract(sources, '$."ticketmaster"') = ?   →  SEARCH USING INDEX
+> json_extract(sources, ?)                  = ?   →  SCAN events
+> ```
+>
+> So the index existed and the query ignored it. Caught by CodeRabbit, confirmed
+> against a local SQLite of the same version, and fixed by inlining the path via
+> `sql.raw` for allowlisted sources only — `sourceEventId`, the part that comes
+> from a third-party feed, stays bound. The generated SQL was then read back out
+> of Drizzle and explained against production:
+>
+> ```
+> MULTI-INDEX OR
+>   INDEX 1  SEARCH events USING INDEX sqlite_autoindex_events_2 (source=? AND source_event_id=?)
+>   INDEX 2  SEARCH events USING INDEX events_sources_ticketmaster_idx (<expr>=?)
+> ```
+>
+> The lesson is narrower than "measure": I measured, and the measurement was of
+> a query I had written by hand rather than the one the ORM emits.
+
+**Verified against production, not just asserted:** three crawls of 8 artists
+through the live admin endpoint. Duplicate groups stayed at **246 before and
+after all three**, and the second crawl of the same artists ingested **0** —
+every existing show matched rather than duplicated, which is the behaviour the
+arm exists to protect.
+
+### Pass 4 — the client (items 6–9) — **landed 2026-08-07**
+
+- [x] **6a. `immutable` on hashed assets.** `public, max-age=0, must-revalidate`
+  → `public, max-age=31536000, immutable`, verified live on the bundle. The
+  match insists on 32 hex digits so `favicon.ico`, `manifest.json` and
+  `og-image.png` stay mutable — verified they still report `max-age=0`.
+- [x] **6b. Killed a 307 on every font** — found while measuring, in neither
+  audit. Expo writes scoped-package paths with a literal `@`; the asset server
+  redirects those to the percent-encoded spelling, so all six
+  `<link rel=preload>` tags spent a round trip learning where to go (0.37s for
+  the redirect, 0.49s for the fetch after it). Now `redirects=0`.
+- [x] **6c. The font gate stays — the audit's premise was wrong.** It claimed
+  nothing paints until ~395 KB of TTFs load *after* the bundle parses. The
+  export already emits `rel="preload"` for all six and `defer`s the bundle, so
+  they download in parallel from HTML parse. Trading a distinctive typeface for
+  a FOUT would have bought nothing.
+- [x] **7a. Explore no longer blocks on a GPS fix** — `getCoordsFast` returns
+  the OS's last known position (≤5 min old) so the feed starts loading, then
+  re-centres when the precise fix lands.
+- [x] **7b. The radius no longer flips mid-flight** — the queries and the
+  ingest call are gated on `prefs.ready`, so a user whose stored radius is 25
+  stops fetching the 50-mile feed first and throwing it away.
+- [ ] **7c. `limit: 400` — deliberately not changed. Needs a decision.** See
+  below.
+- [x] **8. Deleted the `profile.isSuccess` gate.** All three queries are
+  `/users/:key/…` and take the route param the component already had, so it was
+  a whole round trip spent learning nothing. Two RTTs → one.
+- [x] **9. Ten public catalogue reads marked `anonymous`** — artists, events,
+  venues. Checked route by route that none reads identity rather than judging
+  by the path: `/events/:id/reviews` and `/events/:id/rsvps` look public and
+  aren't (`likedByMe`, `followedByMe`), so they keep their token.
+
+**Also fixed here, and it was my own doing:** `npm run deploy` was bare
+`wrangler deploy`, and `dist/` is gitignored — so it published whatever web
+build happened to be on the deploying machine. Mine was from Jul 31 with 59
+source files newer, and I pushed it over production several times before
+noticing the served tab bar read "Saved | Log" instead of "My Shows |
+Activity". `deploy` now runs `build` first.
+
 #### 7c: why `limit: 400` is still 400
 
 `useNearbyEvents` is not Explore's alone — [map.tsx](src/app/(tabs)/map.tsx),

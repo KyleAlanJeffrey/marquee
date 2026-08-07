@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, useWindowDimensions, View } from 'react-native';
 import MapView, { Marker, type Region } from 'react-native-maps';
 
 import { PageMeta } from '@/components/page-meta';
@@ -11,19 +11,26 @@ import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useFollows } from '@/lib/follows-store';
+import { useFollowedVenues } from '@/lib/followed-venues-store';
 import { formatEventDate, formatTime } from '@/lib/format';
-import { useNearbyEvents } from '@/hooks/queries';
+import { useNearbyVenues, useVenueUpcoming } from '@/hooks/queries';
 import { parseCoords, parseRadius } from '@/lib/params';
-import type { NearbyEvent } from '@/lib/types';
 
 /**
  * The map, on a phone: a real interactive MapView (Apple Maps on iOS — no
  * token, no tile bill) instead of the old 300-pixel static image above a list.
- * Full screen because that's what a map is for; one pin per venue because
- * events stack there; and the sheet a pin opens names the venue as a link,
- * which is the whole reason someone taps a pin. The web file mirrors this
- * with Mapbox GL.
+ * Full screen because that's what a map is for, and the sheet a pin opens names
+ * the venue as a link, which is the whole reason someone taps a pin. The web
+ * file mirrors this with Mapbox GL.
+ *
+ * **Pins are venues, and the lineup is fetched on the tap that reads it.** They
+ * used to be derived by grouping a 400-row page of *events* by venue
+ * coordinate, which got the relationship backwards: the map's coverage became a
+ * side effect of an event feed's page size, so a room whose shows fell past row
+ * 400 simply had no pin, and drawing a dot cost that venue's entire lineup up
+ * front. `/venues/nearby` answers the question a map is actually asking — which
+ * rooms are here, and where — and `useVenueUpcoming` answers "what's on" once,
+ * for the one venue somebody chose.
  *
  * Pin taps are hit-tested in JS from the map's own onPress coordinate rather
  * than through Marker onPress: under Expo Go's New Architecture the markers'
@@ -35,15 +42,26 @@ import type { NearbyEvent } from '@/lib/types';
  * but a *standalone* Android build needs `android.config.googleMaps.apiKey`
  * in app.json — parked with the Play-store setup in todo.md.
  */
-type VenueGroup = {
+/** A pin. One venue, with the coordinates the server gave it. */
+type VenuePin = {
   key: string;
-  venueId: string | null;
+  venueId: string;
   lat: number;
   lng: number;
   name: string;
-  events: NearbyEvent[];
+  /** The zone the shows happen in — a 23:00 gig in London is not a 3pm gig.
+   *  The venue rows carry it; `/venues/:id/events` doesn't, so it rides here. */
+  timezone: string | null;
+  upcoming: number;
   following: boolean;
 };
+
+/**
+ * How many rooms a map asks for. The server caps this at 200 and scans no more
+ * than that either way; a map that stops short just has holes, and nothing on
+ * screen tells you whether an empty patch is quiet or truncated.
+ */
+const MAP_VENUE_LIMIT = 200;
 
 export default function MapScreen() {
   const theme = useTheme();
@@ -51,8 +69,12 @@ export default function MapScreen() {
   const coords = parseCoords(lat, lng);
   const radiusMiles = parseRadius(radius);
 
-  const events = useNearbyEvents(coords, radiusMiles);
-  const { isFollowing } = useFollows();
+  const venues = useNearbyVenues(coords, radiusMiles, MAP_VENUE_LIMIT);
+  // A venue pin highlights a followed *venue*. It used to light up when a
+  // followed artist happened to be playing there, which needed every pin's
+  // lineup loaded in advance to decide the colour of a dot — and said something
+  // about the night rather than about the room the pin marks.
+  const { isFollowingVenue } = useFollowedVenues();
   const { width, height } = useWindowDimensions();
   const mapRef = useRef<MapView>(null);
   const fittedRef = useRef(false);
@@ -66,35 +88,41 @@ export default function MapScreen() {
   // cached query data can win that race — so the fit waits for onMapReady.
   const [mapReady, setMapReady] = useState(false);
 
-  const all = useMemo(() => events.data?.items ?? [], [events.data]);
-  const ref = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.artist_spotify_id });
-
-  // One pin per venue (events stack there). Keyed by rounded coordinates, not
-  // venue id, so two rooms of one building don't draw two overlapping pins.
+  // Keyed by rounded coordinates rather than venue id, so two rooms of one
+  // building don't draw two pins on the same spot. The busiest room wins the
+  // pin — `/venues/nearby` returns them busiest first, so the first to claim a
+  // coordinate is the one worth naming.
   const groups = useMemo(() => {
-    const m = new Map<string, VenueGroup>();
-    for (const e of all) {
-      if (e.venue_lat == null || e.venue_lng == null) continue;
-      const key = `${e.venue_lat.toFixed(4)},${e.venue_lng.toFixed(4)}`;
-      const g =
-        m.get(key) ??
-        {
-          key,
-          venueId: e.venue_id ?? null,
-          lat: e.venue_lat,
-          lng: e.venue_lng,
-          name: e.venue_name ?? 'Venue',
-          events: [],
-          following: false,
-        };
-      g.events.push(e);
-      if (isFollowing(ref(e))) g.following = true;
-      m.set(key, g);
+    const m = new Map<string, VenuePin>();
+    for (const v of venues.data ?? []) {
+      if (v.lat == null || v.lng == null) continue;
+      const key = `${v.lat.toFixed(4)},${v.lng.toFixed(4)}`;
+      const existing = m.get(key);
+      if (existing) {
+        // Still worth counting: the sheet says how many nights are on at this
+        // spot, and a shared building's rooms are one spot to whoever taps it.
+        existing.upcoming += v.upcoming;
+        existing.following ||= isFollowingVenue({ venueId: v.id });
+        continue;
+      }
+      m.set(key, {
+        key,
+        venueId: v.id,
+        lat: v.lat,
+        lng: v.lng,
+        name: v.name,
+        timezone: v.timezone,
+        upcoming: v.upcoming,
+        following: isFollowingVenue({ venueId: v.id }),
+      });
     }
     return [...m.values()];
-  }, [all, isFollowing]);
+  }, [venues.data, isFollowingVenue]);
 
   const selected = groups.find((g) => g.key === selectedKey) ?? null;
+  // Only the chosen room's lineup, and only once chosen.
+  const lineup = useVenueUpcoming(selected?.venueId ?? null);
+  const shows = lineup.data?.items ?? [];
 
   // The JS stand-in for marker presses (see the header comment): take the
   // tapped coordinate, measure each pin's distance from it in screen points at
@@ -111,7 +139,7 @@ export default function MapScreen() {
       return;
     }
     const TAP_RADIUS_PTS = 28;
-    let best: VenueGroup | null = null;
+    let best: VenuePin | null = null;
     let bestDist = Infinity;
     for (const g of groups) {
       const dx = ((g.lng - tap.longitude) / region.longitudeDelta) * width;
@@ -248,28 +276,51 @@ export default function MapScreen() {
               <Ionicons name="close" size={20} color={theme.textTertiary} />
             </PressableScale>
           </View>
-          {selected.events.slice(0, 4).map((e) => (
-            <PressableScale
-              key={e.event_id}
-              onPress={() => router.push(`/event/${e.event_id}`)}
-              style={[styles.row, { borderColor: theme.border }]}>
-              <View style={{ flex: 1 }}>
-                <ThemedText type="smallBold" numberOfLines={1}>
-                  {e.artist_name}
-                </ThemedText>
-                <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                  {e.time_unknown
-                    ? formatEventDate(e.starts_at, e.venue_timezone)
-                    : `${formatEventDate(e.starts_at, e.venue_timezone)} · ${formatTime(e.starts_at, e.venue_timezone)}`}
-                </ThemedText>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
-            </PressableScale>
-          ))}
-          {selected.events.length > 4 && (
-            <ThemedText type="labelSm" style={{ color: theme.textTertiary, textAlign: 'center' }}>
-              +{selected.events.length - 4} MORE AT THIS VENUE
+          {/* The lineup arrives after the tap, so the sheet opens immediately
+              with the room's name and holds this space while it loads. The
+              venue's own upcoming count is already known, so the wait never
+              looks like an empty venue. */}
+          {lineup.isPending ? (
+            <View style={styles.sheetLoading}>
+              <ActivityIndicator color={theme.cyan} />
+              <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                {selected.upcoming} {selected.upcoming === 1 ? 'SHOW' : 'SHOWS'} COMING UP
+              </ThemedText>
+            </View>
+          ) : lineup.isError ? (
+            <ThemedText type="labelSm" style={styles.sheetNote}>
+              Couldn&apos;t load what&apos;s on here.
             </ThemedText>
+          ) : shows.length === 0 ? (
+            <ThemedText type="labelSm" style={styles.sheetNote}>
+              Nothing on sale here right now.
+            </ThemedText>
+          ) : (
+            <>
+              {shows.slice(0, 4).map((e) => (
+                <PressableScale
+                  key={e.event_id}
+                  onPress={() => router.push(`/event/${e.event_id}`)}
+                  style={[styles.row, { borderColor: theme.border }]}>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText type="smallBold" numberOfLines={1}>
+                      {e.artist_name}
+                    </ThemedText>
+                    <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                      {e.time_unknown
+                        ? formatEventDate(e.starts_at, selected.timezone)
+                        : `${formatEventDate(e.starts_at, selected.timezone)} · ${formatTime(e.starts_at, selected.timezone)}`}
+                    </ThemedText>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={theme.textTertiary} />
+                </PressableScale>
+              ))}
+              {selected.upcoming > shows.slice(0, 4).length && (
+                <ThemedText type="labelSm" style={{ color: theme.textTertiary, textAlign: 'center' }}>
+                  +{selected.upcoming - shows.slice(0, 4).length} MORE AT THIS VENUE
+                </ThemedText>
+              )}
+            </>
           )}
         </View>
       )}
@@ -304,6 +355,10 @@ const styles = StyleSheet.create({
   sheetHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   sheetVenue: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   sheetClose: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  // Tall enough that the sheet doesn't resize under the finger when the lineup
+  // lands — the pin it belongs to would slide out from under the tap.
+  sheetLoading: { minHeight: 72, alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
+  sheetNote: { minHeight: 72, textAlign: 'center', textAlignVertical: 'center', paddingTop: Spacing.three },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

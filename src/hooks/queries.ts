@@ -284,6 +284,33 @@ export function useVenueInfo(venueId: string) {
   });
 }
 
+/**
+ * The next few shows at one venue, fetched only when something asks.
+ *
+ * This is what makes the map a map of *rooms*. It used to plot pins by grouping
+ * a 400-row page of events by venue coordinate, which meant the map's accuracy
+ * was a side effect of an event feed: a room whose shows fell outside that page
+ * had no pin at all, and every pin cost its venue's whole lineup up front to
+ * draw a dot. Pins come from `/venues/nearby` now — rooms, with coordinates,
+ * which is the question a map is asking — and the lineup is pulled here on the
+ * tap that wants to read it.
+ *
+ * Cached per venue under the same `venue-events` key family as the venue page's
+ * infinite list, but a separate key: this is a fixed short page, not page zero
+ * of a scroll, and sharing the key would let one overwrite the other.
+ */
+export function useVenueUpcoming(venueId: string | null, limit = 6) {
+  return useQuery({
+    queryKey: ['venue-upcoming', venueId, limit],
+    enabled: !!venueId,
+    // A room's next few nights don't turn over minute to minute, and tapping
+    // back and forth between two pins shouldn't re-ask each time.
+    staleTime: 10 * 60 * 1000,
+    queryFn: (): Promise<Page<VenueEvent>> =>
+      apiGet(`/venues/${venueId}/events?limit=${limit}&offset=0`, { anonymous: true }),
+  });
+}
+
 /** Paginated upcoming shows at a venue for infinite scroll. */
 export function useInfiniteVenueEvents(venueId: string, pageSize = 20) {
   return useInfiniteQuery({

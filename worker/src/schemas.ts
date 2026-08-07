@@ -34,7 +34,11 @@ export const nearbyVenuesQuery = z.object({
   lat: latitude,
   lng: longitude,
   radius: z.coerce.number().positive().max(1000).optional().default(50),
-  limit: z.coerce.number().int().positive().max(50).optional().default(12),
+  // 200 because the map asks for pins, not a shortlist: a rail wants the dozen
+  // busiest rooms, but a map that stops at 50 has holes in it, and nothing on
+  // screen distinguishes a thin area from a truncated one. `NEARBY_VENUE_SCAN`
+  // is the real ceiling on the work — this only decides how much comes back.
+  limit: z.coerce.number().int().positive().max(200).optional().default(12),
 });
 
 /** The saved list a client wants current rows for. */
