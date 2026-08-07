@@ -87,14 +87,14 @@ export function useInfiniteNearby(
 export function useArtist(artistId: string) {
   return useQuery({
     queryKey: ['artist', artistId],
-    queryFn: (): Promise<Artist> => apiGet(`/artists/${artistId}`),
+    queryFn: (): Promise<Artist> => apiGet(`/artists/${artistId}`, { anonymous: true }),
   });
 }
 
 export function useArtistEvents(artistId: string) {
   return useQuery({
     queryKey: ['artist-events', artistId],
-    queryFn: (): Promise<ArtistEvent[]> => apiGet(`/artists/${artistId}/events`),
+    queryFn: (): Promise<ArtistEvent[]> => apiGet(`/artists/${artistId}/events`, { anonymous: true }),
   });
 }
 
@@ -110,7 +110,7 @@ export function useArtistPastEvents(artistId: string, enabled: boolean) {
     queryKey: ['artist-past-events', artistId],
     enabled: enabled && !!artistId,
     staleTime: 60 * 60 * 1000,
-    queryFn: (): Promise<ArtistPastEvent[]> => apiGet(`/artists/${artistId}/past-events`),
+    queryFn: (): Promise<ArtistPastEvent[]> => apiGet(`/artists/${artistId}/past-events`, { anonymous: true }),
   });
 }
 
@@ -137,14 +137,14 @@ export function useArtistInfo(artistId: string) {
   return useQuery({
     queryKey: ['artist-info', artistId],
     staleTime: 60 * 60 * 1000,
-    queryFn: (): Promise<ArtistInfo> => apiGet(`/artists/${artistId}/info`),
+    queryFn: (): Promise<ArtistInfo> => apiGet(`/artists/${artistId}/info`, { anonymous: true }),
   });
 }
 
 export function useEvent(eventId: string) {
   return useQuery({
     queryKey: ['event', eventId],
-    queryFn: (): Promise<EventDetail> => apiGet(`/events/${eventId}`),
+    queryFn: (): Promise<EventDetail> => apiGet(`/events/${eventId}`, { anonymous: true }),
   });
 }
 
@@ -153,7 +153,7 @@ export function useEventBuzz(eventId: string) {
   return useQuery({
     queryKey: ['event-buzz', eventId],
     staleTime: 5 * 60 * 1000,
-    queryFn: (): Promise<EventBuzz> => apiGet(`/events/${eventId}/buzz`),
+    queryFn: (): Promise<EventBuzz> => apiGet(`/events/${eventId}/buzz`, { anonymous: true }),
   });
 }
 
@@ -162,7 +162,7 @@ export function useEventLineup(eventId: string) {
   return useQuery({
     queryKey: ['event-lineup', eventId],
     staleTime: 60 * 60 * 1000,
-    queryFn: (): Promise<EventLineup> => apiGet(`/events/${eventId}/lineup`),
+    queryFn: (): Promise<EventLineup> => apiGet(`/events/${eventId}/lineup`, { anonymous: true }),
   });
 }
 
@@ -264,7 +264,7 @@ export function useFollowingEvents(
 export function useVenue(venueId: string) {
   return useQuery({
     queryKey: ['venue', venueId],
-    queryFn: (): Promise<VenueDetail> => apiGet(`/venues/${venueId}`),
+    queryFn: (): Promise<VenueDetail> => apiGet(`/venues/${venueId}`, { anonymous: true }),
   });
 }
 
@@ -280,7 +280,7 @@ export function useVenueInfo(venueId: string) {
   return useQuery({
     queryKey: ['venue-info', venueId],
     staleTime: 60 * 60 * 1000,
-    queryFn: (): Promise<VenueInfo> => apiGet(`/venues/${venueId}/info`),
+    queryFn: (): Promise<VenueInfo> => apiGet(`/venues/${venueId}/info`, { anonymous: true }),
   });
 }
 
@@ -290,7 +290,7 @@ export function useInfiniteVenueEvents(venueId: string, pageSize = 20) {
     queryKey: ['venue-events', venueId],
     initialPageParam: 0,
     queryFn: ({ pageParam }): Promise<Page<VenueEvent>> =>
-      apiGet(`/venues/${venueId}/events?limit=${pageSize}&offset=${pageParam}`),
+      apiGet(`/venues/${venueId}/events?limit=${pageSize}&offset=${pageParam}`, { anonymous: true }),
     getNextPageParam: (last) => last.nextCursor,
   });
 }

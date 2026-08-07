@@ -57,7 +57,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build": "expo export -p web",
-    "deploy": "wrangler deploy",
+    "deploy": "npm run build && wrangler deploy",
     "deploy:jobs": "wrangler deploy -c wrangler.jobs.jsonc",
     "cf:dev": "wrangler dev",
     "cf:dev:jobs": "wrangler dev -c wrangler.jobs.jsonc --port 8788",

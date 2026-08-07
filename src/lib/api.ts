@@ -50,10 +50,23 @@ async function authHeaders(): Promise<Record<string, string>> {
 /**
  * `anonymous` sends the request with no Authorization header even when signed in.
  *
- * For the endpoints that carry the user's location. None of them read identity,
- * and attaching the token anyway would put "who" and "where" in one request — the
- * exact pairing the privacy declaration promises never leaves the device. What the
- * server never receives, no log or breach can disclose.
+ * Two reasons, and an endpoint qualifies under either.
+ *
+ * **Privacy**, for the endpoints that carry the user's location. None of them
+ * read identity, and attaching the token anyway would put "who" and "where" in
+ * one request — the exact pairing the privacy declaration promises never leaves
+ * the device. What the server never receives, no log or breach can disclose.
+ *
+ * **Latency**, for the public catalogue. `authHeaders()` awaits Clerk's
+ * `getToken`, and on web that doesn't resolve until clerk-js has loaded from a
+ * third-party CDN and hydrated the session — so an event page was waiting on
+ * somebody else's script to render a show that has nothing to do with who's
+ * looking. Signed-out visitors paid it too.
+ *
+ * The bar for adding it is the same either way: the route must read no
+ * identity. Verified per route, not assumed — `/events/:id/reviews` and
+ * `/events/:id/rsvps` look identity-free from the path and are not (they carry
+ * `likedByMe` and `followedByMe`), so they keep their token.
  */
 type RequestOpts = { anonymous?: boolean };
 

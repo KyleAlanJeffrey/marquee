@@ -255,11 +255,19 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
   const follow = useFollowPerson(profileKey);
   const block = useBlockPerson(profileKey);
   const [tab, setTab] = useState<'followers' | 'following'>('followers');
-  // Both directions mount lazily: the counts answer most visits, and each list
-  // is only fetched the first time its tab is looked at.
-  const list = useFollowList(profileKey, tab, profile.isSuccess);
-  const theirReviews = useProfileReviews(profileKey, profile.isSuccess);
-  const shelves = usePersonLists(profileKey, profile.isSuccess);
+  // Siblings of the profile query, not children of it. These three used to wait
+  // on `profile.isSuccess`, which cost a full round trip for nothing: all three
+  // endpoints are `/users/:key/…` and take the same route param this component
+  // was handed, so there was never anything to learn from the profile first.
+  // The profile screen and every /user/:key link paid two sequential RTTs
+  // before the body appeared.
+  //
+  // The laziness that comment used to claim is still here and always came from
+  // elsewhere: `tab` is part of the query key, so the direction you haven't
+  // looked at isn't fetched.
+  const list = useFollowList(profileKey, tab, true);
+  const theirReviews = useProfileReviews(profileKey);
+  const shelves = usePersonLists(profileKey);
 
   if (profile.isLoading) {
     return (

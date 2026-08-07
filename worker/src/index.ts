@@ -244,11 +244,50 @@ app.get('/concerts/:slug', (c) =>
   }),
 );
 
+/**
+ * A filename with a content hash in it — `entry-<32 hex>.js`,
+ * `Anybody_400Regular.<32 hex>.ttf`. The hash *is* the cache key: change the
+ * bytes and you change the URL, so the old one can never be wrong.
+ *
+ * Deliberately strict about the 32 hex digits. Everything unhashed —
+ * `favicon.ico`, `og-image.png`, `manifest.json` — must not match, because for
+ * those the URL outlives the content and `immutable` would strand a stale copy
+ * in every browser that ever loaded it.
+ */
+const HASHED_ASSET = /[.-][0-9a-f]{32}\.[a-z0-9]+$/i;
+
+/**
+ * A year, and `immutable` so browsers don't even revalidate.
+ *
+ * The export was going out as `public, max-age=0, must-revalidate` on
+ * content-hashed filenames — a conditional request on every load, for a
+ * 749 KB bundle and six fonts, to be told nothing changed.
+ */
+const IMMUTABLE_ASSET = 'public, max-age=31536000, immutable';
+
 // Static assets. Every HTML response is the same client-rendered shell, so its
 // <head> gets rewritten for the requested route before it goes out (seo.ts).
 app.all('*', async (c) => {
-  const res = await c.env.ASSETS.fetch(c.req.raw);
   const url = new URL(c.req.url);
+
+  // Expo writes scoped-package asset paths with a literal `@`, and the asset
+  // server answers those with a 307 to the percent-encoded spelling. The six
+  // font `<link rel=preload>` tags in the export all point at the literal form,
+  // so each one paid a redirect before it could begin downloading — measured at
+  // 0.37s for the 307 and 0.49s for the round trip that followed. Ask for the
+  // spelling the asset server actually serves.
+  const assetReq = url.pathname.includes('@')
+    ? new Request(new URL(url.pathname.replace(/@/g, '%40') + url.search, url.origin), c.req.raw)
+    : c.req.raw;
+
+  const res = await c.env.ASSETS.fetch(assetReq);
+
+  if (c.req.method === 'GET' && res.ok && HASHED_ASSET.test(url.pathname)) {
+    const cached = new Response(res.body, res);
+    cached.headers.set('Cache-Control', IMMUTABLE_ASSET);
+    return cached;
+  }
+
   if (c.req.method !== 'GET' || !res.headers.get('content-type')?.includes('text/html')) return res;
 
   // Metadata is written with the canonical origin, whichever host served this.
