@@ -150,13 +150,24 @@ const PAGE_CACHE = 'public, max-age=300, s-maxage=1800, stale-while-revalidate=8
 /**
  * Where a rendered page is keyed in the edge cache.
  *
- * Always the canonical origin plus the path, and deliberately **not** the query
- * string: none of these three pages reads one, so keying on the full URL would
- * mint a separate entry for every `?utm_source=…` a share adds and miss on all
- * of them.
+ * The canonical origin plus the path, and deliberately **not** the query string:
+ * none of these three pages reads one, so keying on the full URL would mint a
+ * separate entry for every `?utm_source=…` a share adds and miss on all of them.
+ *
+ * Plus the deployment id, because nothing else tells the cache a deploy just
+ * made its contents wrong. Without it, changing the copy on a page and shipping
+ * it means the *old* copy keeps going out until `s-maxage` expires — half an
+ * hour of serving text you already fixed, with no way to force it: the key
+ * ignores the query string, so a cache-buster can't reach past it either. The
+ * id changes on every deploy, so each one starts a clean namespace and the
+ * entries it orphans expire on their own.
  */
-const pageCacheKey = (c: Context<AppEnv>) =>
-  new Request(new URL(new URL(c.req.url).pathname, siteOrigin(c)).toString(), { method: 'GET' });
+const pageCacheKey = (c: Context<AppEnv>) => {
+  const url = new URL(new URL(c.req.url).pathname, siteOrigin(c));
+  // A query param on the key, not the path: it must not collide with a real URL.
+  if (c.env.CF_VERSION?.id) url.searchParams.set('__v', c.env.CF_VERSION.id);
+  return new Request(url.toString(), { method: 'GET' });
+};
 
 /**
  * Serve a rendered page through the edge cache.

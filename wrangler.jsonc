@@ -23,6 +23,11 @@
   // domain. Uncomment once `dig NS marquee.rocks` answers with Cloudflare's
   // nameservers and the zone reads Active.
   // "routes": [{ "pattern": "marquee.rocks", "custom_domain": true }],
+  // Exposes the deployment id to the Worker. The page cache keys on it, so a
+  // deploy invalidates the rendered HTML instead of serving the previous copy
+  // until s-maxage runs out.
+  "version_metadata": { "binding": "CF_VERSION" },
+
   "assets": {
     // The Expo web export. The Worker runs first for every request and either
     // handles /api/* or hands off to ASSETS (SPA fallback for client routes).

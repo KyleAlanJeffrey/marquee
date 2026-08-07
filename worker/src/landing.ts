@@ -48,7 +48,7 @@ const NAME = 'Marquee';
 const TITLE = 'Concerts Near You — Every Upcoming Show in One Place · Marquee';
 // Kept inside DESC_MAX — a snippet that overflows is copy no search result shows.
 export const DESCRIPTION =
-  'Find concerts near you: upcoming shows, tour dates and tickets from Ticketmaster, SeatGeek and Bandsintown in one listing. No account needed to browse.';
+  'Find concerts near you: upcoming shows, tour dates and tickets in one listing, with the duplicates merged away. No account needed to browse.';
 
 /** How far ahead the page counts, matching the app's own horizon. */
 const HORIZON_DAYS = 365;
@@ -249,7 +249,7 @@ const townHref = (c: LandingData['cities'][number]) => `/concerts/${c.slug}`;
 const FAQ: Faq[] = [
   {
     q: 'How does Marquee find concerts near me?',
-    a: 'It reads live listings from Ticketmaster, SeatGeek and Bandsintown, then merges them: the same show sold in three places becomes one entry, and a venue that all three name slightly differently becomes one room. You give it a point and a radius, and it answers with what is actually on.',
+    a: 'It reads live ticket listings continuously and merges them: the same show on sale in three places becomes one entry, and a venue spelled differently in each of them becomes one room. You give it a point and a radius, and it answers with what is actually on.',
   },
   {
     q: 'Do I need an account?',
@@ -307,7 +307,7 @@ export function landingHtml(origin: string, d: LandingData): string {
         'Follow artists and venues',
         'Save shows for later',
         'Map of nearby shows',
-        'Listings merged from Ticketmaster, SeatGeek and Bandsintown',
+        'Duplicate listings merged into one entry per show',
       ],
     },
     faqJsonLd(FAQ),
@@ -380,7 +380,7 @@ export function landingHtml(origin: string, d: LandingData): string {
     <div class="rise">
       <p class="eyebrow">No account needed to browse</p>
       <h1>Every concert<br>near you, <span class="lit">in one place.</span></h1>
-      <p class="lede">Marquee pulls the listings from Ticketmaster, SeatGeek and Bandsintown, throws away the duplicates, and shows you what is actually on — tonight, this weekend, or any time in the next year.</p>
+      <p class="lede">Marquee pulls the listings together, throws away the duplicates, and shows you what is actually on — tonight, this weekend, or any time in the next year.</p>
       <div class="buttons">
         <a class="btn" href="/explore">Open the app</a>
         <a class="btn ghost" href="/map">See the map</a>

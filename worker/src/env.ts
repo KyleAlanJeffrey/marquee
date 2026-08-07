@@ -46,6 +46,18 @@ export type CoreEnv = {
 export type Env = CoreEnv & {
   ASSETS: Fetcher;
   /**
+   * Which deployment is serving. Bound by `version_metadata` in wrangler.jsonc.
+   *
+   * The rendered pages are edge-cached, and nothing about a deploy tells that
+   * cache its contents just became wrong — so the version id goes in the cache
+   * key and a deploy starts a fresh namespace. Learned by shipping a copy
+   * change and watching the old copy keep going out for half an hour.
+   *
+   * Optional so a local `wrangler dev` without the binding still runs; the key
+   * just falls back to an unversioned one there.
+   */
+  CF_VERSION?: { id: string; tag?: string; timestamp?: string };
+  /**
    * Clerk's secret key — the one that makes accounts exist at all.
    *
    * Required, not optional. Unset used to mean "everybody is signed out", which

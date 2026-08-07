@@ -25,7 +25,7 @@ const NAME = 'Marquee';
  * links people have already shared. The `?v` is what makes them fetch again, and
  * it has to be bumped whenever public/og-image.png is rebuilt.
  */
-export const OG_IMAGE = '/og-image.png?v=3';
+export const OG_IMAGE = '/og-image.png?v=4';
 
 // --- text -------------------------------------------------------------------
 
@@ -162,7 +162,7 @@ export function pageFooter(extra = ''): string {
     <a href="/privacy">Privacy &amp; contact</a>
   </nav>
   ${extra}
-  <p>Marquee is a free live-music radar built by Kyle Jeffrey. Listings come from Ticketmaster, SeatGeek and Bandsintown; artist detail from Spotify, Deezer and Wikipedia. Tickets are sold by those sites, not by us.</p>
+  <p>Marquee is a free live-music radar built by Kyle Jeffrey. Tickets are sold by the sites we link out to, never by us.</p>
 </footer>`;
 }
 

@@ -483,8 +483,8 @@ function cityFaq(d: CityData): Faq[] {
         : `The venue list above is generated from what is on sale in ${where} right now.`,
     },
     {
-      q: `Where do these ${where} listings come from?`,
-      a: 'Ticketmaster, SeatGeek and Bandsintown, read live and merged: the same show sold in three places becomes one entry, and a room all three name slightly differently becomes one venue. Tickets are bought from whoever is selling them — Marquee links straight out and takes nothing in between.',
+      q: `Why is each ${where} show listed only once?`,
+      a: 'Because a show on sale in three places is still one night out. Marquee merges them into a single entry, and a room spelled differently by each seller becomes one venue. Tickets are bought from whoever is selling them — Marquee links straight out and takes nothing in between.',
     },
     {
       q: `Can I get told when an artist announces a ${where} date?`,
@@ -620,7 +620,7 @@ export function cityHtml(origin: string, d: CityData): string {
         <a href="/concerts">Concerts</a><span aria-hidden="true">/</span>${esc(town.label)}
       </nav>
       <h1>Concerts in <span class="lit">${esc(town.label)}</span></h1>
-      <p class="lede">Every upcoming show in ${esc(town.label)}, by date — ${shows} of them across ${num(town.venues)} ${plural(town.venues, 'venue', 'venues')}, pulled from Ticketmaster, SeatGeek and Bandsintown and merged so a show sold in three places is listed once.</p>
+      <p class="lede">Every upcoming show in ${esc(town.label)}, by date — ${shows} of them across ${num(town.venues)} ${plural(town.venues, 'venue', 'venues')}, merged so a show on sale in three places is listed once.</p>
       <div class="buttons">
         <a class="btn" href="${esc(feedHref)}">Open ${esc(town.city)} in the app</a>
         <a class="btn ghost" href="/map">See the map</a>
