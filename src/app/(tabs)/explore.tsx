@@ -22,7 +22,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { discoverEvents, refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
 import { useNearbyEvents, useNearbyVenues } from '@/hooks/queries';
-import { getCurrentCoords, reverseGeocodeLabel } from '@/lib/location';
+import { getCoordsFast, reverseGeocodeLabel } from '@/lib/location';
 import { RADIUS_OPTIONS, usePrefs } from '@/lib/prefs-store';
 import { syncConcertReminders } from '@/lib/reminders';
 import type { Coords, NearbyEvent } from '@/lib/types';
@@ -33,15 +33,21 @@ const eventRef = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.arti
 export default function ExploreScreen() {
   const theme = useTheme();
   const { follows, isFollowing, toggle } = useFollows();
-  const { radiusMiles, setRadiusMiles, remindersEnabled } = usePrefs();
+  const { radiusMiles, setRadiusMiles, remindersEnabled, ready: prefsReady } = usePrefs();
 
   const [coords, setCoords] = useState<Coords | null>(null);
   const [label, setLabel] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
   const [genre, setGenre] = useState<string>(ALL);
 
-  const events = useNearbyEvents(coords, radiusMiles);
-  const venues = useNearbyVenues(coords, radiusMiles);
+  // Held back until the account's stored radius has landed. `usePrefs` answers
+  // with the 50-mile default while `/me` is still in flight, so firing on that
+  // meant a user whose radius is 25 fetched the whole 50-mile feed, then threw
+  // it away and fetched again when the real number arrived — twice the work for
+  // a first screen they only see once. Signed out, `ready` is true immediately.
+  const feedCoords = prefsReady ? coords : null;
+  const events = useNearbyEvents(feedCoords, radiusMiles);
+  const venues = useNearbyVenues(feedCoords, radiusMiles);
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const refreshedFollows = useRef(false);
@@ -50,7 +56,14 @@ export default function ExploreScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const c = await getCurrentCoords();
+        // The cached fix comes back first so the feed can start loading; the
+        // precise one re-centres it a moment later if the device has moved
+        // enough to matter. Explore used to block its entire render — spinner
+        // and all — on the GPS lookup before it could so much as ask the
+        // server for shows.
+        const c = await getCoordsFast((precise) => {
+          if (!cancelled) setCoords(precise);
+        });
         if (cancelled) return;
         if (!c) {
           setDenied(true);
@@ -79,15 +92,15 @@ export default function ExploreScreen() {
 
   // Pull fresh nearby shows for this area (server throttles per cell).
   useEffect(() => {
-    if (!coords) return;
+    if (!feedCoords) return;
     let cancelled = false;
-    discoverEvents(coords, radiusMiles).then((n) => {
+    discoverEvents(feedCoords, radiusMiles).then((n) => {
       if (!cancelled && n > 0) queryClient.invalidateQueries({ queryKey: ['nearby-events'] });
     });
     return () => {
       cancelled = true;
     };
-  }, [coords, radiusMiles, queryClient]);
+  }, [feedCoords, radiusMiles, queryClient]);
 
   const allEvents = useMemo(() => events.data?.items ?? [], [events.data]);
 
@@ -205,7 +218,7 @@ export default function ExploreScreen() {
           title="Location needed"
           message="Allow location access in system settings so Marquee can light up the shows around you."
         />
-      ) : !coords || events.isLoading ? (
+      ) : !coords || !prefsReady || events.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={theme.primary} />
           <ThemedText type="label" style={{ color: theme.textTertiary, marginTop: Spacing.two }}>

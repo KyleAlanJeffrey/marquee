@@ -357,17 +357,59 @@ after all three**, and the second crawl of the same artists ingested **0** —
 every existing show matched rather than duplicated, which is the behaviour the
 arm exists to protect.
 
-### Pass 4 — the client (items 6–9)
+### Pass 4 — the client (items 6–9) — **landed 2026-08-07**
 
-- [ ] **6. `immutable` on hashed assets; drop the font gate.** Baselines:
-  776 KB gzip bundle at `max-age=0, must-revalidate`; nothing paints until
-  ~395 KB of TTFs land. — wrangler + [_layout.tsx:79](src/app/_layout.tsx:79)
-- [ ] **7. Explore: last-known coords, `limit` 40, gate on prefs.** Baseline:
-  blocks on GPS, then 339 KB to draw three cards, twice. —
-  [explore.tsx](src/app/(tabs)/explore.tsx)
-- [ ] **8. Delete the `profile.isSuccess` gate** — three queries waiting on a
-  fourth they don't need. —
-  [person-profile.tsx:260](src/components/person-profile.tsx:260)
-- [ ] **9. `anonymous: true` on public catalogue reads** — stops the public
-  catalogue serializing behind a Clerk token. —
-  [queries.ts](src/hooks/queries.ts)
+- [x] **6a. `immutable` on hashed assets.** `public, max-age=0, must-revalidate`
+  → `public, max-age=31536000, immutable`, verified live on the bundle. The
+  match insists on 32 hex digits so `favicon.ico`, `manifest.json` and
+  `og-image.png` stay mutable — verified they still report `max-age=0`.
+- [x] **6b. Killed a 307 on every font** — found while measuring, in neither
+  audit. Expo writes scoped-package paths with a literal `@`; the asset server
+  redirects those to the percent-encoded spelling, so all six
+  `<link rel=preload>` tags spent a round trip learning where to go (0.37s for
+  the redirect, 0.49s for the fetch after it). Now `redirects=0`.
+- [x] **6c. The font gate stays — the audit's premise was wrong.** It claimed
+  nothing paints until ~395 KB of TTFs load *after* the bundle parses. The
+  export already emits `rel="preload"` for all six and `defer`s the bundle, so
+  they download in parallel from HTML parse. Trading a distinctive typeface for
+  a FOUT would have bought nothing.
+- [x] **7a. Explore no longer blocks on a GPS fix** — `getCoordsFast` returns
+  the OS's last known position (≤5 min old) so the feed starts loading, then
+  re-centres when the precise fix lands.
+- [x] **7b. The radius no longer flips mid-flight** — the queries and the
+  ingest call are gated on `prefs.ready`, so a user whose stored radius is 25
+  stops fetching the 50-mile feed first and throwing it away.
+- [ ] **7c. `limit: 400` — deliberately not changed. Needs a decision.** See
+  below.
+- [x] **8. Deleted the `profile.isSuccess` gate.** All three queries are
+  `/users/:key/…` and take the route param the component already had, so it was
+  a whole round trip spent learning nothing. Two RTTs → one.
+- [x] **9. Ten public catalogue reads marked `anonymous`** — artists, events,
+  venues. Checked route by route that none reads identity rather than judging
+  by the path: `/events/:id/reviews` and `/events/:id/rsvps` look public and
+  aren't (`likedByMe`, `followedByMe`), so they keep their token.
+
+**Also fixed here, and it was my own doing:** `npm run deploy` was bare
+`wrangler deploy`, and `dist/` is gitignored — so it published whatever web
+build happened to be on the deploying machine. Mine was from Jul 31 with 59
+source files newer, and I pushed it over production several times before
+noticing the served tab bar read "Saved | Log" instead of "My Shows |
+Activity". `deploy` now runs `build` first.
+
+#### 7c: why `limit: 400` is still 400
+
+`useNearbyEvents` is not Explore's alone — [map.tsx](src/app/(tabs)/map.tsx),
+[map.web.tsx](src/app/(tabs)/map.web.tsx) and
+[event-map-list.tsx](src/components/event-map-list.tsx) share the same query
+key, and a map plotting pins genuinely wants the whole radius. Dropping the
+shared limit to 40 would gut pin coverage; giving Explore its own limit splits
+the cache entry, so a user who opens Explore and then the map fetches twice.
+
+Explore also derives its genre chips from the full page
+([explore.tsx](src/app/(tabs)/explore.tsx)), so a short page means fewer and
+more skewed genres — a visible product change, not a free win.
+
+Worth knowing before deciding: after pass 1 the payload is no longer the
+expensive part. `limit=1` and `limit=400` now differ by roughly 0.3s, where the
+fixed cost used to be ~1.0s. The real fix is server-side genre facets plus a
+small page, which is a feature, not a tune-up.
