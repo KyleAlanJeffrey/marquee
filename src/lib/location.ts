@@ -41,27 +41,44 @@ export async function getCoordsFast(onPrecise?: (c: Coords) => void): Promise<Co
   const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== 'granted') return null;
 
-  const precise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then(
-    (pos) => ({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-  );
+  // Settled rather than left raw, and *immediately*: the cached lookup below is
+  // awaited, so a precise fix that fails during that await would otherwise be an
+  // unhandled rejection with nothing attached yet. The outcome is kept so the
+  // no-cache path can still rethrow it.
+  const precise = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+    .then((pos) => ({ ok: true as const, coords: { lat: pos.coords.latitude, lng: pos.coords.longitude } }))
+    .catch((err: unknown) => ({ ok: false as const, err }));
 
   let cached: Coords | null = null;
   try {
     const last = await Location.getLastKnownPositionAsync({ maxAge: LAST_KNOWN_MAX_AGE_MS });
     if (last) cached = { lat: last.coords.latitude, lng: last.coords.longitude };
   } catch (err) {
-    // Never fatal: this is the shortcut, and the precise lookup below is the
-    // answer either way.
+    // Never fatal: this is the shortcut, and the precise lookup is the answer
+    // either way.
     console.warn('last known position unavailable:', err);
   }
 
-  if (!cached) return precise;
+  if (!cached) {
+    const settled = await precise;
+    if (!settled.ok) throw settled.err;
+    return settled.coords;
+  }
 
-  // Somebody has to consume the precise promise or a rejection goes unhandled,
-  // and the caller only opted in to `onPrecise` for the coordinates.
-  precise
-    .then((c) => onPrecise?.(c))
-    .catch((err) => console.warn('precise location lookup failed:', err));
+  // Deferred past this function's own return, and via a task rather than a
+  // microtask so the ordering doesn't depend on counting `await` hops.
+  //
+  // If the precise fix has already resolved, a bare `.then` here can run before
+  // the caller's `await getCoordsFast(...)` continuation — `onPrecise` would set
+  // the good coordinates and the caller would then overwrite them with the
+  // cached ones it is still holding, pinning the feed to the stale position for
+  // the rest of the session. A timeout cannot run until the microtask queue,
+  // caller's continuation included, has drained.
+  setTimeout(async () => {
+    const settled = await precise;
+    if (settled.ok) onPrecise?.(settled.coords);
+    else console.warn('precise location lookup failed:', settled.err);
+  }, 0);
   return cached;
 }
 

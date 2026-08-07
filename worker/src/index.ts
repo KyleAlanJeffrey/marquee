@@ -135,8 +135,15 @@ app.get('/:file{sitemap-[a-z0-9-]+\\.xml}', async (c) => {
  * The pages the Worker renders itself, as real HTML rather than the SPA shell.
  * Registered before the asset handler so they win over the export's SPA fallback.
  *
- * Cheap to regenerate and never personalised, so the edge holds them and serves
- * the stale copy while it refreshes.
+ * Cheap to regenerate and never personalised, so the edge holds a copy.
+ *
+ * Who honours which directive, because they are not the same audience:
+ * `max-age=300` is the reader's own browser, `s-maxage=1800` is the stored TTL
+ * at the edge (see `cachedPage` — the Cache API is what makes it real), and
+ * `stale-while-revalidate` is browsers only. The Workers Cache API does not
+ * serve stale and refresh behind your back; `match` returns fresh entries or
+ * nothing, so the first request after 30 minutes re-renders and pays for it.
+ * Serving stale from the edge would mean tracking freshness ourselves.
  */
 const PAGE_CACHE = 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400';
 

@@ -54,6 +54,21 @@ export default function ExploreScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    // Which fix a reverse geocode belongs to. The cached lookup starts first but
+    // can land second, and the town name must follow the newest coordinates, not
+    // the last response to arrive.
+    let labelGeneration = 0;
+    const nameTown = async (c: Coords) => {
+      const mine = ++labelGeneration;
+      try {
+        const town = await reverseGeocodeLabel(c);
+        // The label is decoration — a failed reverse geocode must not look like
+        // a denied permission now that we have real coordinates.
+        if (!cancelled && mine === labelGeneration) setLabel(town);
+      } catch (err) {
+        console.warn('reverse geocode failed:', err);
+      }
+    };
     (async () => {
       try {
         // The cached fix comes back first so the feed can start loading; the
@@ -62,7 +77,11 @@ export default function ExploreScreen() {
         // and all — on the GPS lookup before it could so much as ask the
         // server for shows.
         const c = await getCoordsFast((precise) => {
-          if (!cancelled) setCoords(precise);
+          if (cancelled) return;
+          setCoords(precise);
+          // The cached fix may have been a town over; the name follows the
+          // coordinates it describes.
+          void nameTown(precise);
         });
         if (cancelled) return;
         if (!c) {
@@ -70,14 +89,7 @@ export default function ExploreScreen() {
           return;
         }
         setCoords(c);
-        // The label is decoration — a failed reverse geocode must not look like
-        // a denied permission now that we have real coordinates.
-        try {
-          const label = await reverseGeocodeLabel(c);
-          if (!cancelled) setLabel(label);
-        } catch (err) {
-          console.warn('reverse geocode failed:', err);
-        }
+        await nameTown(c);
       } catch (err) {
         // Location services can throw (disabled, timeout) — treat it like a
         // refusal so the spinner doesn't hang forever.

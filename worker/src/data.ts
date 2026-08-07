@@ -331,6 +331,11 @@ export async function nearbyEvents(
     const totalRow = await db
       .select({ n: sql<number>`count(*)` })
       .from(events)
+      // The same joins as the page above, artists included. It is count-neutral
+      // today — production has zero null and zero orphaned artist ids — but the
+      // two paths produce the same field and disagreeing about *how* is how they
+      // quietly drift apart the day that stops being true.
+      .innerJoin(artists, eq(artists.id, events.artistId))
       .innerJoin(venues, eq(venues.id, events.venueId))
       .innerJoin(canon, eq(canon.id, sql`coalesce(${venues.canonicalVenueId}, ${venues.id})`))
       .where(where)
@@ -1646,6 +1651,25 @@ const MATCH_CLUSTER_MAX = 30;
  */
 const INDEXED_SOURCE_IDS = new Set(['ticketmaster', 'bandsintown', 'seatgeek', 'dice']);
 
+/**
+ * The JSON path for a source's id, as SQL — inlined, not bound.
+ *
+ * This has to be a literal in the statement text. SQLite matches an expression
+ * index by comparing expression trees, and a bound parameter is not the same
+ * tree as `'$."ticketmaster"'` however identical the value turns out to be: the
+ * planner decides before the value exists. Proven rather than assumed — the two
+ * forms against the same table and index give:
+ *
+ *     json_extract(sources, '$."ticketmaster"') = ?  →  SEARCH USING INDEX
+ *     json_extract(sources, ?)                  = ?  →  SCAN events
+ *
+ * Inlining a value into SQL is normally how injection happens, so the only
+ * sources that get here are the ones on the `INDEXED_SOURCE_IDS` allowlist,
+ * re-checked for shape at the call site. `sourceEventId` — the part that comes
+ * from a third-party feed — stays a bound parameter.
+ */
+const sourceIdPath = (source: string) => sql.raw(`'$."${source}"'`);
+
 async function findExistingShows(
   db: DB,
   keys: {
@@ -1693,12 +1717,18 @@ async function findExistingShows(
   }
 
   const stmts = keys.map((k) => {
+    // Belt and braces before anything reaches `sql.raw`: on the allowlist *and*
+    // a plain identifier. A source name is ours, not a feed's, but that is a
+    // property of today's callers rather than of this function.
+    const indexable = INDEXED_SOURCE_IDS.has(k.source) && /^[a-z0-9_]+$/.test(k.source);
     const clauses = [
       and(eq(events.source, k.source), eq(events.sourceEventId, k.sourceEventId)),
-      // Indexed per source — see INDEXED_SOURCE_IDS. The path quoting here has
-      // to stay character-for-character identical to the index's, or the
-      // planner quietly falls back to a scan.
-      sql`json_extract(${events.sources}, ${'$."' + k.source + '"'}) = ${k.sourceEventId}`,
+      // The path is inlined for indexable sources and bound for the rest — see
+      // `sourceIdPath`. Bound, this arm cannot use the index and the scan it
+      // falls back to poisons the whole OR.
+      indexable
+        ? sql`json_extract(${events.sources}, ${sourceIdPath(k.source)}) = ${k.sourceEventId}`
+        : sql`json_extract(${events.sources}, ${'$."' + k.source + '"'}) = ${k.sourceEventId}`,
     ];
     const t = new Date(k.startsAt).getTime();
     const cluster = k.venueId ? (clusters.get(k.venueId) ?? [k.venueId]) : [];

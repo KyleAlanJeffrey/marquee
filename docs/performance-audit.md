@@ -351,6 +351,33 @@ the JSON path quoting, or the planner silently falls back to the scan — so
 `INDEXED_SOURCE_IDS` in `data.ts` warns when a source has no index. The failure
 mode is slow, not broken, which is exactly the kind that survives review.
 
+> **Correction — the first version of this shipped without working.** The
+> measurement above was taken with the JSON path written as a **literal**, but
+> Drizzle binds it as a **parameter**, and SQLite matches an expression index by
+> comparing expression trees: a `?` is not the same tree as
+> `'$."ticketmaster"'`, because the planner decides before the value exists.
+> Same table, same index:
+>
+> ```
+> json_extract(sources, '$."ticketmaster"') = ?   →  SEARCH USING INDEX
+> json_extract(sources, ?)                  = ?   →  SCAN events
+> ```
+>
+> So the index existed and the query ignored it. Caught by CodeRabbit, confirmed
+> against a local SQLite of the same version, and fixed by inlining the path via
+> `sql.raw` for allowlisted sources only — `sourceEventId`, the part that comes
+> from a third-party feed, stays bound. The generated SQL was then read back out
+> of Drizzle and explained against production:
+>
+> ```
+> MULTI-INDEX OR
+>   INDEX 1  SEARCH events USING INDEX sqlite_autoindex_events_2 (source=? AND source_event_id=?)
+>   INDEX 2  SEARCH events USING INDEX events_sources_ticketmaster_idx (<expr>=?)
+> ```
+>
+> The lesson is narrower than "measure": I measured, and the measurement was of
+> a query I had written by hand rather than the one the ORM emits.
+
 **Verified against production, not just asserted:** three crawls of 8 artists
 through the live admin endpoint. Duplicate groups stayed at **246 before and
 after all three**, and the second crawl of the same artists ingested **0** —
@@ -413,3 +440,21 @@ Worth knowing before deciding: after pass 1 the payload is no longer the
 expensive part. `limit=1` and `limit=400` now differ by roughly 0.3s, where the
 fixed cost used to be ~1.0s. The real fix is server-side genre facets plus a
 small page, which is a feature, not a tune-up.
+
+---
+
+## CodeRabbit pass (base `647bec8`)
+
+Six findings, all acted on.
+
+| severity | where | outcome |
+|---|---|---|
+| major | `data.ts` — JSON path bound, not inlined | **Fixed.** The pass-3 index wasn't being used at all; see the correction above. |
+| major | `location.ts` — `onPrecise` can fire before the function returns | **Fixed.** A resolved precise fix could call back in a microtask that beat the caller's `await`, so the caller then overwrote the good coordinates with the cached ones and pinned the feed to the stale position. Deferred with a task, not a microtask, so the ordering doesn't rest on counting `await` hops. |
+| major | `index.ts` — `stale-while-revalidate` isn't implemented | **Comment fixed, header kept.** Browsers do honour SWR, so the directive earns its place; the doc comment claimed the *edge* served stale and refreshed behind it, which the Workers Cache API doesn't do. `match` returns fresh or nothing. |
+| minor | `location.ts` — unhandled rejection during the cached lookup | **Fixed.** The precise promise is settled to a result object immediately, so a failure while `getLastKnownPositionAsync` is awaited has a handler; the no-cache path still rethrows. |
+| minor | `data.ts` — fallback count missing the artists join | **Fixed.** Count-neutral today (zero orphans), but two paths producing the same field shouldn't compute it differently. |
+| minor | `explore.tsx` — label not refreshed on the precise fix | **Fixed,** with a generation counter so a slow reverse-geocode of the cached position can't overwrite the newer one. |
+
+Re-verified after the fixes: two more crawls of 8 artists, duplicate groups held
+at **247**, and the first ingested **0** — everything matched.
