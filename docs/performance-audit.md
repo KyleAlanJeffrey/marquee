@@ -291,14 +291,39 @@ Correctness re-checked on the live endpoint after deploy: `total` matches D1,
 and both empty-page paths — past the end at `offset 9000`, and an empty radius
 at `offset 0` — return the right totals.
 
-### Pass 2 — edge caching (items 3, 5)
+### Pass 2 — edge caching (items 3, 5) — **landed 2026-08-07**
 
-- [ ] **3. Cache API** on `/`, `/privacy`, `/concerts/:slug`, with
-  `ctx.waitUntil` revalidation. Baselines: landing 1.93–3.32s, city hub
-  2.09–2.24s, both with no `cf-cache-status` at all. —
-  [index.ts:147](worker/src/index.ts:147)
-- [ ] **5. `cors({ maxAge: 86400 })`** — the hot reads are all POST, so they
-  preflight every time. — [index.ts:26](worker/src/index.ts:26)
+- [x] **3. Cache API** on `/`, `/privacy`, `/concerts/:slug`
+  ([index.ts](worker/src/index.ts)). The cache is checked *before* the renderer
+  runs, so a hit on a city page skips all four D1 queries including the
+  158,625-row `allTowns`. `cf-cache-status: HIT` now appears on these pages,
+  where before there was no such header at all.
+- [x] **5. `cors({ maxAge: 86400 })`** — verified live:
+  `access-control-max-age: 86400` on an `OPTIONS /api/nearby` preflight.
+
+| | before | cold (MISS) | warm (HIT) |
+|---|---|---|---|
+| `/` | 1.93–3.32s | 2.64s | **0.39–0.55s** |
+| `/concerts/new-york-ny` | 2.09–2.24s | 2.04–2.12s | **0.28–0.46s** |
+| `/privacy` | 0.30s | 0.30s | 0.38s (no D1 either way) |
+
+Verified after deploy: cached bodies are byte-identical across hits (42,538 and
+79,292 bytes, matching the pre-change measurements), canonicals and `<h1>` are
+intact, a bogus slug still 404s and is *not* stored, `/concerts` still 301s, and
+event deep links still get their two JSON-LD blocks injected.
+
+Two deliberate choices worth knowing:
+
+- **The key drops the query string.** None of these three pages reads one, so
+  keying on the full URL would mint a fresh entry per `?utm_source=…` and miss
+  on all of them.
+- **Off-brand hosts bypass entirely.** The `*.workers.dev` copy writes different
+  canonicals and carries a `noindex` stamp, so sharing entries with the real
+  domain would leak one into the other in whichever direction raced first.
+
+Not done here: purging on ingest. A new show can take up to `s-maxage` (30 min)
+to appear on `/` or a city page. That is what the header always claimed, and
+IndexNow still pings the crawler immediately.
 
 ### Pass 3 — the crawl (item 4)
 

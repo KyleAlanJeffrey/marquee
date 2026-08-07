@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 
 import type { AppEnv, Env } from './env';
@@ -23,7 +23,11 @@ import { injectSeo, pageSeo, robotsTxt, robotsTxtOffBrand, sitemapChild, sitemap
 // build), which include an SPA fallback for client-routed deep links.
 const api = new Hono<AppEnv>().basePath('/api');
 
-api.use('*', cors());
+// The hot reads — /nearby, /following, /venues/nearby, /events/by-ids — are all
+// POST with a JSON body, which always triggers a CORS preflight. Without a
+// max-age the browser re-asks before every one of them, doubling the round trips on
+// exactly the endpoints that can least afford it. A day is the Chromium cap.
+api.use('*', cors({ maxAge: 86400 }));
 api.get('/', (c) => c.json({ ok: true, service: 'marquee' }));
 
 api.route('/', feed); // /nearby, /discover-events, /refresh-artist-events
@@ -137,6 +141,78 @@ app.get('/:file{sitemap-[a-z0-9-]+\\.xml}', async (c) => {
 const PAGE_CACHE = 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400';
 
 /**
+ * Where a rendered page is keyed in the edge cache.
+ *
+ * Always the canonical origin plus the path, and deliberately **not** the query
+ * string: none of these three pages reads one, so keying on the full URL would
+ * mint a separate entry for every `?utm_source=…` a share adds and miss on all
+ * of them.
+ */
+const pageCacheKey = (c: Context<AppEnv>) =>
+  new Request(new URL(new URL(c.req.url).pathname, siteOrigin(c)).toString(), { method: 'GET' });
+
+/**
+ * Serve a rendered page through the edge cache.
+ *
+ * `PAGE_CACHE` was already on these responses and was doing nothing: Cloudflare
+ * does not cache a Worker's HTML by default, whatever `s-maxage` says, so every
+ * hit paid the full render. Measured before this: `/` 1.93–3.32s and five D1
+ * queries, `/concerts/:slug` 2.09–2.24s and four — one of which, `allTowns`,
+ * reads 158,625 rows on its own — and neither response carried a
+ * `cf-cache-status` header at all, while static assets showed `HIT`.
+ *
+ * The Cache API is the part that was missing. `s-maxage=1800` now actually
+ * means something: it's the stored TTL, while browsers keep their own copy for
+ * `max-age=300`.
+ *
+ * Off-brand hosts (the `*.workers.dev` deploy URL) neither read nor write it.
+ * Their HTML differs — canonicals are written from the requested origin, and
+ * the noindex middleware above stamps them — so sharing entries with the real
+ * domain would leak one into the other in whichever direction raced first.
+ *
+ * `X-Marquee-Cache` is here to make the thing verifiable from outside; the
+ * whole finding was that a caching header can lie about caching happening.
+ */
+async function cachedPage(
+  c: Context<AppEnv>,
+  // A renderer may answer with a `Response` instead of HTML — a 404 for a slug
+  // no town claims, a 301 to a spelling we still publish. Those are returned
+  // untouched and never stored: the cache is for pages, and a redirect held for
+  // half an hour is a redirect that outlives the rename that caused it.
+  render: () => string | Response | Promise<string | Response>,
+) {
+  const shareable = !offBrandHost(c);
+  const key = shareable ? pageCacheKey(c) : null;
+
+  if (key) {
+    // Before the renderer, which is the entire point: a hit on `/concerts/:slug`
+    // skips four D1 queries, one of which reads 158,625 rows.
+    const hit = await caches.default.match(key);
+    // Copied rather than returned as-is: a response handed back by the cache
+    // has immutable headers, and the middleware above still wants to stamp it.
+    if (hit) {
+      const res = new Response(hit.body, hit);
+      res.headers.set('X-Marquee-Cache', 'HIT');
+      return res;
+    }
+  }
+
+  const rendered = await render();
+  if (rendered instanceof Response) return rendered;
+
+  const res = c.html(rendered, 200, {
+    'Cache-Control': PAGE_CACHE,
+    'X-Marquee-Cache': shareable ? 'MISS' : 'BYPASS',
+  });
+  if (key) {
+    // The clone goes to the cache and the original to the reader, so filling
+    // the cache never delays the response that missed.
+    c.executionCtx.waitUntil(caches.default.put(key, res.clone()));
+  }
+  return res;
+}
+
+/**
  * The landing page, at the address that actually collects links.
  *
  * `/` used to be the app's feed: every inbound link, every share and every crawl
@@ -144,31 +220,29 @@ const PAGE_CACHE = 'public, max-age=300, s-maxage=1800, stale-while-revalidate=8
  * words of listings sat at `/concerts` earning its own way from nothing. So they
  * swapped — the feed is `/explore` now, and this is the front door.
  */
-app.get('/', async (c) =>
-  c.html(await landingPage(c.env, siteOrigin(c)), 200, { 'Cache-Control': PAGE_CACHE }),
-);
+app.get('/', (c) => cachedPage(c, () => landingPage(c.env, siteOrigin(c))));
 
 /** Where the landing page used to live. Its links and its indexing belong to `/`. */
 app.get('/concerts', (c) => c.redirect('/', 301));
 
 // The privacy policy and published contact — the URL three store forms ask for.
-app.get('/privacy', (c) =>
-  c.html(privacyPage(siteOrigin(c)), 200, { 'Cache-Control': PAGE_CACHE }),
-);
+app.get('/privacy', (c) => cachedPage(c, () => privacyPage(siteOrigin(c))));
 
-app.get('/concerts/:slug', async (c) => {
-  const found = await cityPage(c.env, siteOrigin(c), c.req.param('slug'));
-  // A slug no town answers to is a 404, not the SPA shell with a 200. Soft 404s
-  // are the fastest way to teach a crawler that made-up URLs on this site work.
-  if (!found) return c.notFound();
-  // A spelling we no longer publish — `/concerts/london-gb` — is a URL already in
-  // sitemaps and IndexNow submissions. Send it to the one we do, permanently, so the
-  // ranking follows rather than splitting.
-  if (found.kind === 'moved') {
-    return c.redirect(`/concerts/${found.slug}`, 301);
-  }
-  return c.html(found.html, 200, { 'Cache-Control': PAGE_CACHE });
-});
+app.get('/concerts/:slug', (c) =>
+  cachedPage(c, async () => {
+    const found = await cityPage(c.env, siteOrigin(c), c.req.param('slug'));
+    // A slug no town answers to is a 404, not the SPA shell with a 200. Soft 404s
+    // are the fastest way to teach a crawler that made-up URLs on this site work.
+    if (!found) return c.notFound();
+    // A spelling we no longer publish — `/concerts/london-gb` — is a URL already in
+    // sitemaps and IndexNow submissions. Send it to the one we do, permanently, so the
+    // ranking follows rather than splitting.
+    if (found.kind === 'moved') {
+      return c.redirect(`/concerts/${found.slug}`, 301);
+    }
+    return found.html;
+  }),
+);
 
 // Static assets. Every HTML response is the same client-rendered shell, so its
 // <head> gets rewritten for the requested route before it goes out (seo.ts).
