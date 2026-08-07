@@ -12,6 +12,7 @@ import { FeaturedCard } from '@/components/featured-card';
 import { PageMeta } from '@/components/page-meta';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
 import { SectionTitle } from '@/components/section-title';
+import { SpotifySuggestions } from '@/components/spotify-suggestions';
 import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
@@ -20,6 +21,7 @@ import { VenueMap, type MapPin } from '@/components/venue-map';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { discoverEvents, refreshArtistEvents } from '@/lib/discovery';
+import { useAuth } from '@/lib/auth';
 import { useFollows } from '@/lib/follows-store';
 import { useNearbyEvents, useNearbyVenues } from '@/hooks/queries';
 import { getCoordsFast, reverseGeocodeLabel } from '@/lib/location';
@@ -32,6 +34,7 @@ const eventRef = (e: NearbyEvent) => ({ artistId: e.artist_id, spotifyId: e.arti
 
 export default function ExploreScreen() {
   const theme = useTheme();
+  const { signedIn } = useAuth();
   const { follows, isFollowing, toggle } = useFollows();
   const { radiusMiles, setRadiusMiles, remindersEnabled, ready: prefsReady } = usePrefs();
 
@@ -378,7 +381,12 @@ export default function ExploreScreen() {
 
               {/* Upcoming shows in range — not weekend-filtered, so don't claim to be */}
               <SectionTitle title="Up Next Near You" badge="Hot" accent />
-              {featured && (
+              {/* Acts from your own Spotify that have dates — above the feed,
+              because it's the most personal thing on the screen, and it hides
+              itself entirely when there's nothing to say. */}
+          <SpotifySuggestions signedIn={signedIn} variant="rail" />
+
+          {featured && (
                 <Animated.View entering={FadeInDown.duration(420)} style={{ marginBottom: Spacing.three }}>
                   <FeaturedCard
                     event={featured}

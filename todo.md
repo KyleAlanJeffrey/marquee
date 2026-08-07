@@ -642,14 +642,21 @@ What's left is the residuals:
   artists with upcoming shows (15%), so an id-only join would have missed 85% of
   what's actually on sale; this repairs the catalogue as people use it, and the
   notability score reads that same column. Residuals:
-  - [ ] **Kyle: Spotify dashboard** — add Clerk's callback as a redirect URI, and
-    allowlist the accounts that should be able to link while in dev mode.
+  - [ ] **Kyle: Spotify dashboard** — add both redirect URIs (they're the Clerk
+    Frontend API domains, decoded from the publishable keys) and allowlist the
+    accounts that should be able to link while in dev mode:
+    - production `https://clerk.marquee.rocks/v1/oauth_callback`
+    - dev `https://kind-redfish-41.clerk.accounts.dev/v1/oauth_callback`
   - [ ] **Kyle: Clerk dashboard** — enable the Spotify social connection with
     custom credentials and scopes `user-follow-read` + `user-top-read`. No code
     change: the sign-in screen offers whatever the instance has enabled.
   - [ ] Verify end to end once linked — I can reach every unlinked path (signed
     out and a bogus token both return `{linked:false, items:[]}` at 200) but not
     a real linked account.
+  - [ ] The connect card on Explore has no dismiss, so a signed-in account that
+    never links sees it on the home screen forever. Fine at seven users; wants
+    either a persisted dismissal or a rule like "only when you follow nobody"
+    before the user base grows.
   - [ ] The name fallback only catches case differences, not diacritics or
     punctuation: "MOLLY TUTTLE" matches, "Sigur Rós" vs "Sigur Ros" doesn't,
     because `artistNameKey` folds more than SQLite can express in a query.

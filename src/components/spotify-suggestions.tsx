@@ -1,11 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 
 import { ArtistArt } from '@/components/artist-art';
 import { FollowButton } from '@/components/follow-button';
 import { PressableScale } from '@/components/pressable-scale';
 import { SectionTitle } from '@/components/section-title';
+import { SpotifyConnect } from '@/components/spotify-connect';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -16,34 +17,93 @@ import type { SpotifySuggestion } from '@/lib/types';
 /**
  * "You follow these on Spotify, and they're playing."
  *
- * Renders **nothing at all** unless the account has Spotify linked. That isn't
- * only tidiness: the Spotify app is in development mode, so linking is limited to
- * 25 hand-allowlisted accounts, and an entry point that most people cannot use is
- * worse than no entry point. `linked` comes back false for them and this
- * disappears — when extended quota lands it appears on its own, with no release.
+ * Three states, and each one is deliberate:
  *
- * Acts with shows come first (see the server's sort) because that's the whole
- * proposition; the rest are still listed, because following them is how you find
- * out when they announce one.
+ * - **signed out** — nothing. A sign-in prompt belongs to the screens that need
+ *   an account, not to a suggestion block that happens to be on the page.
+ * - **signed in, not linked** — the connect card. This is the state that makes
+ *   the feature reachable by people who already had an account before Spotify
+ *   was ever offered at sign-in, which is nearly everyone.
+ * - **linked** — the suggestions, acts with dates first (the server sorts them),
+ *   because that's the proposition. The ones with nothing on sale still make the
+ *   `list` variant, since following them is how you hear about the announcement.
+ *
+ * A note on the connect card and Spotify's development mode: linking is capped at
+ * 25 hand-allowlisted accounts, so for anyone else Spotify refuses at its own
+ * authorize step. There is no way to know that in advance from here, so the card
+ * is offered to every signed-in account and a refusal reads as "try again". At
+ * seven users that exposure is nil; if the user base grows before extended quota
+ * lands, this is the thing to gate rather than the suggestions.
  */
-export function SpotifySuggestions({ signedIn }: { signedIn: boolean }) {
+export function SpotifySuggestions({
+  signedIn,
+  /**
+   * `list` is the full thing, for a screen about who you follow. `rail` is the
+   * Explore shape: horizontal, and **only acts with dates**, because Explore is
+   * about what's on — a rail of artists with nothing on sale is a dead end in
+   * the middle of a discovery screen.
+   */
+  variant = 'list',
+}: {
+  signedIn: boolean;
+  variant?: 'list' | 'rail';
+}) {
   const theme = useTheme();
   const { isFollowing, toggle } = useFollows();
   const suggestions = useSpotifySuggestions(signedIn);
 
   const data = suggestions.data;
-  // Not linked, or linked with nothing matched: both are silence rather than an
-  // empty state. There is no action to offer — linking happens in Clerk's portal,
-  // not here — so a "no results" card would just be noise on the screen.
-  if (!signedIn || !data?.linked || data.items.length === 0) {
-    if (suggestions.isLoading && signedIn) {
-      return <ActivityIndicator color={theme.primary} style={{ marginVertical: Spacing.four }} />;
-    }
-    return null;
+
+  // Signed out has nothing to offer here: the sign-in prompt belongs to the
+  // screens that need an account, not to a suggestion block.
+  if (!signedIn) return null;
+  if (suggestions.isLoading) {
+    return <ActivityIndicator color={theme.primary} style={{ marginVertical: Spacing.four }} />;
   }
+  // Signed in and not linked is the one case with an action worth offering, and
+  // it's the whole reason this isn't sign-up-only: an account that already exists
+  // can connect Spotify from here.
+  if (!data?.linked) return <SpotifyConnect compact={variant === 'rail'} />;
 
   const playing = data.items.filter((s) => s.upcoming > 0);
   const quiet = data.items.filter((s) => s.upcoming === 0);
+
+  // Linked, matched nothing playing: silence on Explore (see `variant`), and on
+  // the list a "follow them anyway" group still earns its place.
+  if (variant === 'rail') {
+    if (playing.length === 0) return null;
+    return (
+      <View style={styles.railBlock}>
+        <SectionTitle title="From your Spotify" />
+        <FlatList
+          horizontal
+          data={playing}
+          keyExtractor={(s) => s.spotify_id}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.railContent}
+          renderItem={({ item }) => (
+            <PressableScale
+              haptic={false}
+              disabled={!item.artist_id}
+              accessibilityRole={item.artist_id ? 'link' : undefined}
+              accessibilityLabel={item.artist_id ? `Open ${item.name}` : undefined}
+              onPress={() => item.artist_id && router.push(`/artist/${item.artist_id}`)}
+              style={styles.railItem}>
+              <ArtistArt uri={item.image_url} artistId={item.artist_id} style={styles.railArt} iconSize={24} />
+              <ThemedText type="labelSm" numberOfLines={1} style={styles.railName}>
+                {item.name}
+              </ThemedText>
+              <ThemedText type="labelSm" style={{ color: theme.cyan }}>
+                {item.upcoming} {item.upcoming === 1 ? 'SHOW' : 'SHOWS'}
+              </ThemedText>
+            </PressableScale>
+          )}
+        />
+      </View>
+    );
+  }
+
+  if (data.items.length === 0) return null;
 
   const row = (s: SpotifySuggestion) => {
     const ref = { artistId: s.artist_id, spotifyId: s.spotify_id };
@@ -119,6 +179,11 @@ export function SpotifySuggestions({ signedIn }: { signedIn: boolean }) {
 
 const styles = StyleSheet.create({
   block: { gap: Spacing.two, paddingBottom: Spacing.four },
+  railBlock: { gap: Spacing.one, paddingBottom: Spacing.three },
+  railContent: { paddingHorizontal: Spacing.three, gap: Spacing.three },
+  railItem: { width: 84, alignItems: 'center', gap: 4 },
+  railArt: { width: 72, height: 72, borderRadius: Radius.pill },
+  railName: { textAlign: 'center' },
   group: { gap: Spacing.one },
   groupLabel: { paddingHorizontal: Spacing.three, paddingTop: Spacing.two },
   row: {
