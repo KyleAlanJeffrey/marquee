@@ -33,17 +33,25 @@ import { usePastRsvps, type PastRsvp } from '@/lib/reviews';
  * next launch rather than a lost night.
  */
 export function RsvpSettler() {
-  const { signedIn } = useAuth();
+  const { signedIn, userId } = useAuth();
   const { ready, wasThere, log } = useAttendances();
   const queryClient = useQueryClient();
   const past = usePastRsvps(signedIn);
   // Which event ids this session already handled, so a re-render between the
   // log write and the list refetch can't start a second pass over the same row.
   const handled = useRef(new Set<string>());
+  // …and whose they were. Two people sharing a phone can hold a going-RSVP for
+  // the same night; without this the second one's would be skipped as already
+  // handled and never reach their log.
+  const handledFor = useRef<string | null>(null);
 
   const items = past.data?.items;
 
   useEffect(() => {
+    if (handledFor.current !== (userId ?? null)) {
+      handledFor.current = userId ?? null;
+      handled.current = new Set();
+    }
     // `ready` matters: the log is read off disk asynchronously, and converting
     // before it lands would re-add shows that are already in there.
     if (!signedIn || !ready || !items?.length) return;
@@ -91,7 +99,7 @@ export function RsvpSettler() {
     return () => {
       cancelled = true;
     };
-  }, [signedIn, ready, items, wasThere, log, queryClient]);
+  }, [signedIn, userId, ready, items, wasThere, log, queryClient]);
 
   return null;
 }
