@@ -144,6 +144,10 @@ export function useReportReview() {
 }
 
 export type FeedItem = ProfileReview & {
+  /** A public review of a past show, or a named RSVP to an upcoming one. */
+  type: 'review' | 'rsvp';
+  /** Set on rsvp items; null on reviews. */
+  status: 'going' | 'interested' | null;
   authorId: string;
   authorHandle: string | null;
   authorName: string | null;
@@ -151,9 +155,9 @@ export type FeedItem = ProfileReview & {
 };
 
 /**
- * The feed: recent public reviews by the people you follow, oldest pages on
- * demand. Signed-in only — the query is "my follows", and there is no
- * anonymous version of that.
+ * The feed: recent public reviews and RSVPs by the people you follow, older
+ * pages on demand. Signed-in only — the query is "my follows", and there is
+ * no anonymous version of that.
  */
 export function useFeed(enabled: boolean) {
   return useInfiniteQuery({
@@ -166,10 +170,40 @@ export function useFeed(enabled: boolean) {
   });
 }
 
+/**
+ * Everyone's recent public activity — the Activity tab's second scope, and
+ * the one that has answers before anyone has followed anyone. Works signed
+ * out; signing in only adds block filtering.
+ */
+export function useGlobalActivity(enabled = true) {
+  return useInfiniteQuery({
+    queryKey: ['activity'],
+    enabled,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }): Promise<{ items: FeedItem[]; nextCursor: string | null }> =>
+      apiGet(`/activity${pageParam ? `?before=${encodeURIComponent(pageParam)}` : ''}`),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+  });
+}
+
 // --- going / interested -------------------------------------------------------
 
 export type RsvpStatus = 'going' | 'interested';
-export type EventRsvps = { counts: { going: number; interested: number }; mine: RsvpStatus | null };
+/** One named answer on a show — who, which way, and whether you follow them. */
+export type RsvpPerson = {
+  id: string;
+  handle: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  status: RsvpStatus;
+  /** 0/1 from SQL; truthy when the viewer follows this person. */
+  followedByMe: number;
+};
+export type EventRsvps = {
+  counts: { going: number; interested: number };
+  mine: RsvpStatus | null;
+  people: RsvpPerson[];
+};
 
 const rsvpKey = (eventId: string) => ['event-rsvps', eventId] as const;
 
@@ -201,7 +235,9 @@ export function useSetRsvp(eventId: string) {
         const counts = { ...old.counts };
         if (old.mine) counts[old.mine] = Math.max(0, counts[old.mine] - 1);
         if (status) counts[status] += 1;
-        return { counts, mine: status };
+        // `people` rides along unchanged; the refetch on settle is what adds
+        // or removes the caller's own name from the wall.
+        return { ...old, counts, mine: status };
       });
       return { previous };
     },
@@ -211,6 +247,10 @@ export function useSetRsvp(eventId: string) {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: rsvpKey(eventId) });
+      // RSVPs are activity now — both streams should show this one without
+      // waiting out their staleTime.
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      queryClient.invalidateQueries({ queryKey: ['activity'] });
       // The My Shows tab lists every answer, so it learns about this one.
       queryClient.invalidateQueries({ queryKey: ['my-rsvps'] });
     },

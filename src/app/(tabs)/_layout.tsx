@@ -57,14 +57,17 @@ export default function TabsLayout() {
           ),
         }}
       />
-      {/* My Shows is what you plan to see; this is what you did. Sits next to
-          it because they are the same list either side of the night. */}
+      {/* The social stream — what other people saw and what they're going to.
+          It took the Log tab's slot (Letterboxd's exact consolidation: the
+          diary lives on your profile, the friends feed gets the tab), because
+          a feed nobody can find is a feed nobody reads, and this one used to
+          live three scrolls deep inside Profile. */}
       <Tabs.Screen
-        name="log"
+        name="activity"
         options={{
-          title: 'Log',
+          title: 'Activity',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'checkmark-done' : 'checkmark-done-outline'} size={size} color={color} />
+            <Ionicons name={focused ? 'pulse' : 'pulse-outline'} size={size} color={color} />
           ),
         }}
       />

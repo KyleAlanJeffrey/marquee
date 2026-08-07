@@ -56,8 +56,9 @@ What's left is the residuals:
    counters once volume justifies them, and `AggregateRating` JSON-LD on the
    server-rendered pages — deliberately deferred until real reviews exist, since
    fabricated-looking review markup is a manual-action category.
-4. [~] **Phase D residuals** — feed pagination beyond 50; any feed of
-   artist/venue activity (this one is people only, by design).
+4. [~] **Phase D residuals** — any feed of artist/venue activity (this one is
+   people only, by design). Pagination landed long ago (compound cursor), and
+   the feed itself grew RSVPs and a tab of its own in the Activity-tab PR.
 5. [~] **Phase E residual** — reportability once lists join the moderation
    kinds. (Item notes and reordering landed 2026-07-31: `PUT
    /:id/items/:kind/:refId` patches the note and/or swaps a place up or down,
@@ -346,6 +347,29 @@ What's left is the residuals:
     render in the next TestFlight build.
   - [ ] Android standalone builds need `android.config.googleMaps.apiKey` in
     app.json before the map screen works there (Expo Go Android is fine).
+- [x] **Social surfacing: the Activity tab** (Kyle, 2026-08-06, "I want to
+  see what other people have seen or are going to in an easy way… consolidate
+  some existing tabs", PR branch `social-activity-tab`): Letterboxd's exact
+  consolidation — the diary lives on the profile, the friends feed gets the
+  tab. Log left the tab bar (still at `/log`, fronted by a YOUR LOG card on
+  Profile); Activity took its slot with two scopes: FRIENDS (`/me/feed`, now
+  reviews **and** RSVPs) and EVERYONE (new `GET /activity`, the cold-start
+  answer — works signed out). RSVPs became **named** (deliberate reversal of
+  "counts name nobody" — an integer answers "who's going" for nobody):
+  `/events/:id/rsvps` returns `people`, going-first then followed-first, and
+  the Your Plans card renders them as tappable chips. Feed authors are
+  tappable now too (they never were). The mixed stream is two indexed
+  queries JS-merged on a compound (createdAt, id) cursor; the RSVP id is
+  synthesised (`r:<user>:<event>`), and RSVP items only stream for shows
+  still to come. Verified on the simulator against local D1 end to end.
+  - Second pass (Kyle, 2026-08-07, "I did like the log page… maybe that
+    should go in the my shows page in a historic vs future view"): the log
+    is now My Shows' **BEEN** tense next to **UPCOMING**, not a Profile
+    card. `<ShowLog>` is a component keeping its own list (the wall is
+    hundreds of tiles, so My Shows renders it instead of nesting), `/log`
+    redirects to `/saved?view=been` for old links, and the view param is
+    applied on *change* — the screen stays mounted in the tab navigator, so
+    mount-only reading silently ignored later links (caught on device).
 - [x] **v1.0.4 launch crash** (Kyle, 2026-08-06, "crashes immediately on
   trying to open the app"): the EAS production env var
   `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` carried the `.env.production` line's
