@@ -1631,6 +1631,21 @@ async function clusterIdsByVenue(db: DB, ids: (string | null)[]): Promise<Map<st
  */
 const MATCH_CLUSTER_MAX = 30;
 
+/**
+ * The sources whose id inside the `sources` JSON has an expression index
+ * (migration 0023).
+ *
+ * The cross-source match arm below is `json_extract(sources, '$."<source>"')`,
+ * and SQLite will only answer that from an index if one was declared for that
+ * exact expression — which means per source, by name. A source that isn't in
+ * this list turns its arm into a full scan of `events`, and because one
+ * unindexable arm poisons the whole OR, it drags the other three down with it:
+ * 59,639 rows instead of 0, per listing, on every crawl tick.
+ *
+ * Nothing enforces this at the type level, so the check below is the enforcement.
+ */
+const INDEXED_SOURCE_IDS = new Set(['ticketmaster', 'bandsintown', 'seatgeek', 'dice']);
+
 async function findExistingShows(
   db: DB,
   keys: {
@@ -1666,9 +1681,23 @@ async function findExistingShows(
     venueId: events.venueId,
   };
 
+  // Warned once for the batch rather than per listing, which at 200 listings an
+  // artist would be its own problem.
+  for (const source of new Set(keys.map((k) => k.source))) {
+    if (!INDEXED_SOURCE_IDS.has(source)) {
+      console.warn(
+        `source "${source}" has no expression index on its sources id — every show match ` +
+          `is now a full scan of events. Add one (see migration 0023) and list it in INDEXED_SOURCE_IDS.`,
+      );
+    }
+  }
+
   const stmts = keys.map((k) => {
     const clauses = [
       and(eq(events.source, k.source), eq(events.sourceEventId, k.sourceEventId)),
+      // Indexed per source — see INDEXED_SOURCE_IDS. The path quoting here has
+      // to stay character-for-character identical to the index's, or the
+      // planner quietly falls back to a scan.
       sql`json_extract(${events.sources}, ${'$."' + k.source + '"'}) = ${k.sourceEventId}`,
     ];
     const t = new Date(k.startsAt).getTime();

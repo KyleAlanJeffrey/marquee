@@ -325,11 +325,37 @@ Not done here: purging on ingest. A new show can take up to `s-maxage` (30 min)
 to appear on `/` or a city page. That is what the header always claimed, and
 IndexNow still pings the crawler immediately.
 
-### Pass 3 — the crawl (item 4)
+### Pass 3 — the crawl (item 4) — **landed 2026-08-07**
 
-- [ ] **4. Split the `json_extract` OR arm** in `findExistingShows`. Baseline:
-  59,639 rows scanned per call vs 0 for the indexed arm alone, hundreds of
-  times per 15-minute tick. — [data.ts:1650](worker/src/data.ts:1650)
+- [x] **4. The `json_extract` arm is now indexed** rather than split out —
+  migration `0023`, four expression indexes, one per source.
+
+The audit proposed splitting the OR so the indexable arms run first and the
+`json_extract` arm only runs on a miss. Measuring the data first killed that
+plan: a genuinely new listing misses *everything*, so the scan would still
+happen on exactly the ingest path that runs most. And the arm can't be dropped —
+**4,117 events carry more than one source id, and 2,289 rows are reachable only
+through it** (a bandsintown row found by the ticketmaster id in its `sources`
+JSON).
+
+SQLite indexes expressions directly, so the arm became a seek with **no query
+change at all** — nothing to re-verify about ordering or match precedence:
+
+| | rows read | SQL time |
+|---|---|---|
+| before | 59,639 (the whole table) | 59.7 ms |
+| after, the full `OR` the crawl issues | **1** | **0.34–0.86 ms** |
+
+The expression text has to match the query's character for character, including
+the JSON path quoting, or the planner silently falls back to the scan — so
+`INDEXED_SOURCE_IDS` in `data.ts` warns when a source has no index. The failure
+mode is slow, not broken, which is exactly the kind that survives review.
+
+**Verified against production, not just asserted:** three crawls of 8 artists
+through the live admin endpoint. Duplicate groups stayed at **246 before and
+after all three**, and the second crawl of the same artists ingested **0** —
+every existing show matched rather than duplicated, which is the behaviour the
+arm exists to protect.
 
 ### Pass 4 — the client (items 6–9)
 
