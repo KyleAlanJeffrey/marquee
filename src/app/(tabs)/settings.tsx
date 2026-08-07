@@ -81,16 +81,16 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* The private log's front door since it left the tab bar for
-            Activity — Letterboxd keeps the diary on the profile for the same
-            reason: it's yours, so it lives with you. */}
+        {/* A shortcut to the wall, which lives on My Shows under BEEN. The
+            card stays because "how many shows have I been to" is a thing
+            people come to their profile to find out. */}
         <Label>YOUR LOG</Label>
         <GlassCard style={styles.card}>
           <PressableScale
             haptic
             accessibilityRole="button"
             accessibilityLabel="Open your concert log"
-            onPress={() => router.push('/log')}
+            onPress={() => router.push('/saved?view=been')}
             style={styles.row}>
             <Ionicons name="checkmark-done" size={24} color={theme.cyan} />
             <View style={{ flex: 1 }}>
@@ -100,7 +100,7 @@ export default function ProfileScreen() {
                   : `${attended.length} ${attended.length === 1 ? 'show' : 'shows'} logged`}
               </ThemedText>
               <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                PRIVATE TO YOU · THE WALL LIVES HERE
+                PRIVATE TO YOU · ON MY SHOWS, UNDER BEEN
               </ThemedText>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />

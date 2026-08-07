@@ -2,17 +2,14 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { EmptyState } from '@/components/empty-state';
-import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
-import { StageBackground } from '@/components/stage-background';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
-import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAttendances, type Attendance } from '@/lib/attendances-store';
@@ -46,8 +43,14 @@ type Row =
  * place and removing live in the list view behind the toggle, because a
  * tile is too small to carry five stars, a remove pill and a navigation
  * target without mis-taps. The log itself is unchanged and private.
+ *
+ * Owns its own FlatList (the wall can be hundreds of tiles), so the screen
+ * embedding it renders this *instead of* its own list rather than nesting
+ * one inside the other. `header` is prepended inside that list — My Shows
+ * puts its UPCOMING/BEEN switch there so the switch scrolls with the wall
+ * instead of floating above it.
  */
-export default function LogScreen() {
+export function ShowLog({ header }: { header?: ReactElement }) {
   const theme = useTheme();
   const { attended, ready, unlog, rate } = useAttendances();
   const [view, setView] = useState<'wall' | 'list'>('wall');
@@ -119,16 +122,7 @@ export default function LogScreen() {
   ).size;
 
   return (
-    <View style={{ flex: 1 }}>
-      <PageMeta
-        title="Your concert log"
-        description="Every show you've been to, and what you thought of it. Private to your account."
-      />
-      <StageBackground />
-      {/* A pushed screen since Activity took the tab slot, so it needs the
-          way back it never used to. */}
-      <TopBar back onSearchPress={() => router.push('/search')} />
-
+    <>
       {!ready ? (
         // The disk read hasn't landed. "You haven't been to anything" would be a
         // lie flashing over somebody's history on every cold start.
@@ -136,13 +130,16 @@ export default function LogScreen() {
           <ActivityIndicator color={theme.primary} />
         </View>
       ) : attended.length === 0 ? (
-        <EmptyState
-          icon="checkmark-done-outline"
-          title="No shows logged yet"
-          message="Log the concerts you've been to — find the night, rate it, say what it was like. Your log is private to your account."
-          actionLabel="Log your first show"
-          onAction={() => router.push('/log-show')}
-        />
+        <>
+          {header}
+          <EmptyState
+            icon="checkmark-done-outline"
+            title="No shows logged yet"
+            message="Log the concerts you've been to — find the night, rate it, say what it was like. Your log is private to your account."
+            actionLabel="Log your first show"
+            onAction={() => router.push('/log-show')}
+          />
+        </>
       ) : (
         <FlatList
           data={view === 'wall' ? wallRows : rows}
@@ -152,10 +149,12 @@ export default function LogScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
           ListHeaderComponent={
-            <View style={styles.head}>
+            <View>
+              {header}
+              <View style={styles.head}>
               <View style={styles.headTop}>
-                <ThemedText type="headline" style={{ flex: 1 }}>
-                  Your Log
+                <ThemedText type="label" style={{ flex: 1, color: theme.textTertiary, letterSpacing: 1.5 }}>
+                  YOUR LOG · PRIVATE
                 </ThemedText>
                 {/* The wall is for looking; the list is for tending — inline
                     stars and the remove pill live there. */}
@@ -200,6 +199,7 @@ export default function LogScreen() {
                   LOG A SHOW
                 </ThemedText>
               </PressableScale>
+              </View>
             </View>
           }
           renderItem={({ item, index }) => {
@@ -363,7 +363,7 @@ export default function LogScreen() {
           }}
         />
       )}
-    </View>
+    </>
   );
 }
 

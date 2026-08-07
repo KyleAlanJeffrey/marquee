@@ -92,10 +92,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="list/[id]" options={{ href: null }} />
       <Tabs.Screen name="browse" options={{ href: null }} />
       <Tabs.Screen name="map" options={{ href: null }} />
-      {/* The private log — demoted from the bar when Activity took its slot,
-          not from the app: it opens from the YOUR LOG card on Profile and
-          from every past event's log card, and /log deep links still land. */}
-      <Tabs.Screen name="log" options={{ href: null }} />
     </Tabs>
   );
 }
