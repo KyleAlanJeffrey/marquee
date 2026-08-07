@@ -7,6 +7,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { EmptyState } from '@/components/empty-state';
 import { ErrorState } from '@/components/error-state';
 import { FollowButton } from '@/components/follow-button';
+import { SpotifySuggestions } from '@/components/spotify-suggestions';
 import { PageMeta } from '@/components/page-meta';
 import { PressableScale } from '@/components/pressable-scale';
 import { SecondaryEventCard } from '@/components/secondary-event-card';
@@ -19,6 +20,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollowedVenues } from '@/lib/followed-venues-store';
+import { useAuth } from '@/lib/auth';
 import { useFollows } from '@/lib/follows-store';
 import { useFollowingEvents } from '@/hooks/queries';
 import { getCurrentCoords } from '@/lib/location';
@@ -29,6 +31,7 @@ type Tab = 'artists' | 'venues';
 
 export default function FollowingScreen() {
   const theme = useTheme();
+  const { signedIn } = useAuth();
   const { follows, ready: followsReady } = useFollows();
   const { venues, isFollowingVenue, toggleVenue, ready: venuesReady } = useFollowedVenues();
   const { radiusMiles } = usePrefs();
@@ -209,6 +212,10 @@ export default function FollowingScreen() {
                       ))}
                     </View>
                   )}
+                  {/* Artists only — these are artist suggestions, and the
+                      venues tab is asking a different question. Renders nothing
+                      unless this account has Spotify linked. */}
+                  {tab === 'artists' && <SpotifySuggestions signedIn={signedIn} />}
                   <ThemedText type="label" style={[styles.sectionLabel, { color: theme.primary }]}>
                     {coords ? `WITHIN ${radiusMiles} MI` : 'COMING UP'}
                   </ThemedText>

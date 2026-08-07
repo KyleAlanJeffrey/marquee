@@ -625,8 +625,35 @@ What's left is the residuals:
 - [ ] StubHub Partner API (needs affiliate account) — swap the search deep link
   for real per-event listings.
 - [ ] More resale sources in "Get Tickets" (same `ticketSources()` pattern).
-- [ ] Spotify extended quota (dev mode strips genres/popularity, 403s
-  top-tracks; routed around via Deezer/Wikipedia meanwhile).
+- [~] **Spotify extended quota** — now gates a shipped feature, not just
+  enrichment. Dev mode strips genres/popularity, 403s top-tracks, **and caps
+  linking at 25 hand-allowlisted accounts**. The "From your Spotify" suggestions
+  (below) are live and hide themselves for anyone who can't link, so extended
+  quota opens them with no release. Routed around via Deezer/Wikipedia meanwhile.
+- [~] **From your Spotify: suggest acts you follow / listen to** (Kyle,
+  2026-08-07) — landed the same day, server + UI, and dark until the two setup
+  steps below are done. Reads the artists you follow (`user-follow-read`) and
+  your top artists (`user-top-read`), matches them to the catalogue, and leads
+  with the ones that have tickets on sale. No token is ever stored: sign-in is
+  Clerk's hosted portal, so the Worker asks Clerk for a live access token per
+  request (`worker/src/spotify-me.ts`) and revoking Spotify in Clerk revokes it
+  here. Matching is `spotify_id` first, then a lowercased-name fallback that
+  **writes the id back** — production had a `spotify_id` on only 920 of the 5,954
+  artists with upcoming shows (15%), so an id-only join would have missed 85% of
+  what's actually on sale; this repairs the catalogue as people use it, and the
+  notability score reads that same column. Residuals:
+  - [ ] **Kyle: Spotify dashboard** — add Clerk's callback as a redirect URI, and
+    allowlist the accounts that should be able to link while in dev mode.
+  - [ ] **Kyle: Clerk dashboard** — enable the Spotify social connection with
+    custom credentials and scopes `user-follow-read` + `user-top-read`. No code
+    change: the sign-in screen offers whatever the instance has enabled.
+  - [ ] Verify end to end once linked — I can reach every unlinked path (signed
+    out and a bogus token both return `{linked:false, items:[]}` at 200) but not
+    a real linked account.
+  - [ ] The name fallback only catches case differences, not diacritics or
+    punctuation: "MOLLY TUTTLE" matches, "Sigur Rós" vs "Sigur Ros" doesn't,
+    because `artistNameKey` folds more than SQLite can express in a query.
+    Closing it wants a stored normalised-name column with an index.
 - [ ] In-app 30s track previews (Deezer `preview_url` + expo-av).
 - [ ] Setlist.fm as a live-proxied, attributed, never-stored setlist on past-show
   pages — their terms allow that and nothing more, and it's off the table

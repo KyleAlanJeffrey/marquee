@@ -7,6 +7,7 @@ import { getDb } from '../db';
 import { artists, users } from '../schema';
 import type { AppEnv } from '../env';
 import { favoritesBody, prefsBody } from '../schemas';
+import { spotifySuggestions } from '../spotify-me';
 
 /**
  * Who am I, according to the server.
@@ -140,4 +141,23 @@ me.put('/prefs', zValidator('json', prefsBody), async (c) => {
     })
     .where(eq(users.id, userId));
   return c.json({ ok: true, user: await findUser(db, userId) });
+});
+
+/**
+ * Acts from your own Spotify that are playing somewhere — the artists you follow
+ * there and the ones you actually listen to, matched against the catalogue.
+ *
+ * `linked: false` is a 200, not a 401 or a 404. Not having connected Spotify is a
+ * normal state, and it's also the answer for anyone the Spotify app hasn't
+ * allowlisted while it's in development mode: they can never complete the
+ * authorize step, so there is nothing to report and nothing to apologise for.
+ * The client hides its entry point on that flag alone.
+ *
+ * Signed out is the same shape for the same reason — the screen asks before it
+ * knows, and a 401 here would light up as a fault rather than a state.
+ */
+me.get('/spotify/suggestions', async (c) => {
+  const { userId } = await callerFrom(c.env, c.req.header('authorization'));
+  if (!userId) return c.json({ linked: false, items: [] });
+  return c.json(await spotifySuggestions(c.env, getDb(c.env.DB), userId));
 });

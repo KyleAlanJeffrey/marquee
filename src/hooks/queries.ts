@@ -26,6 +26,7 @@ import type {
   NearbyEvent,
   NearbyVenue,
   Page,
+  SpotifySuggestion,
   Town,
   VenueDetail,
   VenueInfo,
@@ -319,6 +320,28 @@ export function useInfiniteVenueEvents(venueId: string, pageSize = 20) {
     queryFn: ({ pageParam }): Promise<Page<VenueEvent>> =>
       apiGet(`/venues/${venueId}/events?limit=${pageSize}&offset=${pageParam}`, { anonymous: true }),
     getNextPageParam: (last) => last.nextCursor,
+  });
+}
+
+/**
+ * Acts from your linked Spotify that are playing somewhere.
+ *
+ * `enabled` on being signed in, because the answer is account-shaped. Not
+ * `anonymous`: this one is entirely about who is asking.
+ *
+ * `linked: false` comes back as a normal 200 for anyone who hasn't connected
+ * Spotify — including anyone the Spotify app hasn't allowlisted while it's in
+ * development mode — and the screen renders nothing on that flag rather than an
+ * error. A long `staleTime` because somebody's Spotify follows do not turn over
+ * inside a session, and this call costs a walk through their whole follow list.
+ */
+export function useSpotifySuggestions(enabled: boolean) {
+  return useQuery({
+    queryKey: ['spotify-suggestions'],
+    enabled,
+    staleTime: 30 * 60 * 1000,
+    queryFn: (): Promise<{ linked: boolean; items: SpotifySuggestion[] }> =>
+      apiGet('/me/spotify/suggestions'),
   });
 }
 

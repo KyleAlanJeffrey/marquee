@@ -271,3 +271,20 @@ export type Town = {
 };
 
 export type Coords = { lat: number; lng: number };
+
+/**
+ * An act from your linked Spotify that we can point at a show.
+ *
+ * `artist_id` null means Spotify knows them and we don't have shows for them —
+ * still worth following, because a follow can carry a Spotify id alone and the
+ * crawl picks the artist up from the follow.
+ */
+export type SpotifySuggestion = {
+  artist_id: string | null;
+  spotify_id: string;
+  name: string;
+  image_url: string | null;
+  genres: string[];
+  upcoming: number;
+  source: 'followed' | 'top';
+};
