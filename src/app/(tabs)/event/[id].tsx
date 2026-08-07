@@ -203,12 +203,36 @@ export default function EventScreen() {
                 {e.artist.name}
               </ThemedText>
             )}
-            <View style={styles.heroVenue}>
-              <Ionicons name="location" size={15} color={theme.cyan} />
-              <ThemedText type="small" style={{ color: theme.textSecondary }} numberOfLines={1}>
-                {formatVenue(e.venue?.name ?? null, e.venue?.city ?? null, e.venue?.region ?? null)}
-              </ThemedText>
-            </View>
+            {/* The venue in the hero opens the venue. It read as a link already
+                — pin icon, its own line, right under the title — and wasn't
+                one, so the obvious tap did nothing and you had to scroll past
+                the whole page to the venue card to find the real button.
+                A row with no venue id (manual entry, or "Venue TBA") has
+                nowhere to go and stays text. */}
+            {e.venue?.id ? (
+              <PressableScale
+                haptic={false}
+                accessibilityRole="link"
+                accessibilityLabel={`Open ${e.venue.name ?? 'the venue'}`}
+                onPress={() => router.push(`/venue/${e.venue!.id}`)}
+                style={styles.heroVenue}>
+                <Ionicons name="location" size={15} color={theme.cyan} />
+                {/* Cyan and not textSecondary: the same colour the icon is
+                    already wearing, which is how everything else tappable on
+                    this page reads. */}
+                <ThemedText type="small" style={{ color: theme.cyan, flexShrink: 1 }} numberOfLines={1}>
+                  {formatVenue(e.venue.name, e.venue.city, e.venue.region)}
+                </ThemedText>
+                <Ionicons name="chevron-forward" size={14} color={theme.cyan} />
+              </PressableScale>
+            ) : (
+              <View style={styles.heroVenue}>
+                <Ionicons name="location" size={15} color={theme.cyan} />
+                <ThemedText type="small" style={{ color: theme.textSecondary }} numberOfLines={1}>
+                  {formatVenue(e.venue?.name ?? null, e.venue?.city ?? null, e.venue?.region ?? null)}
+                </ThemedText>
+              </View>
+            )}
             {/* Social proof in the hero, upcoming shows only — for a past show
                 "3 were going" reads as stale plans, and the log below is the
                 record of the night that actually happened. */}
