@@ -329,6 +329,14 @@ export default function ExploreScreen() {
             </ScrollView>
           )}
 
+          {/* Acts from your own Spotify that have dates. Outside the feed branch
+              below on purpose: an empty local feed is exactly when a personal
+              suggestion is worth most, and it's where somebody who hasn't linked
+              yet most needs the offer. Still inside the location gate, because
+              this whole screen is — Following carries the same block without
+              one. The block hides itself when there's nothing to say. */}
+          <SpotifySuggestions signedIn={signedIn} variant="rail" />
+
           {shown.length === 0 ? (
             <EmptyState
               icon="compass-outline"
@@ -381,12 +389,7 @@ export default function ExploreScreen() {
 
               {/* Upcoming shows in range — not weekend-filtered, so don't claim to be */}
               <SectionTitle title="Up Next Near You" badge="Hot" accent />
-              {/* Acts from your own Spotify that have dates — above the feed,
-              because it's the most personal thing on the screen, and it hides
-              itself entirely when there's nothing to say. */}
-          <SpotifySuggestions signedIn={signedIn} variant="rail" />
-
-          {featured && (
+              {featured && (
                 <Animated.View entering={FadeInDown.duration(420)} style={{ marginBottom: Spacing.three }}>
                   <FeaturedCard
                     event={featured}

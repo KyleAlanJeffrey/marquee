@@ -42,10 +42,15 @@ export function SpotifyConnect({ compact = false }: { compact?: boolean }) {
       // `marquee://` on a device and the site's own origin on web, so one call
       // site covers both without branching on the URL.
       const redirectUrl = Linking.createURL('/');
-      const account = await user.createExternalAccount({
-        strategy: 'oauth_spotify',
-        redirectUrl,
-      });
+
+      // A back-out leaves an unverified Spotify account attached to the user, and
+      // asking Clerk to create a second one for the same provider is an error
+      // rather than a retry. `reauthorize` is the retry: it hands back a fresh
+      // authorize URL for the account that's already there.
+      const pending = user.unverifiedExternalAccounts.find((a) => a.provider === 'spotify');
+      const account = pending
+        ? await pending.reauthorize({ redirectUrl })
+        : await user.createExternalAccount({ strategy: 'oauth_spotify', redirectUrl });
       const target = account.verification?.externalVerificationRedirectURL?.toString();
       if (!target) throw new Error('Clerk returned no verification URL');
 
@@ -55,10 +60,20 @@ export function SpotifyConnect({ compact = false }: { compact?: boolean }) {
         window.location.href = target;
         return;
       }
-      await WebBrowser.openAuthSessionAsync(target, redirectUrl);
-      // The session's connected accounts changed underneath us; without the
-      // reload the next render still believes Spotify isn't linked.
-      await user.reload();
+      const result = await WebBrowser.openAuthSessionAsync(target, redirectUrl);
+      // The session's connected accounts may have changed underneath us; without
+      // the reload the next render still believes Spotify isn't linked. Reload
+      // even when the sheet reports a dismissal, because somebody who authorised
+      // and *then* closed it by hand is linked, and asking is the only way to
+      // know — the sheet's own verdict isn't evidence either way.
+      const fresh = await user.reload();
+      const linked = fresh.verifiedExternalAccounts.some((a) => a.provider === 'spotify');
+      if (!linked) {
+        // Closing the sheet is a decision, not a fault: no error copy for it.
+        // Anything else means the flow broke somewhere worth retrying.
+        setFailed(result.type !== 'cancel' && result.type !== 'dismiss');
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ['spotify-suggestions'] });
     } catch (err) {
       // Most likely cause while the Spotify app is in development mode: this
