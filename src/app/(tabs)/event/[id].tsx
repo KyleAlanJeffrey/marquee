@@ -54,15 +54,24 @@ function InfoRow({
   label,
   value,
   valueColor,
+  onPress,
+  accessibilityLabel,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: string;
   valueColor?: string;
+  /**
+   * Given one, the whole row is the target and it wears a chevron. Most of
+   * these rows are facts about the night with nowhere to go — a date, a price —
+   * so a row that looks tappable when it isn't is worse than one that doesn't.
+   */
+  onPress?: () => void;
+  accessibilityLabel?: string;
 }) {
   const theme = useTheme();
-  return (
-    <GlassCard style={styles.infoRow}>
+  const body = (
+    <>
       <View style={[styles.infoIcon, { backgroundColor: theme.backgroundHigh }]}>
         <Ionicons name={icon} size={20} color={theme.primary} />
       </View>
@@ -74,7 +83,18 @@ function InfoRow({
           {value}
         </ThemedText>
       </View>
-    </GlassCard>
+      {onPress && <Ionicons name="chevron-forward" size={18} color={theme.cyan} />}
+    </>
+  );
+  if (!onPress) return <GlassCard style={styles.infoRow}>{body}</GlassCard>;
+  return (
+    <PressableScale
+      haptic={false}
+      accessibilityRole="link"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}>
+      <GlassCard style={styles.infoRow}>{body}</GlassCard>
+    </PressableScale>
   );
 }
 
@@ -259,6 +279,10 @@ export default function EventScreen() {
             icon="location"
             label="Venue"
             value={formatVenue(e.venue?.name ?? null, e.venue?.city ?? null, e.venue?.region ?? null)}
+            // The row that names the room opens the room. Only when there is one
+            // to open: a manual entry or "Venue TBA" keeps the plain card.
+            onPress={e.venue?.id ? () => router.push(`/venue/${e.venue!.id}`) : undefined}
+            accessibilityLabel={e.venue?.name ? `Open ${e.venue.name}` : undefined}
           />
           <InfoRow
             icon="pricetag"
