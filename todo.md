@@ -77,6 +77,25 @@ What's left is the residuals:
 
 ## P1 · Next
 
+- [ ] **Act on the performance audit** (Kyle, 2026-08-07) — the audit is
+  **[`docs/performance-audit.md`](docs/performance-audit.md)**, all of it
+  measured against production D1 and the live site. The headline is that
+  `ANALYZE` has never been run: on the exact `/api/nearby` predicate the
+  planner reads **93,049 rows in 277ms** where a forced venues-first join
+  reads **6,625 in 8.1ms** for the same answer. A full `/api/nearby` is
+  **197,006 rows read and 633ms of SQL** across its two statements, which is
+  essentially all of the ~0.9s it spends above the 0.293s network floor —
+  and `limit=1` costs 1.035s, same as `limit=400`, because the sort and the
+  count both run over the whole candidate set. Second: the server-rendered
+  pages set `s-maxage=1800` but return **no `cf-cache-status` header at
+  all**, because a Worker's HTML isn't edge-cached without the Cache API
+  (landing 1.93–3.32s, city hub 2.09–2.24s). Third: the 15-minute crawl
+  scans the entire `events` table (**59,639 rows**) once per incoming
+  listing, against the same D1 the site reads from. Order of work is at the
+  bottom of the doc. Note for the split below: the audit says the app/site
+  split is **not** what's slow — do the caching and the plan fix first, then
+  revisit with clean numbers.
+
 - [~] **Letterboxd-style logging of past shows** (Kyle, 2026-08-05) — landed
   the same day: a `/log-show` modal in three steps — WHO (artist search,
   with an always-reachable by-hand branch that keeps what you typed),
