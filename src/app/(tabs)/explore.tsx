@@ -329,14 +329,6 @@ export default function ExploreScreen() {
             </ScrollView>
           )}
 
-          {/* Acts from your own Spotify that have dates. Outside the feed branch
-              below on purpose: an empty local feed is exactly when a personal
-              suggestion is worth most, and it's where somebody who hasn't linked
-              yet most needs the offer. Still inside the location gate, because
-              this whole screen is — Following carries the same block without
-              one. The block hides itself when there's nothing to say. */}
-          <SpotifySuggestions signedIn={signedIn} variant="rail" />
-
           {shown.length === 0 ? (
             <EmptyState
               icon="compass-outline"
@@ -427,6 +419,14 @@ export default function ExploreScreen() {
               )}
             </>
           )}
+
+          {/* Acts from your own Spotify that have dates — the closing rail,
+              after the local feed rather than cutting into it: what's on near
+              you is this screen's promise, and the personal stuff reads as a
+              coda, not an interruption. Outside the ternary so it also shows
+              under an empty feed, where a personal lead (or the connect offer)
+              is worth the most. Hides itself when there's nothing to say. */}
+          <SpotifySuggestions signedIn={signedIn} variant="rail" />
         </ScrollView>
       )}
     </View>
