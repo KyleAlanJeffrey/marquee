@@ -255,8 +255,11 @@ export function PersonProfile({
    * account section (integrations, manage, sign out) here. A slot rather than
    * a built-in: this component is also every visitor's view of a profile, and
    * account controls must come from the one screen that means "you", not from
-   * anything `/user/[key]` could reach. Rendered only when the server says
-   * `isSelf`, so a stray slot on someone else's profile stays invisible.
+   * anything `/user/[key]` could reach. On a loaded profile it renders only
+   * when the server says `isSelf`, so a stray slot on someone else's profile
+   * stays invisible; when the profile read *fails* it renders anyway — sign
+   * out can't be held hostage by a broken fetch, and in that branch the
+   * caller's word is all there is.
    */
   accountSlot,
 }: {
@@ -302,6 +305,13 @@ export function PersonProfile({
           message={gone ? "This profile doesn't exist — the account may have been deleted." : undefined}
           onRetry={gone ? undefined : () => profile.refetch()}
         />
+        {/* The account section must outlive the profile read: the moment this
+            endpoint is failing is exactly when someone reaches for SIGN OUT,
+            and hiding the way out behind a broken fetch would trap them. No
+            `isSelf` confirmation exists in this branch — trusting the caller
+            is the contract here (see the prop docs), and the only caller that
+            passes a slot is the tab that means "you". */}
+        {accountSlot && <View style={styles.errorSlot}>{accountSlot}</View>}
       </View>
     );
   }
@@ -554,6 +564,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   centreBlock: { alignItems: 'center', padding: Spacing.four },
+  // The account slot shown under an ErrorState: full width, like it is in the
+  // header card, rather than shrink-wrapped by the centred parent.
+  errorSlot: { alignSelf: 'stretch' },
   emptyNote: { textAlign: 'center', paddingVertical: Spacing.three },
   moreBtn: {
     alignItems: 'center',
