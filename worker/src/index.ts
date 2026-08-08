@@ -339,8 +339,14 @@ app.all('*', async (c) => {
   // and the pages that truly are thin carry their own noindex (seo.ts).
   if (c.req.method === 'GET' && res.status === 404 && c.req.header('accept')?.includes('text/html')) {
     // `%2B`, not `+`: the asset server 307s the literal spelling, same as the
-    // `@` in the font paths above.
-    const shell = await c.env.ASSETS.fetch(new Request(new URL('/%2Bnot-found', url.origin), c.req.raw));
+    // `@` in the font paths above. A fresh unconditional GET, not a clone of
+    // the original request: a revisiting browser sends If-None-Match for the
+    // shell it already holds, and forwarding it here turns the fallback into
+    // a 304 — not `ok`, so the deep link would 404 exactly for the people
+    // who'd loaded it before. Same for Range.
+    const shell = await c.env.ASSETS.fetch(
+      new Request(new URL('/%2Bnot-found', url.origin), { headers: { Accept: 'text/html' } }),
+    );
     if (shell.ok) res = new Response(shell.body, { status: 200, headers: shell.headers });
   }
 

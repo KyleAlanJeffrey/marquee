@@ -70,9 +70,7 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {
-        "redirects": [{ "source": "/index", "destination": "/explore" }]
-      },
+      "router": {},
       "eas": {
         "projectId": "a9540056-1ade-460c-bc4f-5b93ccae1c61"
       }

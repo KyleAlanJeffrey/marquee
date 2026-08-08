@@ -91,11 +91,10 @@ const navTheme = {
  *
  * A native cold start still arrives as the URL `marquee:///`, though, and an
  * unmatched initial URL renders "Unmatched Route" — `initialRouteName` does
- * not rescue it (verified in the simulator). The declared redirect in
- * app.json (`extra.router.redirects`: `/index` → `/explore` — `index` is
- * the route name the file convention gives `/`) is what resolves it:
- * a signpost in the route table rather than a page, which is exactly the
- * distinction this separation is about.
+ * not rescue it (verified in the simulator). `+native-intent.tsx` is what
+ * resolves it: the system URL is rewritten to `/explore` before the router
+ * sees it, on native only — no route table entry on any platform, which is
+ * exactly the distinction this separation is about.
  *
  * `initialRouteName` still anchors the navigator itself: it names where the
  * root Stack considers "home" once a URL has resolved into it.
