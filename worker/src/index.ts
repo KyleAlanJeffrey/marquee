@@ -340,8 +340,12 @@ app.all('*', async (c) => {
   const wantsHtml = c.req.header('accept')?.includes('text/html') ?? false;
   // Metadata is written with the canonical origin, whichever host served this —
   // and without the query string: no shell page reads one, so `?utm_source=…`
-  // (or the `?app=1` below) must not end up declared canonical.
-  const canonicalUrl = new URL(url.pathname, siteOrigin(c));
+  // (or the `?app=1` below) must not end up declared canonical. Assigned via
+  // the setter, never the two-argument constructor: a request for
+  // `//evil.com/x` would parse there as protocol-relative and write a foreign
+  // host into every canonical tag on the page.
+  const canonicalUrl = new URL(siteOrigin(c));
+  canonicalUrl.pathname = url.pathname;
   // `?app=1` is the way *into* the app from a detail page: it serves the plain
   // shell so the bundle mounts, where the bare URL keeps the website page.
   const keepApp = url.searchParams.get('app') === '1';
