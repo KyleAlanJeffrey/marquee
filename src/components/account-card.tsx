@@ -6,11 +6,9 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { PressableScale } from '@/components/pressable-scale';
 import { useConnectSpotify } from '@/components/spotify-connect';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
-
-const SPOTIFY_GREEN = '#1DB954';
 
 /**
  * The account section of the profile header: which integrations are wired up,
@@ -61,7 +59,7 @@ export function AccountCard() {
         INTEGRATIONS
       </ThemedText>
       <View style={styles.row}>
-        <Ionicons name="musical-notes" size={20} color={SPOTIFY_GREEN} />
+        <Ionicons name="musical-notes" size={20} color={Brand.spotify} />
         <View style={{ flex: 1 }}>
           <ThemedText type="smallBold">Spotify</ThemedText>
           <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
@@ -86,11 +84,11 @@ export function AccountCard() {
             accessibilityLabel="Connect your Spotify account"
             disabled={busy}
             onPress={connect}
-            style={[styles.connectBtn, { borderColor: SPOTIFY_GREEN }]}>
+            style={[styles.connectBtn, { borderColor: Brand.spotify }]}>
             {busy ? (
-              <ActivityIndicator size="small" color={SPOTIFY_GREEN} />
+              <ActivityIndicator size="small" color={Brand.spotify} />
             ) : (
-              <ThemedText type="labelSm" style={{ color: SPOTIFY_GREEN }}>
+              <ThemedText type="labelSm" style={{ color: Brand.spotify }}>
                 {failed ? 'RETRY' : 'CONNECT'}
               </ThemedText>
             )}

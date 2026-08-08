@@ -6,7 +6,7 @@ import { ArtistArt } from '@/components/artist-art';
 import { PressableScale } from '@/components/pressable-scale';
 import { RsvpCounts } from '@/components/rsvp-counts';
 import { ThemedText } from '@/components/themed-text';
-import { Colors, Glow, Radius, Spacing } from '@/constants/theme';
+import { Brand, Colors, Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatEventDateParts, formatPrice, formatTime, formatVenue } from '@/lib/format';
 import type { NearbyEvent } from '@/lib/types';
@@ -16,10 +16,12 @@ type Props = {
   following: boolean;
   onPress: () => void;
   onToggleFollow: () => void;
+  /** See SecondaryEventCard: the caller matched this act to your Spotify. */
+  spotifyBadge?: boolean;
 };
 
 /** The hero "Concert Card": wide image, date chip, price, headline stack. */
-export function FeaturedCard({ event, following, onPress, onToggleFollow }: Props) {
+export function FeaturedCard({ event, following, onPress, onToggleFollow, spotifyBadge = false }: Props) {
   const theme = useTheme();
   const genre = event.artist_genres?.[0];
   const { weekday, day, month } = formatEventDateParts(event.starts_at, event.venue_timezone);
@@ -61,6 +63,13 @@ export function FeaturedCard({ event, following, onPress, onToggleFollow }: Prop
       <View style={styles.body}>
         <View style={{ flex: 1 }}>
           <ThemedText type="labelSm" style={{ color: theme.cyan, letterSpacing: 1.5 }}>
+            {/* Nested span: Spotify's green for the mark, the line's cyan for
+                the rest, truncating together as one Text. */}
+            {spotifyBadge && (
+              <ThemedText type="labelSm" style={{ color: Brand.spotify, letterSpacing: 1.5 }}>
+                {'YOUR SPOTIFY • '}
+              </ThemedText>
+            )}
             {[
               genre?.toUpperCase(),
               event.time_unknown

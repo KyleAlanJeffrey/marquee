@@ -40,6 +40,16 @@ export type ThemeColor = Exclude<
  * slant — so nothing here should also set `fontStyle: 'italic'`, which would
  * double-slant on Android.
  */
+/**
+ * Third-party brand colors, which don't theme: Spotify's green is Spotify's
+ * green on every background we'll ever ship. Outside `Colors` on purpose so
+ * nothing ever "adjusts" it per-theme — brand guidelines say the color is the
+ * identity.
+ */
+export const Brand = {
+  spotify: '#1DB954',
+} as const;
+
 export const Fonts = {
   display: 'Anybody_800ExtraBold_Italic',
   headline: 'Anybody_700Bold',

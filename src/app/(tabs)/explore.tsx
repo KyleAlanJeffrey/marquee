@@ -23,7 +23,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { discoverEvents, refreshArtistEvents } from '@/lib/discovery';
 import { useAuth } from '@/lib/auth';
 import { useFollows } from '@/lib/follows-store';
-import { useNearbyEvents, useNearbyVenues } from '@/hooks/queries';
+import { useNearbyEvents, useNearbyVenues, useSpotifySuggestions } from '@/hooks/queries';
 import { getCoordsFast, reverseGeocodeLabel } from '@/lib/location';
 import { RADIUS_OPTIONS, usePrefs } from '@/lib/prefs-store';
 import { syncConcertReminders } from '@/lib/reminders';
@@ -118,6 +118,16 @@ export default function ExploreScreen() {
   }, [feedCoords, radiusMiles, queryClient]);
 
   const allEvents = useMemo(() => events.data?.items ?? [], [events.data]);
+
+  // Which feed acts are in your Spotify library — for the green mark on the
+  // cards. Same query the bottom rail reads (React Query dedupes them), so the
+  // marks and the rail can never disagree about who you listen to. Signed out
+  // or unlinked it's an empty set and every card renders exactly as before.
+  const spotify = useSpotifySuggestions(signedIn);
+  const spotifyArtistIds = useMemo(
+    () => new Set((spotify.data?.items ?? []).map((s) => s.artist_id).filter(Boolean)),
+    [spotify.data],
+  );
 
   // Followed shows near the user — not shown here (see the Following tab), but
   // used to keep on-device reminders in sync and to refresh followed artists.
@@ -388,6 +398,7 @@ export default function ExploreScreen() {
                     following={isFollowing(eventRef(featured))}
                     onPress={() => router.push(`/event/${featured.event_id}`)}
                     onToggleFollow={() => toggleFollow(featured)}
+                    spotifyBadge={spotifyArtistIds.has(featured.artist_id)}
                   />
                 </Animated.View>
               )}
@@ -397,6 +408,7 @@ export default function ExploreScreen() {
                     event={e}
                     following={isFollowing(eventRef(e))}
                     onPress={() => router.push(`/event/${e.event_id}`)}
+                    spotifyBadge={spotifyArtistIds.has(e.artist_id)}
                   />
                 </Animated.View>
               ))}

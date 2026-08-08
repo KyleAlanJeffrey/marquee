@@ -6,7 +6,7 @@ import { ArtistArt } from '@/components/artist-art';
 import { PressableScale } from '@/components/pressable-scale';
 import { RsvpCounts } from '@/components/rsvp-counts';
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDistance, formatPrice, formatRelativeDay, formatTime, formatVenue } from '@/lib/format';
 import type { NearbyEvent } from '@/lib/types';
@@ -17,12 +17,20 @@ export function SecondaryEventCard({
   following,
   onPress,
   action,
+  spotifyBadge = false,
 }: {
   event: NearbyEvent;
   following: boolean;
   onPress: () => void;
   /** Control pinned to the right edge, e.g. remove-from-saved. */
   action?: ReactNode;
+  /**
+   * "This act is in your Spotify library" — a green mark in the label line.
+   * The caller decides (Explore matches the feed against the suggestions
+   * query); the card just wears it, so screens without the integration pay
+   * nothing.
+   */
+  spotifyBadge?: boolean;
 }) {
   const theme = useTheme();
   const genre = event.artist_genres?.[0];
@@ -41,6 +49,14 @@ export function SecondaryEventCard({
       <View style={styles.body}>
         <View style={styles.topRow}>
           <ThemedText type="labelSm" style={{ color: theme.primary, flex: 1 }} numberOfLines={1}>
+            {/* Nested so the mark can hold Spotify's green while the rest of
+                the line keeps the theme color — one Text, so it truncates as
+                a single line instead of wrapping the label under the mark. */}
+            {spotifyBadge && (
+              <ThemedText type="labelSm" style={{ color: Brand.spotify }}>
+                {'YOUR SPOTIFY • '}
+              </ThemedText>
+            )}
             {[
               genre?.toUpperCase(),
               event.time_unknown

@@ -19,7 +19,7 @@ import { PastShowsPicker } from '@/components/past-shows-picker';
 import { PressableScale } from '@/components/pressable-scale';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
-import { Colors, Glow, Radius, Spacing } from '@/constants/theme';
+import { Brand, Colors, Glow, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
@@ -334,9 +334,9 @@ export default function ArtistScreen() {
                 {spotifyUrl && (
                   <PressableScale
                     onPress={() => openUrl(spotifyUrl)}
-                    style={[styles.spotifyBtn, { borderColor: '#1DB954' }]}>
-                    <Ionicons name="musical-notes" size={16} color="#1DB954" />
-                    <ThemedText type="label" style={{ color: '#1DB954', fontSize: 13 }}>
+                    style={[styles.spotifyBtn, { borderColor: Brand.spotify }]}>
+                    <Ionicons name="musical-notes" size={16} color={Brand.spotify} />
+                    <ThemedText type="label" style={{ color: Brand.spotify, fontSize: 13 }}>
                       Listen on Spotify
                     </ThemedText>
                   </PressableScale>
