@@ -698,7 +698,20 @@ export async function pageSeo(env: Env, path: string, origin: string): Promise<P
 const escapeAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 /** Rewrite the SPA shell's <head> for this specific URL. */
-export function injectSeo(res: Response, url: URL, seo: PageSeo): Response {
+export function injectSeo(
+  res: Response,
+  url: URL,
+  seo: PageSeo,
+  opts?: {
+    /**
+     * Serve the app shell untouched even when this page has server markup —
+     * the `?app=1` escape hatch on detail pages. The "Open in the app" links
+     * point here, so a reader can trade the website page for the app
+     * deliberately instead of having it taken from them.
+     */
+    keepApp?: boolean;
+  },
+): Response {
   const origin = url.origin;
   const self = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : '/';
   const canonical = origin + (seo.canonicalPath ?? self);
@@ -768,45 +781,52 @@ export function injectSeo(res: Response, url: URL, seo: PageSeo): Response {
     });
   }
 
-  if (seo.body) {
+  if (seo.body && !opts?.keepApp) {
     const body = seo.body;
+    // These used to be the app's first paint: the body went into #root with the
+    // hydrate flag off, the bundle mounted over it, and the reader watched the
+    // page they were reading get replaced by the app ("snuffed by a redirect"
+    // was the bug report, and fair). Now a page with something to say *is* the
+    // page: the bundle never loads here. Every link on it is a real <a href>,
+    // and the ones that should open the app say `?app=1`, which serves the
+    // plain shell instead (see `keepApp`).
+    //
+    // The export loads Anybody in JavaScript, so a page without the bundle
+    // would fall back to system-ui. The font files are still declared in the
+    // head as preloads, though — so their URLs are read off those tags and
+    // turned into @font-face rules, and the typography survives the app's
+    // absence.
+    let fontCss = '';
     /** One module script's text, reassembled across however many chunks it arrives in. */
     let module = '';
     rewriter
-      // The export prerendered a loading spinner into #root and set the hydrate flag
-      // so React would adopt it. Replacing those children *and* hydrating is a
-      // mismatch, and React resolves a mismatch by throwing the whole tree away with
-      // a console error. Turning the flag off switches the bundle to
-      // `createRoot().render()`, which discards the container's children by design —
-      // which is exactly the handover we want, since all it discards is our markup
-      // after it has been read. Nothing is lost: the thing being hydrated was a
-      // spinner.
-      //
-      // Buffered rather than tested chunk by chunk: HTMLRewriter splits a text node
-      // wherever it likes, and a flag straddling two chunks would be missed — which
-      // is the one failure that matters here, since it would leave a hydrating page
-      // with markup that doesn't match. Scoped to the module script (the only one
-      // the export writes it into) so the JSON-LD next to it is never rebuilt.
+      .on('link[rel="preload"]', {
+        element(el) {
+          if (el.getAttribute('as') !== 'font') return;
+          const href = el.getAttribute('href');
+          const family = href?.split('/').pop()?.split('.')[0];
+          if (!href || !family) return;
+          fontCss += `@font-face{font-family:'${family}';src:url('${href}') format('truetype');font-display:swap}`;
+        },
+      })
+      // The export's boot script — the hydrate flag and the deferred entry
+      // bundle. Both go: this page doesn't hand over to the app.
       .on('script[type="module"]', {
-        element() {
-          module = '';
+        element(el) {
+          el.remove();
         },
         text(chunk) {
-          module += chunk.text;
-          if (!chunk.lastInTextNode) {
-            chunk.remove();
-            return;
-          }
-          chunk.replace(
-            module.replace(/__EXPO_ROUTER_HYDRATE__\s*=\s*true/, '__EXPO_ROUTER_HYDRATE__=false'),
-            { html: true },
-          );
-          module = '';
+          chunk.remove();
+        },
+      })
+      .on('script[src]', {
+        element(el) {
+          if (/\/entry-[0-9a-f]+\.js$/.test(el.getAttribute('src') ?? '')) el.remove();
         },
       })
       .on('#root', {
         element(el) {
-          el.setInnerContent(body, { html: true });
+          el.setInnerContent(`<style>${fontCss}</style>${body}`, { html: true });
         },
       });
   }

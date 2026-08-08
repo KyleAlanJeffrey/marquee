@@ -337,15 +337,35 @@ app.all('*', async (c) => {
   // not-found shell, which hydrates, reads the real URL, and renders the real
   // screen. 200, not 404: the shell will almost always become actual content,
   // and the pages that truly are thin carry their own noindex (seo.ts).
-  if (c.req.method === 'GET' && res.status === 404 && c.req.header('accept')?.includes('text/html')) {
+  const wantsHtml = c.req.header('accept')?.includes('text/html') ?? false;
+  // Metadata is written with the canonical origin, whichever host served this —
+  // and without the query string: no shell page reads one, so `?utm_source=…`
+  // (or the `?app=1` below) must not end up declared canonical.
+  const canonicalUrl = new URL(url.pathname, siteOrigin(c));
+  // `?app=1` is the way *into* the app from a detail page: it serves the plain
+  // shell so the bundle mounts, where the bare URL keeps the website page.
+  const keepApp = url.searchParams.get('app') === '1';
+  const seo =
+    c.req.method === 'GET' && wantsHtml ? await pageSeo(c.env, url.pathname, canonicalUrl.origin) : null;
+
+  if (c.req.method === 'GET' && res.status === 404 && wantsHtml) {
+    // Which shell depends on what happens to it. A page with server markup
+    // replaces `#root` wholesale, so its shell only contributes a `<head>` —
+    // and it must be explore's, because Expo writes the font preloads this
+    // page's `@font-face` rules are built from (seo.ts) only into pages that
+    // rendered text, which the not-found export didn't. Everything else gets
+    // the not-found shell, whose prerendered body is empty — the app mounts
+    // over it without first flashing another screen's skeleton.
+    //
     // `%2B`, not `+`: the asset server 307s the literal spelling, same as the
     // `@` in the font paths above. A fresh unconditional GET, not a clone of
     // the original request: a revisiting browser sends If-None-Match for the
     // shell it already holds, and forwarding it here turns the fallback into
     // a 304 — not `ok`, so the deep link would 404 exactly for the people
     // who'd loaded it before. Same for Range.
+    const shellPath = seo?.body && !keepApp ? '/explore' : '/%2Bnot-found';
     const shell = await c.env.ASSETS.fetch(
-      new Request(new URL('/%2Bnot-found', url.origin), { headers: { Accept: 'text/html' } }),
+      new Request(new URL(shellPath, url.origin), { headers: { Accept: 'text/html' } }),
     );
     if (shell.ok) res = new Response(shell.body, { status: 200, headers: shell.headers });
   }
@@ -358,10 +378,7 @@ app.all('*', async (c) => {
 
   if (c.req.method !== 'GET' || !res.headers.get('content-type')?.includes('text/html')) return res;
 
-  // Metadata is written with the canonical origin, whichever host served this.
-  const canonicalUrl = new URL(url.pathname + url.search, siteOrigin(c));
-  const seo = await pageSeo(c.env, url.pathname, canonicalUrl.origin);
-  return seo ? injectSeo(res, canonicalUrl, seo) : res;
+  return seo ? injectSeo(res, canonicalUrl, seo, { keepApp }) : res;
 });
 
 // The cron crawl and IndexNow submissions live on the jobs Worker

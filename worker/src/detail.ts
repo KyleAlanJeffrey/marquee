@@ -202,7 +202,8 @@ ${(() => {
   // The facts and the ticket link are one card. With a tour list beside it the
   // page splits into desktop columns; without one the card just flows.
   const side = `<aside class="side"><dl class="facts">${facts}</dl>
-${tickets ? `<a class="cta" rel="nofollow noopener" href="${esc(tickets)}">Get tickets</a>` : ''}</aside>`;
+${tickets ? `<a class="cta" rel="nofollow noopener" href="${esc(tickets)}">Get tickets</a>` : ''}
+<p class="more"><a rel="nofollow" href="/event/${encodeURIComponent(d.id)}?app=1">Open in the app</a></p></aside>`;
   return tour ? `<div class="split">${side}<div>${tour}</div></div>` : side;
 })()}`,
   );
@@ -254,7 +255,7 @@ export function artistBody(d: ArtistBody): string {
     }. ${d.shows.length ? `${d.shows.length}${d.truncated ? '+' : ''} upcoming show${d.shows.length === 1 ? '' : 's'}, soonest first.` : ''}</p>
 <h2>Upcoming shows</h2>
 ${dates}
-<a class="cta" href="/explore">Open Marquee</a>`,
+<a class="cta" rel="nofollow" href="/artist/${encodeURIComponent(d.id)}?app=1">Open in the app</a>`,
   );
 }
 
@@ -301,6 +302,7 @@ export function venueBody(d: VenueBody): string {
     } at ${esc(d.name)}${where ? ` in ${esc(where)}` : ''}.</p>
 <h2>What's on</h2>
 ${list}
-${where ? `<p class="more">More around ${hubLink(d.city, d.region, d.country)}.</p>` : ''}`,
+${where ? `<p class="more">More around ${hubLink(d.city, d.region, d.country)}.</p>` : ''}
+<p class="more"><a rel="nofollow" href="/venue/${encodeURIComponent(d.id)}?app=1">Open in the app</a></p>`,
   );
 }
