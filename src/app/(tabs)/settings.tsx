@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { AccountCard } from '@/components/account-card';
+import { ShowAllButton } from '@/components/show-all-button';
 import { GlassCard } from '@/components/glass-card';
 import { PageMeta } from '@/components/page-meta';
 import { PersonProfile } from '@/components/person-profile';
@@ -13,6 +14,7 @@ import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Radius, Spacing } from '@/constants/theme';
+import { useCappedList } from '@/hooks/use-capped-list';
 import { useTheme } from '@/hooks/use-theme';
 import { useAttendances } from '@/lib/attendances-store';
 import { useAuth } from '@/lib/auth';
@@ -34,6 +36,9 @@ export default function ProfileScreen() {
   const { follows, unfollow } = useFollows();
   const { attended } = useAttendances();
   const { signedIn, loading, userId } = useAuth();
+  // The heading carries the true count; the list itself shows eight rows and
+  // gates the rest — a hundred follows shouldn't bury the sections below.
+  const followList = useCappedList(follows, 8);
   const { radiusMiles, setRadiusMiles, remindersEnabled, setRemindersEnabled, persisted } = usePrefs();
   const [toggling, setToggling] = useState(false);
 
@@ -220,12 +225,12 @@ export default function ProfileScreen() {
           </GlassCard>
         ) : (
           <GlassCard style={styles.listCard}>
-            {follows.map((f, i) => (
+            {followList.shown.map((f, i) => (
               <View
                 key={f.artistId ?? f.spotifyId ?? f.name}
                 style={[
                   styles.followRow,
-                  i < follows.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
+                  i < followList.shown.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border },
                 ]}>
                 <Image
                   source={f.imageUrl ? { uri: f.imageUrl } : undefined}
@@ -253,6 +258,11 @@ export default function ProfileScreen() {
                 </PressableScale>
               </View>
             ))}
+            {followList.hidden > 0 && (
+              <View style={{ paddingHorizontal: Spacing.three, paddingBottom: Spacing.three }}>
+                <ShowAllButton hidden={followList.hidden} noun="ARTISTS" onPress={followList.expand} />
+              </View>
+            )}
           </GlassCard>
         )}
 

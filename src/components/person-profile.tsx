@@ -9,8 +9,10 @@ import { ErrorState } from '@/components/error-state';
 import { FollowButton } from '@/components/follow-button';
 import { GlassCard } from '@/components/glass-card';
 import { PressableScale } from '@/components/pressable-scale';
+import { ShowAllButton } from '@/components/show-all-button';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
+import { useCappedList } from '@/hooks/use-capped-list';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api';
 import { StarRating } from '@/components/star-rating';
@@ -286,6 +288,12 @@ export function PersonProfile({
   const theirReviews = useProfileReviews(profileKey);
   const shelves = usePersonLists(profileKey);
 
+  // Profiles are summaries, and every one of these can outgrow one (the server
+  // sends up to 100 people, 50 reviews): a cap each, and a gate for the rest.
+  const people = useCappedList(list.data?.people ?? [], 8);
+  const reviewList = useCappedList(theirReviews.data?.reviews ?? [], 5);
+  const shelfList = useCappedList(shelves.data?.lists ?? [], 5);
+
   if (profile.isLoading) {
     return (
       <View style={styles.centreBlock}>
@@ -435,9 +443,12 @@ export function PersonProfile({
         </ThemedText>
       ) : (
         <GlassCard style={styles.listCard}>
-          {list.data!.people.map((p) => (
+          {people.shown.map((p) => (
             <PersonRow key={p.id} person={p} />
           ))}
+          {people.hidden > 0 && (
+            <ShowAllButton hidden={people.hidden} noun="PEOPLE" onPress={people.expand} />
+          )}
         </GlassCard>
       )}
 
@@ -449,7 +460,7 @@ export function PersonProfile({
             {`LISTS · ${shelves.data.lists.length}`}
           </ThemedText>
           <GlassCard style={styles.listCard}>
-            {shelves.data.lists.map((l) => (
+            {shelfList.shown.map((l) => (
               <PressableScale
                 key={l.id}
                 haptic={false}
@@ -472,6 +483,9 @@ export function PersonProfile({
                 )}
               </PressableScale>
             ))}
+            {shelfList.hidden > 0 && (
+              <ShowAllButton hidden={shelfList.hidden} noun="LISTS" onPress={shelfList.expand} />
+            )}
           </GlassCard>
         </>
       )}
@@ -496,7 +510,7 @@ export function PersonProfile({
             </ThemedText>
           ) : (
             <GlassCard style={styles.listCard}>
-              {theirReviews.data.reviews.map((r) => (
+              {reviewList.shown.map((r) => (
                 <PressableScale
                   key={r.id}
                   haptic={false}
@@ -520,6 +534,9 @@ export function PersonProfile({
                   )}
                 </PressableScale>
               ))}
+              {reviewList.hidden > 0 && (
+                <ShowAllButton hidden={reviewList.hidden} noun="REVIEWS" onPress={reviewList.expand} />
+              )}
             </GlassCard>
           )}
         </>

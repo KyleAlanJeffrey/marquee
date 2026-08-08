@@ -145,6 +145,76 @@ export type SpotifySuggestion = {
   source: 'followed' | 'top';
 };
 
+/** One catalogue candidate for a Spotify artist, with its upcoming-show count. */
+export type CatalogueRow = {
+  id: string;
+  spotifyId: string | null;
+  name: string | null;
+  upcoming: number;
+};
+
+/**
+ * Decide which catalogue row answers for each Spotify artist.
+ *
+ * The rule: **the row with the shows wins.** An id-equality match is the
+ * strongest claim in principle, but production data cuts both ways — duplicate
+ * artist rows where the id landed on a stray with zero events while its twin
+ * holds the tour, and enrichment-written ids that don't match the artist's
+ * real one. Suggesting is answering "can you go and see them", so when an id
+ * match says 0 and a same-named row says 42, the 42 is the truth worth acting
+ * on. Ties keep the incumbent (id matches run first, so equal evidence
+ * defers to the stronger claim).
+ *
+ * The same rule settles duplicate same-named rows (each claims; the busier
+ * row stays) — and its known cost: two genuinely different artists sharing a
+ * name resolve to whichever is busier. That ambiguity predates this function;
+ * at least this pick is the one with tickets to show for it.
+ *
+ * `backfill` lists the name-matched winners that still lack a `spotify_id`,
+ * so the caller can write the id back — never rows that already carry one,
+ * and never a candidate that was later outbid.
+ */
+export function pickCatalogueMatches(
+  byId: CatalogueRow[],
+  byName: CatalogueRow[],
+  nameKeys: Map<string, string>,
+): {
+  matched: Map<string, { artistId: string; upcoming: number }>;
+  backfill: { artistId: string; spotifyId: string }[];
+} {
+  const matched = new Map<string, { artistId: string; upcoming: number }>();
+  const claim = (spotifyId: string, row: CatalogueRow): boolean => {
+    const upcoming = Number(row.upcoming);
+    const prev = matched.get(spotifyId);
+    if (prev && prev.upcoming >= upcoming) return false;
+    matched.set(spotifyId, { artistId: row.id, upcoming });
+    return true;
+  };
+
+  for (const row of byId) {
+    if (row.spotifyId) claim(row.spotifyId, row);
+  }
+
+  // The name match is looser than SQL can express — `lower(name)` narrowed the
+  // candidates, `artistNameKey` decides — so the final comparison happens here.
+  const backfillIds = new Map<string, string>();
+  for (const row of byName) {
+    const key = artistNameKey(row.name ?? '');
+    const spotifyId = key ? nameKeys.get(key) : undefined;
+    if (!spotifyId) continue;
+    if (claim(spotifyId, row) && !row.spotifyId) backfillIds.set(row.id, spotifyId);
+  }
+
+  // A candidate that claimed early and was outbid later must not be written:
+  // only rows that still hold their match at the end earn the id.
+  const winners = new Set([...matched.values()].map((m) => m.artistId));
+  const backfill = [...backfillIds]
+    .filter(([artistId]) => winners.has(artistId))
+    .map(([artistId, spotifyId]) => ({ artistId, spotifyId }));
+
+  return { matched, backfill };
+}
+
 /**
  * Match a listener's Spotify artists to our catalogue, and suggest them.
  *
@@ -211,32 +281,25 @@ export async function spotifySuggestions(
       .from(artists)
       .where(inArray(artists.spotifyId, spotifyIds))
       .all(),
-    // Only rows still missing an id are worth name-matching: anything with one
-    // was either found above or belongs to a different Spotify artist.
+    // Every name candidate, including rows that already carry an id. This used
+    // to filter on `spotify_id IS NULL` — "anything with one was either found
+    // above or belongs to a different Spotify artist" — and production proved
+    // both halves wrong at once: the catalogue holds duplicate rows where the
+    // id-bearing one is a stray with no shows (Gorillaz: the spotify_id row had
+    // 0 upcoming, its bare twin had 42), and enrichment has written ids that
+    // don't match the artist's real one (Parcels: id set, 24 upcoming, and the
+    // id-equality match missed it). The filter turned both into "no dates yet".
+    // `pickCatalogueMatches` arbitrates instead: the row with the shows wins.
     lowerNames.size === 0
       ? Promise.resolve([])
       : db
-          .select({ id: artists.id, name: artists.name, upcoming })
+          .select({ id: artists.id, spotifyId: artists.spotifyId, name: artists.name, upcoming })
           .from(artists)
-          .where(and(isNull(artists.spotifyId), inArray(sql`lower(${artists.name})`, [...lowerNames])))
+          .where(inArray(sql`lower(${artists.name})`, [...lowerNames]))
           .all(),
   ]);
 
-  const matched = new Map<string, { artistId: string; upcoming: number }>();
-  for (const row of byId) {
-    if (row.spotifyId) matched.set(row.spotifyId, { artistId: row.id, upcoming: Number(row.upcoming) });
-  }
-
-  // The name match is looser than SQL can express — `lower(name)` narrowed the
-  // candidates, `artistNameKey` decides — so the final comparison happens here.
-  const backfill: { artistId: string; spotifyId: string }[] = [];
-  for (const row of byName) {
-    const key = artistNameKey(row.name ?? '');
-    const spotifyId = nameKeys.get(key);
-    if (!spotifyId || matched.has(spotifyId)) continue;
-    matched.set(spotifyId, { artistId: row.id, upcoming: Number(row.upcoming) });
-    backfill.push({ artistId: row.id, spotifyId });
-  }
+  const { matched, backfill } = pickCatalogueMatches(byId, byName, nameKeys);
 
   // Write the ids the name match earned. Guarded on `spotify_id is null` so a
   // concurrent enrichment that got there first is never overwritten, and awaited

@@ -7,6 +7,7 @@ import { PressableScale } from '@/components/pressable-scale';
 import { useConnectSpotify } from '@/components/spotify-connect';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
+import { useSpotifySuggestions } from '@/hooks/queries';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth';
 
@@ -37,12 +38,19 @@ export function AccountCard() {
   const { user } = useUser();
   const { busy, failed, connect } = useConnectSpotify();
 
-  // Clerk's client knows the linked accounts already — no server round-trip.
-  // `verified` matters: a back-out at Spotify's authorize page leaves an
-  // unverified account behind, and that must read as "not connected".
-  const spotifyLinked = Boolean(
-    user?.verifiedExternalAccounts.some((a) => a.provider === 'spotify'),
-  );
+  // "Connected" is the server's word, not the client's. This row used to read
+  // Clerk's client-side `verifiedExternalAccounts`, and production showed the
+  // two disagreeing: the suggestions endpoint was fetching a live Spotify
+  // token — the listener's library rendered on the Following tab — while this
+  // card still offered CONNECT, and tapping it 403'd because the account
+  // already existed. The suggestions query's `linked` flag *is* a successful
+  // token fetch, so it can't be wrong about this; Clerk's view fills in only
+  // until that answer arrives (and after a native connect, the flow
+  // invalidates the query, so this refreshes itself).
+  const suggestions = useSpotifySuggestions(true);
+  const spotifyLinked =
+    suggestions.data?.linked ??
+    Boolean(user?.verifiedExternalAccounts.some((a) => a.provider === 'spotify'));
   // A failed attempt comes home as a full page load on web, so the hook's own
   // `failed` state is gone by the time anyone can read it. Clerk keeps the
   // reason on the unverified account it left behind — show that, verbatim:

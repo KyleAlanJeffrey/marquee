@@ -657,6 +657,15 @@ What's left is the residuals:
     never links sees it on the home screen forever. Fine at seven users; wants
     either a persisted dismissal or a rule like "only when you follow nobody"
     before the user base grows.
+  - [ ] **Catalogue has duplicate artist rows** — production: Gorillaz twice
+    (the spotify_id-bearing row has 0 upcoming, its bare twin 42), The Strokes
+    three times (0/31/21). The suggestions matcher now routes around them by
+    preferring the row with shows, but the rows themselves want a dedupe pass
+    like the venue one.
+  - [ ] **Enrichment has written wrong spotify_ids** — Parcels' stored id
+    doesn't match the id Spotify's own /me/following returns for Parcels
+    (24 upcoming shows read as "no dates" until the name fallback was allowed
+    to outbid it). Worth an audit of enrichment's search-by-name id picks.
   - [ ] The name fallback only catches case differences, not diacritics or
     punctuation: "MOLLY TUTTLE" matches, "Sigur Rós" vs "Sigur Ros" doesn't,
     because `artistNameKey` folds more than SQLite can express in a query.

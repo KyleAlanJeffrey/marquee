@@ -17,9 +17,11 @@ import { AddToListButton } from '@/components/add-to-list-button';
 import { StatGrid, type Stat } from '@/components/stat-grid';
 import { STATS_FLOOR, useVenueReviewStats } from '@/lib/reviews';
 import { StaticMap } from '@/components/static-map';
+import { ShowAllButton } from '@/components/show-all-button';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Colors, Radius, Spacing } from '@/constants/theme';
+import { useCappedList } from '@/hooks/use-capped-list';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshVenueEvents } from '@/lib/discovery';
 import { useFollowedVenues } from '@/lib/followed-venues-store';
@@ -40,6 +42,9 @@ export default function VenueScreen() {
   const { isFollowingVenue, toggleVenue } = useFollowedVenues();
 
   const events = shows.data?.pages.flatMap((p) => p.items) ?? [];
+  // Ten rows, then the gate — a busy room books months out, and the venue's
+  // own page (photo, map, stats, reviews) shouldn't scroll like a calendar.
+  const eventList = useCappedList(events, 10);
 
   // On open, pull the venue's full upcoming lineup from Ticketmaster, then refetch.
   const refreshed = useRef(false);
@@ -134,16 +139,27 @@ export default function VenueScreen() {
       />
       <StageBackground />
       <FlatList
-        data={events}
+        data={eventList.shown}
         keyExtractor={(e: VenueEvent) => e.event_id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: 56 + 24, paddingBottom: Spacing.six }}
         onEndReachedThreshold={0.6}
         onEndReached={() => {
-          if (shows.hasNextPage && !shows.isFetchingNextPage) shows.fetchNextPage();
+          // Paging waits for the reader to open the list: until the gate is
+          // tapped, scrolling past ten rows means "on to the rest of the
+          // page", not "fetch me another fifty dates".
+          if (eventList.hidden === 0 && shows.hasNextPage && !shows.isFetchingNextPage) {
+            shows.fetchNextPage();
+          }
         }}
         ListFooterComponent={
-          shows.isFetchingNextPage ? (
+          eventList.hidden > 0 ? (
+            <View style={{ marginHorizontal: Spacing.three }}>
+              {/* The count is what's already loaded; `stats.upcoming` up top
+                  carries the real total. Expanding also unlocks paging. */}
+              <ShowAllButton hidden={eventList.hidden} noun="SHOWS" onPress={eventList.expand} />
+            </View>
+          ) : shows.isFetchingNextPage ? (
             <ActivityIndicator color={theme.primary} style={{ marginVertical: Spacing.four }} />
           ) : null
         }

@@ -6,9 +6,11 @@ import { ArtistArt } from '@/components/artist-art';
 import { FollowButton } from '@/components/follow-button';
 import { PressableScale } from '@/components/pressable-scale';
 import { SectionTitle } from '@/components/section-title';
+import { ShowAllButton } from '@/components/show-all-button';
 import { SpotifyConnect } from '@/components/spotify-connect';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
+import { useCappedList } from '@/hooks/use-capped-list';
 import { useTheme } from '@/hooks/use-theme';
 import { useSpotifySuggestions } from '@/hooks/queries';
 import { useFollows } from '@/lib/follows-store';
@@ -53,6 +55,10 @@ export function SpotifySuggestions({
   const suggestions = useSpotifySuggestions(signedIn);
 
   const data = suggestions.data;
+  const playing = data?.linked ? data.items.filter((s) => s.upcoming > 0) : [];
+  const quiet = data?.linked ? data.items.filter((s) => s.upcoming === 0) : [];
+  // Before the early returns — hooks don't get to be conditional.
+  const quietList = useCappedList(quiet, 8);
 
   // Signed out has nothing to offer here: the sign-in prompt belongs to the
   // screens that need an account, not to a suggestion block.
@@ -64,9 +70,6 @@ export function SpotifySuggestions({
   // it's the whole reason this isn't sign-up-only: an account that already exists
   // can connect Spotify from here.
   if (!data?.linked) return <SpotifyConnect compact={variant === 'rail'} />;
-
-  const playing = data.items.filter((s) => s.upcoming > 0);
-  const quiet = data.items.filter((s) => s.upcoming === 0);
 
   // Linked, matched nothing playing: silence on Explore (see `variant`), and on
   // the list a "follow them anyway" group still earns its place.
@@ -163,7 +166,15 @@ export function SpotifySuggestions({
           <ThemedText type="labelSm" style={[styles.groupLabel, { color: theme.textTertiary }]}>
             NO DATES YET — FOLLOW TO BE TOLD
           </ThemedText>
-          {quiet.map(row)}
+          {/* Capped hard: a Spotify library can put sixty acts here, and a
+              wall of "no dates yet" buries whatever screen this block is on —
+              the playing group above stays whole because it's the point. */}
+          {quietList.shown.map(row)}
+          {quietList.hidden > 0 && (
+            <View style={{ paddingHorizontal: Spacing.three }}>
+              <ShowAllButton hidden={quietList.hidden} noun="ARTISTS" onPress={quietList.expand} />
+            </View>
+          )}
         </View>
       )}
       <View style={styles.note}>

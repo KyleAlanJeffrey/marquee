@@ -17,9 +17,11 @@ import { PageMeta } from '@/components/page-meta';
 import { AddToListButton } from '@/components/add-to-list-button';
 import { PastShowsPicker } from '@/components/past-shows-picker';
 import { PressableScale } from '@/components/pressable-scale';
+import { ShowAllButton } from '@/components/show-all-button';
 import { ThemedText } from '@/components/themed-text';
 import { TopBar } from '@/components/top-bar';
 import { Brand, Colors, Glow, Radius, Spacing } from '@/constants/theme';
+import { useCappedList } from '@/hooks/use-capped-list';
 import { useTheme } from '@/hooks/use-theme';
 import { refreshArtistEvents } from '@/lib/discovery';
 import { useFollows } from '@/lib/follows-store';
@@ -42,6 +44,9 @@ export default function ArtistScreen() {
   const theme = useTheme();
   const artist = useArtist(id);
   const events = useArtistEvents(id);
+  // Ten dates, then the button — a big tour otherwise turns the artist's page
+  // into a scroll of dates (see useCappedList).
+  const eventList = useCappedList(events.data ?? [], 10);
   const info = useArtistInfo(id);
   const liveStats = useArtistReviewStats(id);
   const { isFollowing, toggle } = useFollows();
@@ -115,7 +120,7 @@ export default function ArtistScreen() {
         } upcoming concerts, tour dates, top tracks and tickets — updated from Ticketmaster.`}
       />
       <Animated.FlatList
-        data={events.data ?? []}
+        data={eventList.shown}
         keyExtractor={(e: ArtistEvent) => e.event_id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: Spacing.six }}
@@ -248,6 +253,15 @@ export default function ArtistScreen() {
         )}
         ListFooterComponent={
           <View>
+            {/* The rest of a long tour, behind one tap: this page is the
+                artist — bio, tracks, links — and forty dates unrolled would
+                make it a scroll of dates instead. The stats row up top still
+                counts the full list. */}
+            {eventList.hidden > 0 && (
+              <View style={{ marginHorizontal: Spacing.three, marginBottom: Spacing.two }}>
+                <ShowAllButton hidden={eventList.hidden} noun="SHOWS" onPress={eventList.expand} />
+              </View>
+            )}
             {/* Top Tracks (from Deezer) */}
             {(tracks.length > 0 || info.isLoading) && (
               <>
