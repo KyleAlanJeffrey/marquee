@@ -212,14 +212,19 @@ export default function FollowingScreen() {
                       ))}
                     </View>
                   )}
-                  {/* Artists only — these are artist suggestions, and the
-                      venues tab is asking a different question. Renders nothing
-                      unless this account has Spotify linked. */}
-                  {tab === 'artists' && <SpotifySuggestions signedIn={signedIn} />}
                   <ThemedText type="label" style={[styles.sectionLabel, { color: theme.primary }]}>
                     {coords ? `WITHIN ${radiusMiles} MI` : 'COMING UP'}
                   </ThemedText>
                 </View>
+              }
+              ListFooterComponent={
+                // Artists only — these are artist suggestions, and the venues
+                // tab is asking a different question. Below the shows, not
+                // above them: this tab's job is the dates of people you
+                // already follow, and the Spotify block is the "what next"
+                // that earns its place after that job is done. Renders nothing
+                // unless this account has Spotify linked.
+                tab === 'artists' ? <SpotifySuggestions signedIn={signedIn} /> : null
               }
               ListEmptyComponent={
                 <EmptyState

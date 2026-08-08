@@ -340,11 +340,16 @@ export default function ExploreScreen() {
           )}
 
           {shown.length === 0 ? (
-            <EmptyState
-              icon="compass-outline"
-              title="Nothing nearby yet"
-              message={`No upcoming shows within ${radiusMiles} mi. Try a wider radius.`}
-            />
+            <>
+              <EmptyState
+                icon="compass-outline"
+                title="Nothing nearby yet"
+                message={`No upcoming shows within ${radiusMiles} mi. Try a wider radius.`}
+              />
+              {/* An empty local feed is exactly when a personal lead (or the
+                  connect offer) is worth the most. */}
+              <SpotifySuggestions signedIn={signedIn} variant="rail" />
+            </>
           ) : (
             <>
               {/* Nearby Venues map */}
@@ -413,6 +418,16 @@ export default function ExploreScreen() {
                 </Animated.View>
               ))}
 
+              {/* Acts from your own Spotify that have dates — after the local
+                  feed has had its say, before the horizon widens to Coming Up.
+                  Third placement, and each end of the page was tried first: at
+                  the top it interrupted the shows (Kyle: "too in the way"), at
+                  the very bottom nobody ever saw it (Kyle: "nothing in
+                  discover"). Mid-page is the one spot that's on the scroll
+                  path without preceding what the screen is for. Hides itself
+                  when there's nothing to say. */}
+              <SpotifySuggestions signedIn={signedIn} variant="rail" />
+
               {/* Coming Up */}
               {comingUp.length > 0 && (
                 <>
@@ -431,14 +446,6 @@ export default function ExploreScreen() {
               )}
             </>
           )}
-
-          {/* Acts from your own Spotify that have dates — the closing rail,
-              after the local feed rather than cutting into it: what's on near
-              you is this screen's promise, and the personal stuff reads as a
-              coda, not an interruption. Outside the ternary so it also shows
-              under an empty feed, where a personal lead (or the connect offer)
-              is worth the most. Hides itself when there's nothing to say. */}
-          <SpotifySuggestions signedIn={signedIn} variant="rail" />
         </ScrollView>
       )}
     </View>
