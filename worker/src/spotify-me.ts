@@ -145,6 +145,31 @@ export type SpotifySuggestion = {
   source: 'followed' | 'top';
 };
 
+/**
+ * name key → Spotify id, for the fallback match — with collisions dropped.
+ *
+ * Two Spotify artists normalising to one key ("Bleachers" and "BLEACHERS",
+ * say, or genuinely distinct same-named acts) is a tie this code cannot
+ * break, and the stakes aren't symmetric: a wrong *match* is a wrong
+ * suggestion, but a wrong *backfill* writes the wrong `spotify_id` into the
+ * catalogue — the exact corruption the Parcels row taught us to fear. So an
+ * ambiguous key matches nobody: both artists still appear in the list from
+ * their own Spotify data, just without catalogue dates.
+ */
+export function buildNameKeys(artists: { id: string; name: string }[]): Map<string, string> {
+  const keys = new Map<string, string>();
+  const ambiguous = new Set<string>();
+  for (const { id, name } of artists) {
+    const key = artistNameKey(name);
+    if (!key) continue;
+    const prev = keys.get(key);
+    if (prev !== undefined && prev !== id) ambiguous.add(key);
+    else keys.set(key, id);
+  }
+  for (const key of ambiguous) keys.delete(key);
+  return keys;
+}
+
 /** One catalogue candidate for a Spotify artist, with its upcoming-show count. */
 export type CatalogueRow = {
   id: string;
@@ -249,8 +274,10 @@ export async function spotifySuggestions(
   if (wanted.size === 0) return { linked: true, items: [] };
 
   const spotifyIds = [...wanted.keys()];
-  // name key -> spotify id, for the fallback match.
-  const nameKeys = new Map<string, string>();
+  // name key -> spotify id, ambiguous keys dropped (see buildNameKeys).
+  const nameKeys = buildNameKeys(
+    [...wanted.values()].map(({ artist }) => ({ id: artist.id, name: artist.name ?? '' })),
+  );
   // The lowercased names as Spotify spells them, which is what the SQL below can
   // actually compare against — `artistNameKey` also folds diacritics and drops
   // punctuation, and SQLite has no equivalent, so it cannot appear in the query.
@@ -259,13 +286,7 @@ export async function spotifySuggestions(
   // that needs a stored normalised-name column to index; see todo.md.
   const lowerNames = new Set<string>();
   for (const { artist } of wanted.values()) {
-    const name = artist.name ?? '';
-    const key = artistNameKey(name);
-    // First spelling wins. Two Spotify artists normalising to one key is a
-    // collision we can't resolve from here, and picking arbitrarily beats
-    // joining both onto the same catalogue row.
-    if (key && !nameKeys.has(key)) nameKeys.set(key, artist.id);
-    if (name) lowerNames.add(name.toLowerCase());
+    if (artist.name) lowerNames.add(artist.name.toLowerCase());
   }
 
   // Upcoming-show counts come along so the list can lead with acts you can

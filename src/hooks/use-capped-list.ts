@@ -17,11 +17,14 @@ import { useState } from 'react';
  */
 export function useCappedList<T>(items: readonly T[], cap: number) {
   const [expanded, setExpanded] = useState(false);
-  const capped = !expanded && items.length - cap >= 2;
+  // Callers pass literals today, but a computed cap that came out fractional
+  // or negative would make slice() misbehave quietly — floor it to a sane one.
+  const limit = Math.max(1, Math.floor(cap) || 1);
+  const capped = !expanded && items.length - limit >= 2;
   return {
-    shown: capped ? items.slice(0, cap) : (items as T[]),
+    shown: capped ? items.slice(0, limit) : (items as T[]),
     /** How many rows the cap is holding back; 0 when everything is visible. */
-    hidden: capped ? items.length - cap : 0,
+    hidden: capped ? items.length - limit : 0,
     expand: () => setExpanded(true),
   };
 }

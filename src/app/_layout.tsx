@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { KyleBadge } from '@/components/kyle-badge';
 import { PageMeta } from '@/components/page-meta';
+import { UpdateNudge } from '@/components/update-nudge';
 import { Colors, Fonts } from '@/constants/theme';
 import { AuthProvider } from '@/lib/auth';
 import { useNotificationObserver } from '@/lib/notifications';
@@ -76,6 +77,10 @@ export default function RootLayout() {
               {/* Turns yesterday's "I'm going" into a logged show. Mounted at the
                   root so it runs whichever tab the app opens on. */}
               <RsvpSettler />
+              {/* Web only: tells a long-lived tab when a deploy has passed it
+                  by. An SPA tab keeps its boot bundle until someone reloads,
+                  and stale tabs kept reading as bug reports. */}
+              <UpdateNudge />
               {fontsLoaded && (
                 <Stack
                   screenOptions={{

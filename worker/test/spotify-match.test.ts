@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { artistNameKey, pickCatalogueMatches, type CatalogueRow } from '../src/spotify-me';
+import { artistNameKey, buildNameKeys, pickCatalogueMatches, type CatalogueRow } from '../src/spotify-me';
 
 const row = (over: Partial<CatalogueRow>): CatalogueRow => ({
   id: 'art_x',
@@ -90,5 +90,41 @@ describe('pickCatalogueMatches', () => {
       keysFor([['Molly Tuttle', 'sp_mt']]),
     );
     expect(matched.get('sp_mt')!.artistId).toBe('art_mt');
+  });
+});
+
+describe('buildNameKeys', () => {
+  it('drops a key two different Spotify artists collide on', () => {
+    const keys = buildNameKeys([
+      { id: 'sp_one', name: 'CAPO' },
+      { id: 'sp_two', name: 'Capo' },
+      { id: 'sp_solo', name: 'Parcels' },
+    ]);
+    // The collision matches nobody — a wrong backfill writes a wrong id into
+    // the catalogue, which is worse than two acts with no dates.
+    expect(keys.has(artistNameKey('CAPO'))).toBe(false);
+    expect(keys.get(artistNameKey('Parcels'))).toBe('sp_solo');
+  });
+
+  it('the same artist listed twice is not a collision', () => {
+    const keys = buildNameKeys([
+      { id: 'sp_one', name: 'Gorillaz' },
+      { id: 'sp_one', name: 'GORILLAZ' },
+    ]);
+    expect(keys.get(artistNameKey('Gorillaz'))).toBe('sp_one');
+  });
+
+  it('an ambiguous key produces neither match nor backfill downstream', () => {
+    const keys = buildNameKeys([
+      { id: 'sp_one', name: 'CAPO' },
+      { id: 'sp_two', name: 'Capo' },
+    ]);
+    const { matched, backfill } = pickCatalogueMatches(
+      [],
+      [row({ id: 'art_capo', spotifyId: null, upcoming: 12, name: 'Capo' })],
+      keys,
+    );
+    expect(matched.size).toBe(0);
+    expect(backfill).toEqual([]);
   });
 });
