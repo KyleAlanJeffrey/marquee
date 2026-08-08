@@ -26,8 +26,12 @@ import { useTheme } from '@/hooks/use-theme';
  * in a keyless build. Keeping the call in a child that the parent renders
  * conditionally is what makes the hook rule and the keyless case agree.
  */
-export function SpotifyConnect({ compact = false }: { compact?: boolean }) {
-  const theme = useTheme();
+/**
+ * The linking flow behind the card, on its own so the Profile tab's
+ * integrations row can offer the same button without carrying the pitch copy.
+ * Callers hold the same contract as the card: signed-in branch only.
+ */
+export function useConnectSpotify() {
   const { user } = useUser();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -86,6 +90,13 @@ export function SpotifyConnect({ compact = false }: { compact?: boolean }) {
       setBusy(false);
     }
   };
+
+  return { busy, failed, connect };
+}
+
+export function SpotifyConnect({ compact = false }: { compact?: boolean }) {
+  const theme = useTheme();
+  const { busy, failed, connect } = useConnectSpotify();
 
   return (
     <View style={[styles.card, compact && styles.cardCompact, { borderColor: theme.border, backgroundColor: theme.backgroundElevated }]}>

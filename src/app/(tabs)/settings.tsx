@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
+import { AccountCard } from '@/components/account-card';
 import { GlassCard } from '@/components/glass-card';
 import { PageMeta } from '@/components/page-meta';
 import { PersonProfile } from '@/components/person-profile';
@@ -32,7 +33,7 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const { follows, unfollow } = useFollows();
   const { attended } = useAttendances();
-  const { signedIn, displayName, loading, userId } = useAuth();
+  const { signedIn, loading, userId } = useAuth();
   const { radiusMiles, setRadiusMiles, remindersEnabled, setRemindersEnabled, persisted } = usePrefs();
   const [toggling, setToggling] = useState(false);
 
@@ -73,11 +74,15 @@ export default function ProfileScreen() {
 
         {/* Your profile *is* the public one — same component, same endpoint as
             /user/[key] — so this tab can never show you something other people
-            wouldn't see. Signed out there is no profile to show, and the
-            account card below is the way in. */}
+            wouldn't see. The account card sits directly under it: who you are,
+            what's connected (Spotify, today) and the sign-out, one block — not
+            scattered across sections with sign-out hidden behind a hop to
+            /sign-in. Signed out there is no profile to show, and the ACCOUNT
+            card below is the way in. */}
         {signedIn && userId && (
           <View style={styles.profileBlock}>
             <PersonProfile profileKey={userId} />
+            <AccountCard />
           </View>
         )}
 
@@ -118,32 +123,31 @@ export default function ProfileScreen() {
           </PressableScale>
         </GlassCard>
 
-        {/* Next, because it is what the rest depends on: following and saving
-            need an account. */}
-        <Label>ACCOUNT</Label>
-        <GlassCard style={styles.card}>
-          <PressableScale
-            haptic
-            accessibilityRole="button"
-            accessibilityLabel={signedIn ? 'Manage your account' : 'Sign in'}
-            onPress={() => router.push('/sign-in')}
-            style={styles.row}>
-            <Ionicons
-              name={signedIn ? 'person-circle' : 'person-circle-outline'}
-              size={26}
-              color={signedIn ? theme.primary : theme.textTertiary}
-            />
-            <View style={{ flex: 1 }}>
-              <ThemedText type="smallBold">
-                {loading ? 'Checking…' : signedIn ? (displayName ?? 'Your account') : 'Not signed in'}
-              </ThemedText>
-              <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
-                {signedIn ? 'MANAGE OR SIGN OUT' : 'NEEDED TO FOLLOW, SAVE AND LOG SHOWS'}
-              </ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
-          </PressableScale>
-        </GlassCard>
+        {/* Signed in, the account lives in the card up top. This section only
+            exists for the visitor who has no account yet — the thing following
+            and saving depend on. */}
+        {!signedIn && (
+          <>
+            <Label>ACCOUNT</Label>
+            <GlassCard style={styles.card}>
+              <PressableScale
+                haptic
+                accessibilityRole="button"
+                accessibilityLabel="Sign in"
+                onPress={() => router.push('/sign-in')}
+                style={styles.row}>
+                <Ionicons name="person-circle-outline" size={26} color={theme.textTertiary} />
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="smallBold">{loading ? 'Checking…' : 'Not signed in'}</ThemedText>
+                  <ThemedText type="labelSm" style={{ color: theme.textTertiary }}>
+                    NEEDED TO FOLLOW, SAVE AND LOG SHOWS
+                  </ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.textTertiary} />
+              </PressableScale>
+            </GlassCard>
+          </>
+        )}
 
         <Label>REMINDERS</Label>
         <GlassCard style={styles.card}>
@@ -264,7 +268,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   content: { padding: Spacing.three, paddingBottom: Spacing.six, gap: Spacing.one },
   title: { marginBottom: Spacing.two },
-  profileBlock: { marginBottom: Spacing.two },
+  profileBlock: { marginBottom: Spacing.two, gap: Spacing.two },
   sectionLabel: { letterSpacing: 1.5, marginTop: Spacing.three, marginBottom: Spacing.two },
   card: { padding: Spacing.three, gap: Spacing.two },
   logBtn: {

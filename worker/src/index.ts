@@ -12,6 +12,7 @@ import { reviewRoutes } from './routes/reviews';
 import { search } from './routes/search';
 import { venues } from './routes/venues';
 import { curated } from './routes/curated';
+import { clerkSignedInHint } from './auth';
 import { cityPage } from './cities';
 import { artistImage } from './images';
 import { landingPage } from './landing';
@@ -198,6 +199,14 @@ async function cachedPage(
   // untouched and never stored: the cache is for pages, and a redirect held for
   // half an hour is a redirect that outlives the rename that caused it.
   render: () => string | Response | Promise<string | Response>,
+  // `browserCache` replaces the Cache-Control the *reader* sees — the copy in
+  // the edge cache keeps PAGE_CACHE, so the edge TTL doesn't change. It exists
+  // for `/`, which forks on a session cookie and so must not sit in a browser
+  // for four hours; see the route. Set on the hit path too, and not as a
+  // nicety: serving from `caches.default` is exactly when Cloudflare rewrites
+  // the stored max-age=300 to the zone's 14400 (measured, both hosts), so a
+  // hit that didn't restate its Cache-Control would undo this.
+  opts?: { browserCache?: string },
 ) {
   const shareable = !offBrandHost(c);
   const key = shareable ? pageCacheKey(c) : null;
@@ -211,6 +220,7 @@ async function cachedPage(
     if (hit) {
       const res = new Response(hit.body, hit);
       res.headers.set('X-Marquee-Cache', 'HIT');
+      if (opts?.browserCache) res.headers.set('Cache-Control', opts.browserCache);
       return res;
     }
   }
@@ -224,9 +234,11 @@ async function cachedPage(
   });
   if (key) {
     // The clone goes to the cache and the original to the reader, so filling
-    // the cache never delays the response that missed.
+    // the cache never delays the response that missed. Cloned before the
+    // browser-facing header goes on: the stored copy's s-maxage is the edge TTL.
     c.executionCtx.waitUntil(caches.default.put(key, res.clone()));
   }
+  if (opts?.browserCache) res.headers.set('Cache-Control', opts.browserCache);
   return res;
 }
 
@@ -237,8 +249,26 @@ async function cachedPage(
  * arrived at a spinner and nine words of chrome, while the page with a thousand
  * words of listings sat at `/concerts` earning its own way from nothing. So they
  * swapped — the feed is `/explore` now, and this is the front door.
+ *
+ * The front door forks on identity: a visitor with a Clerk session cookie has
+ * an account, and an account-holder standing at `/` wants the app, not the
+ * pitch for it — which is also where Clerk's own after-auth default delivers
+ * people, so without this a completed sign-in could dead-end on the marketing
+ * page. The redirect is never cached (`no-store`), and the page itself tells
+ * browsers to revalidate (`max-age=0` — costs one edge round-trip, ~0.3s warm)
+ * because the alternative was measured at four hours of a locally-cached
+ * marketing page that no sign-in could get past. Crawlers carry no cookie and
+ * see none of this.
  */
-app.get('/', (c) => cachedPage(c, () => landingPage(c.env, siteOrigin(c))));
+app.get('/', (c) => {
+  if (clerkSignedInHint(c.req.header('Cookie'))) {
+    c.header('Cache-Control', 'no-store');
+    return c.redirect('/explore', 302);
+  }
+  return cachedPage(c, () => landingPage(c.env, siteOrigin(c)), {
+    browserCache: 'public, max-age=0, must-revalidate',
+  });
+});
 
 /** Where the landing page used to live. Its links and its indexing belong to `/`. */
 app.get('/concerts', (c) => c.redirect('/', 301));

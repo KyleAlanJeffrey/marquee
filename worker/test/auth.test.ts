@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { bearerToken, callerFrom, ANONYMOUS } from '../src/auth';
+import { bearerToken, callerFrom, clerkSignedInHint, ANONYMOUS } from '../src/auth';
 import type { Env } from '../src/env';
 
 const env = (over: Partial<Env> = {}) => ({ ...over }) as Env;
@@ -85,5 +85,39 @@ describe('callerFrom', () => {
       vi.unstubAllGlobals();
       debug.mockRestore();
     }
+  });
+});
+
+describe('clerkSignedInHint', () => {
+  it('says no with no cookie header at all', () => {
+    expect(clerkSignedInHint(undefined)).toBe(false);
+    expect(clerkSignedInHint('')).toBe(false);
+  });
+
+  it('reads __client_uat as the verdict when present', () => {
+    // A timestamp means a session; Clerk writes 0 on sign-out rather than
+    // deleting the cookie, so 0 must read as signed out.
+    expect(clerkSignedInHint('__client_uat=1754625600')).toBe(true);
+    expect(clerkSignedInHint('__client_uat=0')).toBe(false);
+    expect(clerkSignedInHint('theme=dark; __client_uat=1754625600; other=1')).toBe(true);
+  });
+
+  it('accepts the suffixed cookie names Clerk mints when instances share a domain', () => {
+    expect(clerkSignedInHint('__client_uat_x9y8z7=1754625600')).toBe(true);
+    expect(clerkSignedInHint('__client_uat_x9y8z7=0')).toBe(false);
+    expect(clerkSignedInHint('__session_x9y8z7=eyJhbGciOi')).toBe(true);
+  });
+
+  it('falls back to __session only when __client_uat is absent', () => {
+    expect(clerkSignedInHint('__session=eyJhbGciOi')).toBe(true);
+    // uat says signed out; a stale __session JWT alongside it must not win.
+    expect(clerkSignedInHint('__client_uat=0; __session=eyJhbGciOi')).toBe(false);
+    // An empty __session is a deleted cookie, not a session.
+    expect(clerkSignedInHint('__session=')).toBe(false);
+  });
+
+  it('is not fooled by cookie names that merely contain the Clerk names', () => {
+    expect(clerkSignedInHint('not__session=abc')).toBe(false);
+    expect(clerkSignedInHint('my__client_uat=123')).toBe(false);
   });
 });

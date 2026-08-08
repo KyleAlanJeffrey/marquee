@@ -9,7 +9,7 @@ import { StageBackground } from '@/components/stage-background';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Fonts, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { useAuth } from '@/lib/auth';
+import { AFTER_AUTH, useAuth } from '@/lib/auth';
 
 // Clerk's `appearance` is plain CSS values outside React, so it can't use
 // `useTheme()`. The app is dark-only today, which is what makes that safe.
@@ -61,17 +61,17 @@ const appearance = {
 export type AuthMode = 'sign-in' | 'sign-up';
 
 /**
- * Where a completed sign-in or sign-up lands: the Profile tab, which now opens
- * on your own profile — the first concrete thing an account buys.
- *
  * Every redirect and cross-link below is stated explicitly because the defaults
  * are the bug: without them, Clerk's card links its own "sign up" footer to the
  * hosted Account Portal, and a finished sign-up follows the portal's defaults
  * off-site too. The session then lives on Clerk's origin, the app never sees it,
  * and the server never hears about the new account at all — which is exactly
  * the "signed up but nothing in the db" report that found this.
+ *
+ * `AFTER_AUTH` lives with the provider now (see `lib/auth.tsx` for why the
+ * card-level prop alone wasn't enough: this screen unmounts the card the moment
+ * the session goes active, and the navigation that follows reads the provider).
  */
-const AFTER_AUTH = '/settings';
 
 export function AuthScreen({ mode }: { mode: AuthMode }) {
   const theme = useTheme();

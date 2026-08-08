@@ -253,3 +253,21 @@ export async function findUser(db: DB, userId: string) {
       .get()) ?? null
   );
 }
+
+/**
+ * Does this request look signed in? A hint, not authentication.
+ *
+ * Clerk keeps two cookies on the site's own domain: `__session` (the JWT) and
+ * `__client_uat`, a timestamp that is `0` when signed out and survives the JWT's
+ * short expiry — which is why it's checked first. Both may carry an instance
+ * suffix. Nothing is verified here and nothing may be: this only picks which of
+ * two public pages `/` means, and the wrong guess costs a redirect to a page
+ * that says "sign in". Anything that actually needs identity goes through
+ * `callerFrom`, which checks the signature.
+ */
+export function clerkSignedInHint(cookie: string | undefined): boolean {
+  if (!cookie) return false;
+  const uat = cookie.match(/(?:^|;\s*)__client_uat(?:_[A-Za-z0-9]+)?=([^;]*)/);
+  if (uat) return uat[1] !== '' && uat[1] !== '0';
+  return /(?:^|;\s*)__session(?:_[A-Za-z0-9]+)?=[^;]/.test(cookie);
+}

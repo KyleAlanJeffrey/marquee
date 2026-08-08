@@ -40,6 +40,22 @@ if (!__DEV__ && CLERK_PUBLISHABLE_KEY.startsWith('pk_test_')) {
   );
 }
 
+/**
+ * Where a completed sign-in or sign-up lands: the Profile tab, the first
+ * concrete thing an account buys.
+ *
+ * Declared at the provider as well as on the web `<SignIn>`/`<SignUp>` cards
+ * (see `auth-screen.web.tsx`), and the provider copy is the one that matters:
+ * the card unmounts the instant the session goes active — `AuthScreen` renders
+ * it behind `signedIn ? null : …` — and a navigation that happens after that
+ * falls back to Clerk's *instance* default, which is `/`. On this site `/` is
+ * the server-rendered marketing page, so a successful sign-in ended with "get
+ * the app". That is the bug this constant exists to pin down; the Worker also
+ * bounces cookie-carrying visitors off `/` for the paths Clerk owns outright
+ * (its hosted portal, dashboard defaults).
+ */
+export const AFTER_AUTH = '/settings';
+
 export type AuthState = {
   /** Still deciding. Callers should not render a signed-out state on this. */
   loading: boolean;
@@ -94,7 +110,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // on native, and deliberately `undefined` on web, where Clerk uses browser
     // storage instead. It also deletes a corrupt entry rather than reading it as an
     // empty session, which is why it replaced the wrapper that used to live here.
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
+    <ClerkProvider
+      publishableKey={CLERK_PUBLISHABLE_KEY}
+      tokenCache={tokenCache}
+      signInFallbackRedirectUrl={AFTER_AUTH}
+      signUpFallbackRedirectUrl={AFTER_AUTH}>
       <ClerkBridge>{children}</ClerkBridge>
     </ClerkProvider>
   );
