@@ -1,0 +1,23 @@
+{
+    "framework": [
+        "React 19",
+        "React Native 0.85",
+        "Expo 56 (expo-router)"
+    ],
+    "language": [
+        "TypeScript"
+    ],
+    "host": [
+        "Cloudflare Workers",
+        "Cloudflare D1"
+    ],
+    "libraries": [
+        "Hono",
+        "Drizzle ORM",
+        "TanStack Query",
+        "Clerk",
+        "Zod",
+        "react-native-maps",
+        "Reanimated"
+    ]
+}
