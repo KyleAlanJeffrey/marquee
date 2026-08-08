@@ -6,7 +6,10 @@ import {
   Anybody_800ExtraBold,
   Anybody_800ExtraBold_Italic,
 } from '@expo-google-fonts/anybody';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import { QueryClient } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useFonts } from 'expo-font';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -18,14 +21,45 @@ import { PageMeta } from '@/components/page-meta';
 import { UpdateNudge } from '@/components/update-nudge';
 import { Colors, Fonts } from '@/constants/theme';
 import { AuthProvider } from '@/lib/auth';
+import { CacheGuard } from '@/lib/cache-guard';
 import { useNotificationObserver } from '@/lib/notifications';
 import { ProfileSync } from '@/lib/people';
 import { RsvpSettler } from '@/lib/rsvp-settler';
 import { WriteGateProvider } from '@/lib/write-gate-provider';
 
+import appJson from '../../app.json';
+
+/**
+ * The query cache persists — localStorage on web, AsyncStorage on a device.
+ *
+ * This is what makes a fresh page load *recognise* things instead of
+ * re-deriving them: before it, every web visit booted from nothing, so the
+ * Spotify block spent its first seconds claiming you weren't connected while
+ * the suggestions round-trip (Clerk token → Spotify pagination → D1) ran from
+ * scratch. Now the last known answer paints immediately and refetching happens
+ * behind it, which is the iOS experience — a warm app — brought to a medium
+ * whose process dies on every tab close.
+ *
+ * `gcTime` must outlive `maxAge`, or restored queries are garbage-collected
+ * the moment they hydrate. The app version busts the cache on release, so a
+ * shape change in any cached payload can never feed old JSON to new code.
+ */
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 60 * 1000 } },
+  defaultOptions: { queries: { retry: 1, staleTime: 60 * 1000, gcTime: 24 * 60 * 60 * 1000 } },
 });
+
+const persister = createAsyncStoragePersister({ storage: AsyncStorage, throttleTime: 1000 });
+
+const persistOptions = {
+  persister,
+  maxAge: 24 * 60 * 60 * 1000,
+  // The app version, read from app.json itself rather than expo-constants:
+  // the constants module inlines a serialized manifest that Metro's transform
+  // cache can freeze at an old release (it shipped saying 1.1.0 during 1.3.0),
+  // and a buster that doesn't change on release busts nothing. A direct JSON
+  // import is keyed on the file's content, so it can't go stale.
+  buster: appJson.expo.version,
+};
 
 const theme = Colors.dark;
 
@@ -66,7 +100,7 @@ export default function RootLayout() {
       {/* Outside the query client, so a token is available to the first fetch it
           makes. Renders its children untouched when there is no Clerk key. */}
       <AuthProvider>
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
         <WriteGateProvider>
             <ThemeProvider value={navTheme}>
               <StatusBar style="light" />
@@ -74,6 +108,9 @@ export default function RootLayout() {
               <PageMeta />
               {/* Refreshes the server's mirror of this account from Clerk on sign-in. */}
               <ProfileSync />
+              {/* Clears the (persisted) query cache when the account changes,
+                  so nothing hydrates under the wrong user. */}
+              <CacheGuard />
               {/* Turns yesterday's "I'm going" into a logged show. Mounted at the
                   root so it runs whichever tab the app opens on. */}
               <RsvpSettler />
@@ -89,7 +126,16 @@ export default function RootLayout() {
                     contentStyle: { backgroundColor: theme.background },
                     animation: 'slide_from_right',
                   }}>
-                  <Stack.Screen name="(tabs)" />
+                  {/* No entry animation. The only navigations that ever *reach*
+                      this screen are the boot redirect (`index` → `/explore`)
+                      and modal dismissals, which animate themselves. The boot
+                      one is why this is here: with the default slide, a cold
+                      iOS start visibly animated from the blank launch route
+                      into Explore — Kyle read it as "the app slides over from
+                      the landing page", and he was right that it looked like
+                      two apps sharing a door. */}
+                  <Stack.Screen name="index" options={{ animation: 'none' }} />
+                  <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
                   <Stack.Screen
                     name="search"
                     options={{
@@ -146,7 +192,7 @@ export default function RootLayout() {
               <KyleBadge />
             </ThemeProvider>
         </WriteGateProvider>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );
