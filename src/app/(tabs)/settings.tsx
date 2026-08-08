@@ -74,15 +74,14 @@ export default function ProfileScreen() {
 
         {/* Your profile *is* the public one — same component, same endpoint as
             /user/[key] — so this tab can never show you something other people
-            wouldn't see. The account card sits directly under it: who you are,
-            what's connected (Spotify, today) and the sign-out, one block — not
-            scattered across sections with sign-out hidden behind a hop to
-            /sign-in. Signed out there is no profile to show, and the ACCOUNT
-            card below is the way in. */}
+            wouldn't see. The one exception is deliberate and slotted in from
+            here: the account section (integrations, manage, sign out) rides
+            inside the header card, because the way out belongs with the
+            identity, not in a card below the reviews. Signed out there is no
+            profile to show, and the ACCOUNT card below is the way in. */}
         {signedIn && userId && (
           <View style={styles.profileBlock}>
-            <PersonProfile profileKey={userId} />
-            <AccountCard />
+            <PersonProfile profileKey={userId} accountSlot={<AccountCard />} />
           </View>
         )}
 

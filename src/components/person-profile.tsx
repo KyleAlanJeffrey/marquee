@@ -248,7 +248,21 @@ function PersonRow({ person }: { person: PublicUser }) {
   );
 }
 
-export function PersonProfile({ profileKey }: { profileKey: string }) {
+export function PersonProfile({
+  profileKey,
+  /**
+   * Owner-only content for the header card — the Profile tab passes the
+   * account section (integrations, manage, sign out) here. A slot rather than
+   * a built-in: this component is also every visitor's view of a profile, and
+   * account controls must come from the one screen that means "you", not from
+   * anything `/user/[key]` could reach. Rendered only when the server says
+   * `isSelf`, so a stray slot on someone else's profile stays invisible.
+   */
+  accountSlot,
+}: {
+  profileKey: string;
+  accountSlot?: React.ReactNode;
+}) {
   const theme = useTheme();
   const gate = useWriteGate();
   const profile = useProfile(profileKey);
@@ -353,6 +367,9 @@ export function PersonProfile({ profileKey }: { profileKey: string }) {
             </ThemedText>
           </PressableScale>
         )}
+        {/* Yours ends with the account section — integrations and the way out
+            live with the identity they belong to, not in a card further down. */}
+        {isSelf && accountSlot}
       </GlassCard>
 
       {/* Four favorites, straight under the name — the profile's signature. */}
