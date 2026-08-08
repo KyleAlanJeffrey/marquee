@@ -12,7 +12,6 @@ import { reviewRoutes } from './routes/reviews';
 import { search } from './routes/search';
 import { venues } from './routes/venues';
 import { curated } from './routes/curated';
-import { clerkSignedInHint } from './auth';
 import { cityPage } from './cities';
 import { artistImage } from './images';
 import { landingPage } from './landing';
@@ -250,25 +249,24 @@ async function cachedPage(
  * words of listings sat at `/concerts` earning its own way from nothing. So they
  * swapped — the feed is `/explore` now, and this is the front door.
  *
- * The front door forks on identity: a visitor with a Clerk session cookie has
- * an account, and an account-holder standing at `/` wants the app, not the
- * pitch for it — which is also where Clerk's own after-auth default delivers
- * people, so without this a completed sign-in could dead-end on the marketing
- * page. The redirect is never cached (`no-store`), and the page itself tells
- * browsers to revalidate (`max-age=0` — costs one edge round-trip, ~0.3s warm)
- * because the alternative was measured at four hours of a locally-cached
- * marketing page that no sign-in could get past. Crawlers carry no cookie and
- * see none of this.
+ * The front door deliberately does NOT fork on identity. It briefly 302'd
+ * anyone with a Clerk session cookie into the app, as a backstop for
+ * sign-ins dead-ending on the marketing page — and the backstop cost more
+ * than it caught: the moment Kyle signed in, marquee.rocks itself became
+ * unreachable for him ("we've lost the landing page"). The dead-end it
+ * guarded against is already fixed at the source — the ClerkProvider's
+ * fallback redirect URLs land completed sign-ins on the Profile tab — so the
+ * landing stays the one address everyone can see, signed in or not.
+ *
+ * The page tells browsers to revalidate (`max-age=0` — costs one edge
+ * round-trip, ~0.3s warm) because the alternative was measured at four hours
+ * of a locally-cached marketing page after a deploy.
  */
-app.get('/', (c) => {
-  if (clerkSignedInHint(c.req.header('Cookie'))) {
-    c.header('Cache-Control', 'no-store');
-    return c.redirect('/explore', 302);
-  }
-  return cachedPage(c, () => landingPage(c.env, siteOrigin(c)), {
+app.get('/', (c) =>
+  cachedPage(c, () => landingPage(c.env, siteOrigin(c)), {
     browserCache: 'public, max-age=0, must-revalidate',
-  });
-});
+  }),
+);
 
 /** Where the landing page used to live. Its links and its indexing belong to `/`. */
 app.get('/concerts', (c) => c.redirect('/', 301));
