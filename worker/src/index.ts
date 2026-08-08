@@ -326,7 +326,29 @@ app.all('*', async (c) => {
     ? new Request(new URL(url.pathname.replace(/@/g, '%40') + url.search, url.origin), c.req.raw)
     : c.req.raw;
 
-  const res = await c.env.ASSETS.fetch(assetReq);
+  let res = await c.env.ASSETS.fetch(assetReq);
+
+  // The SPA fallback, done here rather than by the asset layer. Cloudflare's
+  // `single-page-application` mode can only ever serve `/index.html`, and the
+  // export doesn't have one anymore: the app deliberately has no `/` route,
+  // because that address is the landing page's, and the landing page is not a
+  // screen of the app. Any GET for a page the export didn't prerender — an
+  // `/artist/<id>` deep link, a route added since — gets the export's own
+  // not-found shell, which hydrates, reads the real URL, and renders the real
+  // screen. 200, not 404: the shell will almost always become actual content,
+  // and the pages that truly are thin carry their own noindex (seo.ts).
+  if (c.req.method === 'GET' && res.status === 404 && c.req.header('accept')?.includes('text/html')) {
+    // `%2B`, not `+`: the asset server 307s the literal spelling, same as the
+    // `@` in the font paths above. A fresh unconditional GET, not a clone of
+    // the original request: a revisiting browser sends If-None-Match for the
+    // shell it already holds, and forwarding it here turns the fallback into
+    // a 304 — not `ok`, so the deep link would 404 exactly for the people
+    // who'd loaded it before. Same for Range.
+    const shell = await c.env.ASSETS.fetch(
+      new Request(new URL('/%2Bnot-found', url.origin), { headers: { Accept: 'text/html' } }),
+    );
+    if (shell.ok) res = new Response(shell.body, { status: 200, headers: shell.headers });
+  }
 
   if (c.req.method === 'GET' && res.ok && HASHED_ASSET.test(url.pathname)) {
     const cached = new Response(res.body, res);
