@@ -30,10 +30,14 @@
 
   "assets": {
     // The Expo web export. The Worker runs first for every request and either
-    // handles /api/* or hands off to ASSETS (SPA fallback for client routes).
+    // handles /api/* or hands off to ASSETS. The SPA fallback for client-routed
+    // deep links lives in the Worker itself (see the asset handler): the export
+    // has no index.html — the app has no `/` route, that address is the
+    // landing page's — and Cloudflare's `single-page-application` mode can only
+    // serve /index.html, so it would fall back to nothing.
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
+    "not_found_handling": "none",
     "run_worker_first": true,
   },
   // The hostname the site is indexed under. Canonicals, og:url and the sitemap

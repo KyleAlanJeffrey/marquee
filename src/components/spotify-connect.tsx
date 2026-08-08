@@ -46,10 +46,12 @@ export function useConnectSpotify() {
       // Clerk sends it here either way. On web that must be the page the
       // button is on: this used to say `/`, which is the server-rendered
       // marketing page, so a completed link dropped the listener on the sales
-      // pitch with no sign anything happened. On a device the path matters
-      // less — the app never unmounted — but `marquee://` still needs to be
-      // the scheme, which is what `createURL` does there.
-      const redirectUrl = Linking.createURL(Platform.OS === 'web' ? window.location.pathname : '/');
+      // pitch with no sign anything happened. On a device the URL mostly just
+      // closes the auth sheet — but it is still a deep link the router will
+      // resolve, and `/` is no longer a route anywhere (that address belongs
+      // to the landing page), so it names the Profile tab, where the
+      // connection's status is the thing on screen.
+      const redirectUrl = Linking.createURL(Platform.OS === 'web' ? window.location.pathname : '/settings');
 
       // A back-out leaves an unverified Spotify account attached to the user, and
       // asking Clerk to create a second one for the same provider is an error

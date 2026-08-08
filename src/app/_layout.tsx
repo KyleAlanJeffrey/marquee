@@ -84,6 +84,26 @@ const navTheme = {
  * "may this write happen", which is now simply "are you signed in".
  */
 
+/**
+ * There is no `/` *screen* anymore, on any platform — that address belongs to
+ * the server-rendered landing page, which is a website, not a screen of this
+ * app. Removing the old `index.tsx` redirect is what finally separates them.
+ *
+ * A native cold start still arrives as the URL `marquee:///`, though, and an
+ * unmatched initial URL renders "Unmatched Route" — `initialRouteName` does
+ * not rescue it (verified in the simulator). The declared redirect in
+ * app.json (`extra.router.redirects`: `/index` → `/explore` — `index` is
+ * the route name the file convention gives `/`) is what resolves it:
+ * a signpost in the route table rather than a page, which is exactly the
+ * distinction this separation is about.
+ *
+ * `initialRouteName` still anchors the navigator itself: it names where the
+ * root Stack considers "home" once a URL has resolved into it.
+ */
+export const unstable_settings = {
+  initialRouteName: '(tabs)',
+};
+
 export default function RootLayout() {
   useNotificationObserver();
   const [fontsLoaded] = useFonts({
@@ -126,15 +146,10 @@ export default function RootLayout() {
                     contentStyle: { backgroundColor: theme.background },
                     animation: 'slide_from_right',
                   }}>
-                  {/* No entry animation. The only navigations that ever *reach*
-                      this screen are the boot redirect (`index` → `/explore`)
-                      and modal dismissals, which animate themselves. The boot
-                      one is why this is here: with the default slide, a cold
-                      iOS start visibly animated from the blank launch route
-                      into Explore — Kyle read it as "the app slides over from
-                      the landing page", and he was right that it looked like
-                      two apps sharing a door. */}
-                  <Stack.Screen name="index" options={{ animation: 'none' }} />
+                  {/* No entry animation: the only navigations that reach this
+                      screen are the cold-start anchor and modal dismissals,
+                      which animate themselves. (The boot used to *slide* in,
+                      back when a phantom `index` route redirected here.) */}
                   <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
                   <Stack.Screen
                     name="search"
